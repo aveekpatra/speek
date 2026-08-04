@@ -123,3 +123,5 @@ Temporary Items
 .apdisk 
 .claude/worktrees/
 .claude/settings.local.json
+.local-build-ios/
+.local-build-ios-dev/

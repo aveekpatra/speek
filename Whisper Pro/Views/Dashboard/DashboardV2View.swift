@@ -94,6 +94,20 @@ struct DashboardV2View: View {
     @State private var statsVisible = false
     @State private var chartVisible = false
 
+    // Live sentinel so new transcripts saved by the engine (WhisperProEngine
+    // posts .transcriptionCreated after modelContext.save()) trigger a re-fetch
+    // instead of the dashboard staying stuck on its first .task load. Mirrors
+    // TranscriptionHistoryView's latestTranscriptionIndicator pattern.
+    @Query(DashboardV2View.createLatestTranscriptionIndicatorDescriptor()) private var latestTranscriptionIndicator: [Transcription]
+
+    private static func createLatestTranscriptionIndicatorDescriptor() -> FetchDescriptor<Transcription> {
+        var descriptor = FetchDescriptor<Transcription>(
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        return descriptor
+    }
+
     // Matches the same card token every other screen renders on inside
     // ContentView's detailCanvas, so the dashboard reads as one continuous
     // surface with the sidebar/window frame instead of a different dark shade.
@@ -146,6 +160,12 @@ struct DashboardV2View: View {
             withAnimation(.easeOut(duration: 0.5)) { identityVisible = true }
             withAnimation(.easeOut(duration: 0.5).delay(0.08)) { statsVisible = true }
             withAnimation(.easeOut(duration: 0.5).delay(0.16)) { chartVisible = true }
+        }
+        .onChange(of: latestTranscriptionIndicator.first?.id) { oldId, newId in
+            guard newId != oldId else { return }
+            Task {
+                await loadData()
+            }
         }
     }
 
