@@ -591,15 +591,14 @@ private struct DashboardAvatarView: View {
     let initials: String
     @Binding var colorIndex: Int
     @State private var isHovered = false
-    @State private var isMainWindowVisible = true
 
     private var colors: [Color] {
         let sets = avatarColorSets
         return sets[((colorIndex % sets.count) + sets.count) % sets.count]
     }
 
-    // Static frame shown when the avatar is idle, so the ~20fps clock only
-    // runs while hovered instead of burning CPU forever.
+    // Idle state is a single static frame at this fixed time, no clock
+    // running at all, so the avatar only animates while hovered.
     private static let idleTime: Double = 0
 
     @ViewBuilder
@@ -624,16 +623,7 @@ private struct DashboardAvatarView: View {
                     spinSurface(at: timeline.date.timeIntervalSinceReferenceDate)
                 }
             } else {
-                // Ambient rotation is a pure function of time, driven by a TimelineView that
-                // SwiftUI stops scheduling entirely when paused - unlike a repeatForever
-                // animation, which keeps ticking in the background even after the window
-                // is hidden and can't be cancelled by re-assigning the animated value.
-                TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: !isMainWindowVisible)) { timeline in
-                    let t = timeline.date.timeIntervalSinceReferenceDate
-                    let angle = t.truncatingRemainder(dividingBy: 40) / 40 * 360
-                    spinSurface(at: Self.idleTime)
-                        .rotationEffect(.degrees(angle))
-                }
+                spinSurface(at: Self.idleTime)
             }
             Text(initials)
                 .font(.system(size: 23, weight: .semibold, design: .rounded))
@@ -652,9 +642,6 @@ private struct DashboardAvatarView: View {
             withAnimation(.easeInOut(duration: 0.35)) {
                 colorIndex = (colorIndex + 1) % avatarColorSets.count
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .mainWindowVisibilityChanged)) { note in
-            isMainWindowVisible = (note.userInfo?["visible"] as? Bool) ?? true
         }
     }
 }
