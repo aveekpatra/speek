@@ -49,15 +49,18 @@ Configuration > Advanced settings > Agent Plugins installs a small hook script i
 - **Claude Code**: `~/.claude/settings.json` hooks for Stop, Notification, PermissionRequest, PreToolUse (AskUserQuestion), and UserPromptSubmit.
 - **Codex**: `~/.codex/hooks.json` (Codex's native hooks) for Stop, PermissionRequest, and UserPromptSubmit. Your `notify` setting is left alone.
 
-When the agent finishes, asks a question, or needs permission, the recording pill turns
-into a reply panel at the same spot: the agent's message (markdown) on top, a reply box
-below. Press your recording shortcut and speak (the transcript lands in the box), or
-type, then Return sends it. Nothing is typed into the terminal: the hook itself waits
-for your answer and returns it to the agent as hook output (a Stop hook "block" with your
-reply as the reason, an allow/deny decision for permissions, the chosen option for
-questions), so the agent continues in the background while you stay where you are.
-Esc dismisses and lets the agent stop normally. Answering in the terminal closes the
-panel automatically.
+When the agent finishes, asks a question, or needs permission, a reply panel appears at
+the recording pill's spot: a pill per waiting session (agent icon, project, git branch),
+the selected agent's message rendered as markdown, and a reply card. Press your recording
+shortcut and speak (the transcript lands in the box), type, paste or drop screenshots,
+then Return sends. Nothing is typed into the terminal: the hook itself waits for your
+answer and returns it to the agent as hook output (a Stop hook "block" with your reply as
+the reason, an allow/deny decision for permissions, the chosen option for questions), so
+the agent continues in the background while you stay where you are. Images are saved
+under Application Support and sent as file paths the agent opens with its Read tool.
+Esc dismisses the selected session and lets that agent stop normally; several agents can
+wait at once and you answer them one by one. Answering in the terminal closes that
+session's panel automatically.
 
 Both agents also get a `/speek` skill (`on`, `off`, `status`) that mutes the hook for
 the current project directory. Uninstall from the same screen removes everything.

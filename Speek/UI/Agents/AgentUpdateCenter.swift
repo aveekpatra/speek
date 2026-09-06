@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import UniformTypeIdentifiers
 import os
 
 /// One event forwarded by the agent hook through `speek://agent-update`.
@@ -70,19 +71,52 @@ struct AgentUpdate: Identifiable, Equatable {
     var projectName: String {
         URL(fileURLWithPath: workingDirectory).lastPathComponent
     }
+
+    /// Current git branch of the working directory, if it is a checkout.
+    var branchName: String? {
+        GitBranch.name(in: workingDirectory)
+    }
 }
 
-/// Receives agent updates and turns the recording pill into a reply panel: the agent's
-/// message on top, a reply box below. Dictation lands in the box, Return sends it to the
-/// agent's terminal, Esc dismisses. Options and permission prompts are answered with a click.
+enum GitBranch {
+    static func name(in directory: String) -> String? {
+        guard !directory.isEmpty else { return nil }
+        var gitPath = URL(fileURLWithPath: directory).appendingPathComponent(".git")
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: gitPath.path, isDirectory: &isDirectory) else { return nil }
+        if !isDirectory.boolValue,
+           let pointer = try? String(contentsOf: gitPath, encoding: .utf8),
+           pointer.hasPrefix("gitdir: ") {
+            let target = pointer.dropFirst("gitdir: ".count).trimmingCharacters(in: .whitespacesAndNewlines)
+            gitPath = target.hasPrefix("/") ? URL(fileURLWithPath: target) : URL(fileURLWithPath: directory).appendingPathComponent(target)
+        }
+        guard let head = try? String(contentsOf: gitPath.appendingPathComponent("HEAD"), encoding: .utf8) else { return nil }
+        let trimmed = head.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("ref: refs/heads/") { return String(trimmed.dropFirst("ref: refs/heads/".count)) }
+        return String(trimmed.prefix(7))
+    }
+}
+
+/// Receives agent updates and shows the reply panel at the recording pill's spot: a pill
+/// per waiting agent session, the selected agent's message, and a reply box. Dictation
+/// lands in the box; Return hands the answer back to the waiting hook (no typing into a
+/// terminal); Esc dismisses. Options and permission prompts are answered with a click.
 @MainActor
 final class AgentUpdateCenter: ObservableObject {
     static let shared = AgentUpdateCenter()
 
-    @Published private(set) var current: AgentUpdate?
+    /// Every session that is waiting for an answer, oldest first.
+    @Published private(set) var pending: [AgentUpdate] = []
+    @Published var selectedID: UUID?
     @Published var draft = ""
+    /// Images pasted or dropped into the reply box; sent to the agent as file paths.
+    @Published private(set) var attachments: [URL] = []
     @Published private(set) var recordingState: RecordingState = .idle
     @Published private(set) var isSending = false
+
+    var current: AgentUpdate? {
+        pending.first { $0.id == selectedID } ?? pending.last
+    }
 
     /// Set by the app at launch so the panel can mirror recording state.
     weak var engine: SpeekEngine? {
@@ -94,10 +128,9 @@ final class AgentUpdateCenter: ObservableObject {
     }
     var recorder: Recorder? { engine?.recorder }
 
-    var isShowingPanel: Bool { current != nil }
+    var isShowingPanel: Bool { !pending.isEmpty }
 
     private var panel: AgentReplyPanel?
-    private var dismissTask: Task<Void, Never>?
     private var stateObserver: AnyCancellable?
     private let logger = Logger(subsystem: "com.aveekpatra.speek", category: "AgentUpdateCenter")
 
@@ -127,25 +160,33 @@ final class AgentUpdateCenter: ObservableObject {
     func receive(_ update: AgentUpdate) {
         logger.notice("Agent update: \(update.agent.displayName, privacy: .public) \(update.kind.title, privacy: .public) session=\(update.session, privacy: .public)")
         if update.kind == .promptSubmitted {
-            // The user answered in the terminal: nothing left to reply to.
-            if current?.session == update.session || current == nil { dismiss() }
+            // The user answered in the terminal: that session has nothing left to reply to.
+            if let existing = pending.first(where: { $0.session == update.session }) {
+                release(existing, with: "dismiss")
+                remove(existing)
+            }
             return
         }
         if case .other = update.kind { return }
-        let isNewConversation = current?.session != update.session
-        if let previous = current, previous.id != update.id { release(previous, with: "dismiss") }
-        current = update
-        if isNewConversation { draft = "" }
+        // One entry per session: a newer event for the same session replaces the old one.
+        if let index = pending.firstIndex(where: { $0.session == update.session }) {
+            release(pending[index], with: "dismiss")
+            pending[index] = update
+        } else {
+            pending.append(update)
+        }
+        if selectedID == nil || pending.count == 1 || pending.first(where: { $0.id == selectedID }) == nil {
+            selectedID = update.id
+        }
         showPanel()
         if SpeekSettings.shared.soundEffects != .off {
             NSSound(named: "Tink")?.play()
         }
-        dismissTask?.cancel()
-        dismissTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(600))
-            guard !Task.isCancelled else { return }
-            self?.dismiss()
-        }
+    }
+
+    func select(_ update: AgentUpdate) {
+        selectedID = update.id
+        refit()
     }
 
     // MARK: Replying
@@ -158,18 +199,65 @@ final class AgentUpdateCenter: ObservableObject {
         panel?.makeKeyAndOrderFront(nil)
     }
 
-    /// Sends the reply box to the agent. With a waiting hook the text goes back as hook
-    /// output; otherwise (plain notifications) it is pasted into the agent's terminal.
+    static let attachmentsDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Speek/agent-attachments", isDirectory: true)
+
+    /// Saves images from the pasteboard (paste) or a drop and lists them under the reply box.
+    @discardableResult
+    func addImages(from pasteboard: NSPasteboard) -> Bool {
+        var images: [NSImage] = []
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingContentsConformToTypes: [UTType.image.identifier]]) as? [URL] {
+            for url in urls { if let image = NSImage(contentsOf: url) { images.append(image) } }
+        }
+        if images.isEmpty, let pasted = pasteboard.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage] {
+            images = pasted
+        }
+        guard !images.isEmpty else { return false }
+        for image in images { if let url = save(image) { attachments.append(url) } }
+        refit()
+        return true
+    }
+
+    func removeAttachment(_ url: URL) {
+        attachments.removeAll { $0 == url }
+        try? FileManager.default.removeItem(at: url)
+        refit()
+    }
+
+    private func save(_ image: NSImage) -> URL? {
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else { return nil }
+        let directory = Self.attachmentsDirectory
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let url = directory.appendingPathComponent("image-\(stamp)-\(Int.random(in: 100...999)).png")
+        do { try png.write(to: url) } catch { return nil }
+        return url
+    }
+
+    /// Reply text plus a list of attached image paths the agent can open.
+    private func outgoingText() -> String {
+        var text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !attachments.isEmpty {
+            let list = attachments.map { "- \($0.path)" }.joined(separator: "\n")
+            text += (text.isEmpty ? "" : "\n\n") + "Attached image\(attachments.count == 1 ? "" : "s") (open with the Read tool):\n" + list
+        }
+        return text
+    }
+
+    /// Sends the reply box to the selected agent. With a waiting hook the text goes back as
+    /// hook output; otherwise (plain notifications) it is pasted into the agent's terminal.
     func send() {
         guard let update = current, !isSending else { return }
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = outgoingText()
         guard !text.isEmpty else { return }
         isSending = true
         if update.isAwaitingReply {
             release(update, with: "reply:" + Data(text.utf8).base64EncodedString())
             isSending = false
-            draft = ""
-            finish()
+            clearDraft()
+            remove(update)
             return
         }
         Task { @MainActor in
@@ -182,8 +270,8 @@ final class AgentUpdateCenter: ObservableObject {
                 CursorPaster.performAutoSend(.enter)
             }
             isSending = false
-            draft = ""
-            finish()
+            clearDraft()
+            remove(update)
         }
     }
 
@@ -193,7 +281,7 @@ final class AgentUpdateCenter: ObservableObject {
         let label = update.options.indices.contains(number - 1) ? update.options[number - 1] : String(number)
         if update.isAwaitingReply {
             release(update, with: "option:" + Data(label.utf8).base64EncodedString())
-            finish()
+            remove(update)
             return
         }
         isSending = true
@@ -205,7 +293,7 @@ final class AgentUpdateCenter: ObservableObject {
             try? await Task.sleep(nanoseconds: 150_000_000)
             CursorPaster.performAutoSend(.enter)
             isSending = false
-            finish()
+            remove(update)
         }
     }
 
@@ -213,7 +301,7 @@ final class AgentUpdateCenter: ObservableObject {
         guard let update = current, !isSending else { return }
         if update.isAwaitingReply {
             release(update, with: "allow")
-            finish()
+            remove(update)
         } else {
             choose(number: 1)
         }
@@ -223,7 +311,7 @@ final class AgentUpdateCenter: ObservableObject {
         guard let update = current, !isSending else { return }
         if update.isAwaitingReply {
             release(update, with: "deny")
-            finish()
+            remove(update)
             return
         }
         isSending = true
@@ -233,8 +321,34 @@ final class AgentUpdateCenter: ObservableObject {
             try? await Task.sleep(nanoseconds: 450_000_000)
             Keystrokes.press(virtualKey: 0x35)   // esc
             isSending = false
-            finish()
+            remove(update)
         }
+    }
+
+    func replyByVoice() {
+        NotificationCenter.default.post(name: .toggleRecorderPanel, object: nil)
+    }
+
+    func openTerminal() {
+        guard let update = current else { return }
+        activateTerminal(for: update)
+    }
+
+    func activateTerminal(for update: AgentUpdate) {
+        if let bundleID = update.terminalBundleID,
+           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
+            app.activate(options: [.activateIgnoringOtherApps])
+        } else {
+            logger.error("No terminal app recorded for \(update.agent.displayName, privacy: .public); reply may land in the wrong window")
+        }
+    }
+
+    /// Dismiss the selected session without answering: its hook is released so the agent
+    /// stops normally. Other waiting sessions stay.
+    func dismiss() {
+        guard let update = current else { hidePanel(); return }
+        release(update, with: "dismiss")
+        remove(update)
     }
 
     /// Answers the waiting hook. Opening a FIFO for writing blocks until the reader is
@@ -250,59 +364,39 @@ final class AgentUpdateCenter: ObservableObject {
         }
     }
 
-    /// Closes the panel after an answer was delivered (does not release the hook again).
-    private func finish() {
-        dismissTask?.cancel()
-        dismissTask = nil
-        current = nil
-        hidePanel()
+    private func clearDraft() {
+        draft = ""
+        attachments = []
     }
 
-    func replyByVoice() {
-        NotificationCenter.default.post(name: .toggleRecorderPanel, object: nil)
-    }
-
-    func openTerminal() {
-        guard let update = current else { return }
-        activateTerminal(for: update)
-        dismiss()
-    }
-
-    func activateTerminal(for update: AgentUpdate) {
-        if let bundleID = update.terminalBundleID,
-           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
-            app.activate(options: [.activateIgnoringOtherApps])
+    /// Drops a session from the panel; selects the next one or hides the panel.
+    private func remove(_ update: AgentUpdate) {
+        pending.removeAll { $0.id == update.id }
+        if pending.isEmpty {
+            selectedID = nil
+            clearDraft()
+            hidePanel()
         } else {
-            logger.error("No terminal app recorded for \(update.agent.displayName, privacy: .public); reply may land in the wrong window")
+            if selectedID == update.id { selectedID = pending.last?.id }
+            refit()
         }
-    }
-
-    /// Dismiss without answering: a waiting hook is released so the agent stops normally.
-    func dismiss() {
-        if let update = current { release(update, with: "dismiss") }
-        finish()
-    }
-
-    private func hidePanel() {
-        guard let panel, panel.isVisible else { return }
-        if panel.isKeyWindow { panel.resignKey() }
-        panel.orderOut(nil)
     }
 
     // MARK: Panel
 
+    static let panelWidth: CGFloat = 600
+
     private func showPanel() {
         if panel == nil {
-            let panel = AgentReplyPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 240))
+            let panel = AgentReplyPanel(contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: 300))
             panel.contentView = NSHostingView(rootView: AgentReplyView(center: self))
             self.panel = panel
         }
         guard let panel, let screen = NSScreen.main else { return }
         panel.contentView?.layoutSubtreeIfNeeded()
         var size = panel.contentView?.fittingSize ?? panel.frame.size
-        size.width = 520
+        size.width = Self.panelWidth
         panel.setContentSize(size)
-        // Same spot as the recording pill: bottom center, or the always-show edge.
         let frame = screen.visibleFrame
         let settings = SpeekSettings.shared
         let origin: NSPoint
@@ -315,12 +409,18 @@ final class AgentUpdateCenter: ObservableObject {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    /// Re-fits the panel height after content changes (longer draft, more options).
+    private func hidePanel() {
+        guard let panel, panel.isVisible else { return }
+        if panel.isKeyWindow { panel.resignKey() }
+        panel.orderOut(nil)
+    }
+
+    /// Re-fits the panel height after content changes (longer draft, other session).
     fileprivate func refit() {
         guard let panel, panel.isVisible else { return }
         panel.contentView?.layoutSubtreeIfNeeded()
         var size = panel.contentView?.fittingSize ?? panel.frame.size
-        size.width = 520
+        size.width = Self.panelWidth
         let bottomAligned = !(SpeekSettings.shared.keepsRecorderVisibleWhenIdle && SpeekSettings.shared.alwaysShowEdge == .top)
         var frame = panel.frame
         if bottomAligned { frame.origin.y = frame.maxY - size.height }
@@ -349,9 +449,21 @@ final class AgentReplyPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) {
         AgentUpdateCenter.shared.dismiss()
     }
+
+    /// Cmd+V with an image on the clipboard attaches it; text pastes fall through to the field.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown,
+           event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "v" {
+            let pasteboard = NSPasteboard.general
+            let hasText = pasteboard.string(forType: .string) != nil
+            if !hasText, AgentUpdateCenter.shared.addImages(from: pasteboard) { return }
+        }
+        super.sendEvent(event)
+    }
 }
 
-/// Synthesised keystrokes for answering terminal prompts.
+/// Synthesised keystrokes for answering terminal prompts (legacy, non-waiting hooks).
 enum Keystrokes {
     static func type(_ text: String) {
         guard AXIsProcessTrusted() else { return }
@@ -377,71 +489,30 @@ enum Keystrokes {
 
 // MARK: - Panel view
 
+/// Three stacked glass pieces: session pills, the agent's message, the reply box.
 private struct AgentReplyView: View {
     @ObservedObject var center: AgentUpdateCenter
+    @ObservedObject private var modeManager = ModeManager.shared
     @FocusState private var replyFocused: Bool
     @State private var appeared = false
 
-    private var shortcutTokens: [String] {
-        ShortcutStore.shortcut(for: .primaryRecording)?.displayTokens ?? ["⌘"]
-    }
+    private let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+    private let glassTint = Color.black.opacity(0.55)
 
     var body: some View {
         Group {
             if let update = center.current {
                 VStack(alignment: .leading, spacing: 12) {
-                    header(update)
-                    if !update.message.isEmpty {
-                        ScrollView {
-                            MarkdownContentView(update.message, fontSize: 13, foregroundColor: .white.opacity(0.92))
-                        }
-                        .frame(maxHeight: 220)
-                        .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if !update.options.isEmpty {
-                        VStack(spacing: 6) {
-                            ForEach(Array(update.options.enumerated()), id: \.offset) { index, label in
-                                Button {
-                                    center.choose(number: index + 1)
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        Text("\(index + 1)")
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                                            .frame(width: 20, height: 20)
-                                            .background(Circle().fill(Color.white.opacity(0.14)))
-                                        Text(label).font(.system(size: 13))
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 32)
-                                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.08)))
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    if update.kind == .permission {
-                        HStack(spacing: 8) {
-                            Button("Allow") { center.allowPermission() }
-                                .buttonStyle(.glassProminent)
-                                .tint(Color.accentColor)
-                            Button("Deny") { center.denyPermission() }
-                                .buttonStyle(.glass)
-                            Spacer()
-                        }
-                    }
-                    replyBox(update)
-                    footer
+                    sessionPills
+                    messageCard(update)
+                    if !update.options.isEmpty { optionRow(update) }
+                    if update.kind == .permission { permissionRow }
+                    replyCard(update)
                 }
-                .padding(16)
-                .frame(width: 520)
-                .glassEffect(.regular.tint(Color.black.opacity(0.62)), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.8)
-                )
-                .scaleEffect(appeared ? 1 : 0.9, anchor: .bottom)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 10)
+                .frame(width: AgentUpdateCenter.panelWidth)
+                .scaleEffect(appeared ? 1 : 0.94, anchor: .bottom)
                 .opacity(appeared ? 1 : 0)
                 .onAppear {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { appeared = true }
@@ -449,7 +520,7 @@ private struct AgentReplyView: View {
                 }
                 .onDisappear { appeared = false }
                 .onChange(of: center.draft) { _, _ in center.refit() }
-                .onChange(of: center.current?.id) { _, _ in
+                .onChange(of: center.selectedID) { _, _ in
                     center.refit()
                     replyFocused = true
                 }
@@ -460,108 +531,213 @@ private struct AgentReplyView: View {
         .colorScheme(.dark)
     }
 
-    private func header(_ update: AgentUpdate) -> some View {
-        HStack(spacing: 10) {
-            update.agent.icon.frame(width: 22, height: 22)
-            Text(update.agent.displayName)
-                .font(.system(size: 14, weight: .semibold))
-            Text(update.kind.title)
-                .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.6))
-            if !update.projectName.isEmpty {
-                Text(update.projectName)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.white.opacity(0.12)))
+    // MARK: Pills
+
+    private var sessionPills: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(center.pending) { update in
+                    let isSelected = update.id == center.current?.id
+                    Button { center.select(update) } label: {
+                        HStack(spacing: 8) {
+                            update.agent.icon.frame(width: 18, height: 18)
+                            Text(pillTitle(update))
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.7))
+                                .lineLimit(1)
+                            if update.kind != .finished {
+                                Circle().fill(Color.orange).frame(width: 6, height: 6)
+                            }
+                        }
+                        .padding(.leading, 10)
+                        .padding(.trailing, 14)
+                        .frame(height: 38)
+                        .glassEffect(.regular.tint(isSelected ? Color.black.opacity(0.7) : Color.black.opacity(0.4)), in: Capsule(style: .continuous))
+                        .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(isSelected ? 0.18 : 0.08), lineWidth: 0.8))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help("\(update.agent.displayName) \(update.kind.title) in \(update.workingDirectory)")
+                }
             }
-            Spacer()
-            if update.terminalBundleID != nil {
-                Button { center.openTerminal() } label: {
-                    Image(systemName: "terminal")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func pillTitle(_ update: AgentUpdate) -> String {
+        let project = update.projectName.isEmpty ? update.agent.displayName : update.projectName
+        if let branch = update.branchName, !branch.isEmpty { return "\(project) • \(branch)" }
+        return project
+    }
+
+    // MARK: Message
+
+    private func messageCard(_ update: AgentUpdate) -> some View {
+        ScrollView {
+            if update.message.isEmpty {
+                Text("\(update.agent.displayName) \(update.kind.title).")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                MarkdownContentView(update.message, fontSize: 15, foregroundColor: .white.opacity(0.94))
+            }
+        }
+        .frame(maxHeight: 380)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular.tint(glassTint), in: cardShape)
+        .overlay(cardShape.strokeBorder(Color.white.opacity(0.1), lineWidth: 0.8))
+    }
+
+    private func optionRow(_ update: AgentUpdate) -> some View {
+        VStack(spacing: 6) {
+            ForEach(Array(update.options.enumerated()), id: \.offset) { index, label in
+                Button { center.choose(number: index + 1) } label: {
+                    HStack(spacing: 10) {
+                        Text("\(index + 1)")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(Color.white.opacity(0.14)))
+                        Text(label).font(.system(size: 14))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: 38)
+                    .glassEffect(.regular.tint(Color.black.opacity(0.45)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Open the terminal")
             }
-            Button { center.dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-            .buttonStyle(.plain)
-            .help("Dismiss (esc)")
         }
     }
 
-    private func replyBox(_ update: AgentUpdate) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            Group {
-                if center.recordingState == .recording {
-                    HStack(spacing: 10) {
-                        if let recorder = center.recorder {
-                            AgentListeningBars(recorder: recorder)
-                        }
-                        Text("Listening...")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.7))
-                        Spacer(minLength: 0)
-                    }
-                } else if center.recordingState == .transcribing || center.recordingState == .enhancing {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small).tint(.white)
-                        Text(center.recordingState == .enhancing ? "Rewriting..." : "Transcribing...")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.7))
-                        Spacer(minLength: 0)
-                    }
-                } else {
-                    TextField("Reply to \(update.agent.displayName)...", text: $center.draft, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14))
-                        .lineLimit(1...6)
-                        .focused($replyFocused)
-                        .onSubmit { center.send() }
-                }
-            }
-            .frame(minHeight: 26)
-            Button { center.send() } label: {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(center.draft.isEmpty ? Color.white.opacity(0.15) : Color.accentColor))
-            }
-            .buttonStyle(.plain)
-            .disabled(center.draft.trimmingCharacters(in: .whitespaces).isEmpty || center.isSending)
-            .help("Send (Return)")
-        }
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
-        .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.08)))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(replyFocused ? Color.accentColor.opacity(0.6) : Color.white.opacity(0.1), lineWidth: 1)
-        )
-    }
-
-    private var footer: some View {
-        HStack(spacing: 6) {
-            SpeekKeycapRow(keys: shortcutTokens)
-            Text("to speak")
-            Text("·").foregroundStyle(.white.opacity(0.3))
-            SpeekKeycapRow(keys: ["⏎"])
-            Text("to send")
-            Text("·").foregroundStyle(.white.opacity(0.3))
-            SpeekKeycapRow(keys: ["esc"])
-            Text("to dismiss")
+    private var permissionRow: some View {
+        HStack(spacing: 8) {
+            Button("Allow") { center.allowPermission() }
+                .buttonStyle(.glassProminent)
+                .tint(Color.accentColor)
+            Button("Deny") { center.denyPermission() }
+                .buttonStyle(.glass)
             Spacer()
         }
-        .font(.system(size: 11))
-        .foregroundStyle(.white.opacity(0.55))
+    }
+
+    // MARK: Reply
+
+    private func replyCard(_ update: AgentUpdate) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField("Type or dictate what you want changed.", text: $center.draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 17))
+                .lineLimit(2...8)
+                .focused($replyFocused)
+                .onSubmit { center.send() }
+                .frame(minHeight: 48, alignment: .topLeading)
+            if !center.attachments.isEmpty { attachmentStrip }
+            HStack(spacing: 14) {
+                voiceStatus
+                Spacer()
+                Button { center.dismiss() } label: {
+                    HStack(spacing: 8) {
+                        Text("Dismiss")
+                        SpeekKeycapRow(keys: ["esc"])
+                    }
+                }
+                .buttonStyle(.plain)
+                Button { center.send() } label: {
+                    HStack(spacing: 8) {
+                        Text("Send")
+                        SpeekKeycapRow(keys: ["⏎"])
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSend)
+                .opacity(canSend ? 1 : 0.45)
+            }
+            .font(.system(size: 15))
+            .foregroundStyle(.white.opacity(0.7))
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 18)
+        .padding(.bottom, 14)
+        .glassEffect(.regular.tint(glassTint), in: cardShape)
+        .overlay(cardShape.strokeBorder(replyFocused ? Color.white.opacity(0.16) : Color.white.opacity(0.1), lineWidth: 0.8))
+        .onDrop(of: [UTType.image, UTType.fileURL], isTargeted: nil) { providers in
+            let pasteboard = NSPasteboard(name: .init("com.aveekpatra.speek.drop"))
+            var accepted = false
+            for provider in providers {
+                provider.loadObject(ofClass: NSImage.self) { object, _ in
+                    guard let image = object as? NSImage else { return }
+                    Task { @MainActor in
+                        pasteboard.clearContents()
+                        pasteboard.writeObjects([image])
+                        _ = center.addImages(from: pasteboard)
+                    }
+                }
+                accepted = true
+            }
+            return accepted
+        }
+    }
+
+    private var canSend: Bool {
+        (!center.draft.trimmingCharacters(in: .whitespaces).isEmpty || !center.attachments.isEmpty) && !center.isSending
+    }
+
+    @ViewBuilder
+    private var voiceStatus: some View {
+        switch center.recordingState {
+        case .recording:
+            HStack(spacing: 10) {
+                if let recorder = center.recorder { AgentListeningBars(recorder: recorder) }
+                Text("Listening...")
+            }
+        case .transcribing, .enhancing:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small).tint(.white)
+                Text(center.recordingState == .enhancing ? "Rewriting..." : "Transcribing...")
+            }
+        default:
+            Button { center.replyByVoice() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "mic")
+                        .font(.system(size: 15, weight: .medium))
+                    Text(modeManager.currentEffectiveConfiguration?.name ?? "Voice to text")
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Start dictating (\((ShortcutStore.shortcut(for: .primaryRecording)?.displayTokens ?? []).joined(separator: " ")))")
+        }
+    }
+
+    private var attachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(center.attachments, id: \.self) { url in
+                    ZStack(alignment: .topTrailing) {
+                        if let image = NSImage(contentsOf: url) {
+                            Image(nsImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.15), lineWidth: 0.8))
+                        }
+                        Button { center.removeAttachment(url) } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.white, Color.black.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 5, y: -5)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
     }
 }
 
@@ -570,6 +746,6 @@ private struct AgentListeningBars: View {
 
     var body: some View {
         LiveBarsView(audioMeter: recorder.audioMeter, isActive: true, barCount: 9, maxHeight: 16)
-            .frame(height: 26)
+            .frame(height: 22)
     }
 }
