@@ -4,7 +4,6 @@ import AppKit
 struct AdvancedConfigurationPage: View {
     @ObservedObject private var settings = SpeekSettings.shared
     @EnvironmentObject private var menuBarManager: MenuBarManager
-    @ObservedObject private var plugins = AgentPluginManager.shared
 
     var body: some View {
         SpeekPageScroll {
@@ -12,7 +11,6 @@ struct AdvancedConfigurationPage: View {
             voiceModelSection
             appFolderSection
             textInputSection
-            agentPluginsSection
             aiModelsSection
         }
         .navigationTitle("")
@@ -107,46 +105,6 @@ struct AdvancedConfigurationPage: View {
                         Toggle("", isOn: $settings.simulateKeypresses).labelsHidden().toggleStyle(.switch)
                     }
                 }
-            }
-        }
-    }
-
-    private var agentPluginsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SpeekSectionHeader("Agent Plugins", help: "Let coding agents call you when they need input. Speek pops up, you answer by voice, and the reply is sent back to the agent.")
-            SpeekGroup {
-                ForEach(AgentPlugin.allCases) { plugin in
-                    HStack(spacing: 12) {
-                        plugin.icon
-                            .frame(width: 26, height: 26)
-                        Text(plugin.displayName)
-                            .font(.system(size: 15))
-                        Spacer()
-                        if plugins.isInstalled(plugin) {
-                            Menu {
-                                Button("Uninstall", role: .destructive) { plugins.uninstall(plugin) }
-                            } label: {
-                                Text("Installed")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .menuStyle(.borderlessButton)
-                            .menuIndicator(.hidden)
-                            .fixedSize()
-                        } else {
-                            Button("Install") { plugins.install(plugin) }
-                                .buttonStyle(.glass)
-                        }
-                    }
-                    .padding(.horizontal, SpeekDesign.rowHorizontalPadding)
-                    .frame(minHeight: SpeekDesign.rowMinHeight)
-                }
-            }
-            if let message = plugins.lastMessage {
-                Text(message)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 4)
             }
         }
     }

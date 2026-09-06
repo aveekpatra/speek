@@ -43,7 +43,7 @@ incremental builds and `scripts/dev-show.sh <page>` to launch on a given page.
 
 ## Agent plugins
 
-Configuration > Advanced settings > Agent Plugins installs a small hook script into
+The Agents page in the sidebar connects Claude Code and Codex: it installs a small hook script into
 `~/Library/Application Support/Speek/hooks/` and wires it into:
 
 - **Claude Code**: `~/.claude/settings.json` hooks for Stop, Notification, PermissionRequest, PreToolUse (AskUserQuestion), and UserPromptSubmit.

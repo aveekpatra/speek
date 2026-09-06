@@ -15,6 +15,22 @@ enum AgentPlugin: String, CaseIterable, Identifiable {
         }
     }
 
+    /// True when the agent's config folder exists (it has been run on this Mac).
+    var isPresentOnThisMac: Bool {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        switch self {
+        case .claudeCode: return FileManager.default.fileExists(atPath: home.appendingPathComponent(".claude").path)
+        case .codex: return FileManager.default.fileExists(atPath: home.appendingPathComponent(".codex").path)
+        }
+    }
+
+    var installedDescription: String {
+        switch self {
+        case .claudeCode: return "Hooks in ~/.claude/settings.json, /speek skill installed"
+        case .codex: return "Hooks in ~/.codex/hooks.json, /speek skill installed"
+        }
+    }
+
     @ViewBuilder
     var icon: some View {
         switch self {

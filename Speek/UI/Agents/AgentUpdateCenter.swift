@@ -179,7 +179,7 @@ final class AgentUpdateCenter: ObservableObject {
             selectedID = update.id
         }
         showPanel()
-        if SpeekSettings.shared.soundEffects != .off {
+        if SpeekSettings.shared.agentSound && SpeekSettings.shared.soundEffects != .off {
             NSSound(named: "Tink")?.play()
         }
     }
@@ -197,6 +197,7 @@ final class AgentUpdateCenter: ObservableObject {
         guard !trimmed.isEmpty else { return }
         draft = draft.isEmpty ? trimmed : draft + " " + trimmed
         panel?.makeKeyAndOrderFront(nil)
+        if SpeekSettings.shared.agentAutoSend { send() }
     }
 
     static let attachmentsDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

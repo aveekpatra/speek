@@ -5,6 +5,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
     case home
     case modes
     case vocabulary
+    case agents
     case configuration
     case sound
     case modelsLibrary
@@ -18,6 +19,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
         case .home: return "Home"
         case .modes: return "Modes"
         case .vocabulary: return "Vocabulary"
+        case .agents: return "Agents"
         case .configuration: return "Configuration"
         case .sound: return "Sound"
         case .modelsLibrary: return "Models library"
@@ -31,6 +33,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
         case .home: return "house.fill"
         case .modes: return "sparkle"
         case .vocabulary: return "text.book.closed.fill"
+        case .agents: return "apple.terminal.fill"
         case .configuration: return "gearshape.fill"
         case .sound: return "speaker.wave.2.fill"
         case .modelsLibrary: return "books.vertical.fill"
@@ -44,6 +47,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
         case .home: return Color(red: 0.98, green: 0.45, blue: 0.20)
         case .modes: return Color(red: 0.20, green: 0.50, blue: 0.98)
         case .vocabulary: return Color(red: 0.20, green: 0.55, blue: 0.98)
+        case .agents: return Color(red: 0.16, green: 0.62, blue: 0.42)
         case .configuration: return Color(white: 0.45)
         case .sound: return Color(white: 0.45)
         case .modelsLibrary: return Color(white: 0.45)
@@ -55,7 +59,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
     /// Sidebar sections, in display order (a gap is drawn between sections).
     static let sidebarSections: [[SpeekPage]] = [
         [.home],
-        [.modes, .vocabulary],
+        [.modes, .vocabulary, .agents],
         [.configuration, .sound, .modelsLibrary],
         [.history]
     ]

@@ -47,6 +47,7 @@ struct MainWindowView: View {
         case .home: HomePage()
         case .modes: ModesPage()
         case .vocabulary: VocabularyPage()
+        case .agents: AgentsPage()
         case .configuration: ConfigurationPage()
         case .sound: SoundPage()
         case .modelsLibrary: ModelsLibraryPage()

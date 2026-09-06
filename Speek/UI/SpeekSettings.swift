@@ -293,6 +293,8 @@ final class SpeekSettings: ObservableObject {
     @Published var typingWordsPerMinute: Int { didSet { defaults.set(typingWordsPerMinute, forKey: Keys.typingWPM) } }
 
     // Agent plugins
+    @Published var agentSound: Bool { didSet { defaults.set(agentSound, forKey: Keys.agentSound) } }
+    @Published var agentAutoSend: Bool { didSet { defaults.set(agentAutoSend, forKey: Keys.agentAutoSend) } }
     @Published var claudeCodePluginInstalled: Bool { didSet { defaults.set(claudeCodePluginInstalled, forKey: Keys.claudePlugin) } }
     @Published var codexPluginInstalled: Bool { didSet { defaults.set(codexPluginInstalled, forKey: Keys.codexPlugin) } }
 
@@ -325,6 +327,8 @@ final class SpeekSettings: ObservableObject {
         soundVolume = d.object(forKey: Keys.soundVolume) as? Double ?? 1.0
         statsRange = StatsRange(rawValue: d.string(forKey: Keys.statsRange) ?? "") ?? .allTime
         typingWordsPerMinute = d.object(forKey: Keys.typingWPM) as? Int ?? 40
+        agentSound = d.object(forKey: Keys.agentSound) as? Bool ?? true
+        agentAutoSend = d.bool(forKey: Keys.agentAutoSend)
         claudeCodePluginInstalled = d.bool(forKey: Keys.claudePlugin)
         codexPluginInstalled = d.bool(forKey: Keys.codexPlugin)
     }
@@ -360,6 +364,8 @@ final class SpeekSettings: ObservableObject {
         static let soundVolume = "speek.soundVolume"
         static let statsRange = "speek.statsRange"
         static let typingWPM = "speek.typingWPM"
+        static let agentSound = "speek.agent.sound"
+        static let agentAutoSend = "speek.agent.autoSend"
         static let claudePlugin = "speek.plugin.claude"
         static let codexPlugin = "speek.plugin.codex"
     }
