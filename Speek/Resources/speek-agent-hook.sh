@@ -23,6 +23,19 @@ else
 fi
 
 [ "${SPEEK_AGENT:-1}" = "0" ] && exit 0
+
+# Bookkeeping events we register for parity but do nothing with: leave at once so
+# they cost the agent nothing. PreToolUse only matters for question tools
+# (AskUserQuestion, request_user_input); any other tool call passes straight through.
+case "$PAYLOAD" in
+  *'"SessionStart"'*|*'"PostToolUse"'*|*'"SessionEnd"'*) exit 0 ;;
+  *'"PreToolUse"'*)
+    case "$PAYLOAD" in
+      *'"questions"'*|*'"question"'*) ;;
+      *) exit 0 ;;
+    esac ;;
+esac
+
 STATE_DIR="${SPEEK_AGENT_STATE_DIR:-/tmp/speek-agent}"
 mkdir -p "$STATE_DIR" 2>/dev/null
 CWD_HASH=$(printf '%s' "$PWD" | /sbin/md5 -q 2>/dev/null || printf '%s' "$PWD" | md5sum | cut -d' ' -f1)
@@ -150,7 +163,13 @@ if (event === "Stop") {
   var answer = "";
   if (kind === "option" && text) answer = text;
   else if (kind === "reply" && text) answer = text;
-  if (answer) {
+  if (answer && env("SPEEK_AGENT_NAME") === "codex") {
+    // The Codex request_user_input tool takes answers from the terminal only, so the
+    // pre-filled `answers` trick below does not apply. Blocking the call with the
+    // answer as the reason hands it to the model instead, which carries on with it.
+    out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny",
+      permissionDecisionReason: "The user already answered in Speek: " + answer + "\nContinue with that answer; do not ask again." } };
+  } else if (answer) {
     var p = {};
     try { p = JSON.parse(env("SPEEK_PAYLOAD") || "{}"); } catch (e) { p = {}; }
     var input = (p && p.tool_input) ? p.tool_input : {};

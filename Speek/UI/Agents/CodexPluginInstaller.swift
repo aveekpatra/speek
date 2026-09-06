@@ -54,7 +54,7 @@ enum CodexPluginInstaller {
     /// True when every Speek plugin hook carries a trusted hash in config.toml.
     static var hooksLookTrusted: Bool {
         guard let text = try? String(contentsOf: configURL, encoding: .utf8) else { return false }
-        return ["stop", "permission_request", "user_prompt_submit"].allSatisfy {
+        return ["session_start", "user_prompt_submit", "pre_tool_use", "post_tool_use", "permission_request", "stop"].allSatisfy {
             text.contains("[hooks.state.\"\(pluginID):hooks.json:\($0):0:0\"]")
         }
     }
@@ -139,14 +139,22 @@ enum CodexPluginInstaller {
         // but no CODEX_PLUGIN_ROOT, and the script under Application Support is the one
         // Speek keeps up to date anyway. The copy inside the plugin is for inspection.
         let command = "\"\(hookScript.path)\" codex"
-        func entry(_ timeout: Int) -> [String: Any] {
-            ["hooks": [["type": "command", "command": command, "timeout": timeout]]]
+        func entry(_ timeout: Int, matcher: String? = nil) -> [String: Any] {
+            var group: [String: Any] = ["hooks": [["type": "command", "command": command, "timeout": timeout]]]
+            if let matcher { group["matcher"] = matcher }
+            return group
         }
+        // Same six lifecycle hooks as Superwhisper's Codex plugin. SessionStart and
+        // PostToolUse return immediately in the script; PreToolUse only waits for
+        // request_user_input (questions).
         let hooks: [String: Any] = [
             "hooks": [
-                "Stop": [entry(3600)],
+                "SessionStart": [entry(10)],
+                "UserPromptSubmit": [entry(10)],
+                "PreToolUse": [entry(3600, matcher: "request_user_input")],
+                "PostToolUse": [entry(10)],
                 "PermissionRequest": [entry(3600)],
-                "UserPromptSubmit": [entry(10)]
+                "Stop": [entry(3600)]
             ]
         ]
         try writeJSON(hooks, to: plugin.appendingPathComponent("hooks.json"))
