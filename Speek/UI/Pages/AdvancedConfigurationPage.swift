@@ -11,7 +11,6 @@ struct AdvancedConfigurationPage: View {
             voiceModelSection
             appFolderSection
             textInputSection
-            aiModelsSection
         }
         .navigationTitle("")
         .toolbar { SpeekStandardToolbar() }
@@ -93,31 +92,7 @@ struct AdvancedConfigurationPage: View {
                 SpeekRow("Paste result text", help: "Turn off to only copy the result to the clipboard without pasting.") {
                     Toggle("", isOn: $settings.pasteResultText).labelsHidden().toggleStyle(.switch)
                 }
-                SpeekRow("Hold shift to auto-send after paste", help: "Hold Shift while stopping a recording to press Return after the text is pasted.") {
-                    HStack(spacing: 14) {
-                        Image(systemName: "atom").foregroundStyle(.tertiary).font(.system(size: 13))
-                        Toggle("", isOn: $settings.holdShiftToAutoSend).labelsHidden().toggleStyle(.switch)
-                    }
                 }
-                SpeekRow("Simulate keypresses", help: "Type the result character by character instead of pasting. Slower, but works in apps that block paste.") {
-                    HStack(spacing: 14) {
-                        Image(systemName: "atom").foregroundStyle(.tertiary).font(.system(size: 13))
-                        Toggle("", isOn: $settings.simulateKeypresses).labelsHidden().toggleStyle(.switch)
-                    }
-                }
-            }
-        }
-    }
-
-    private var aiModelsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SpeekSectionHeader("AI Models")
-            SpeekGroup {
-                SpeekRow("Show experimental models", help: "Lists preview and quantized model builds in the Models library.") {
-                    HStack(spacing: 14) {
-                        Image(systemName: "atom").foregroundStyle(.tertiary).font(.system(size: 13))
-                        Toggle("", isOn: $settings.showExperimentalModels).labelsHidden().toggleStyle(.switch)
-                    }
                 }
             }
         }

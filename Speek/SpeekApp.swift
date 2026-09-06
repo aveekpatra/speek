@@ -333,12 +333,6 @@ struct SpeekApp: App {
                         .background(WindowAccessor { window in
                             WindowManager.shared.configureWindow(window)
                         })
-                        .onDisappear {
-                            whisperModelManager.unloadModel()
-
-                            // Stop the automatic audio cleanup process
-                            audioCleanupManager.stopAutomaticCleanup()
-                        }
                 } else {
                     SpeekOnboardingView(hasCompleted: $hasCompletedOnboardingV2)
                         .environmentObject(fluidAudioModelManager)

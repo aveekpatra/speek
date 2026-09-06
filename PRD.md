@@ -44,7 +44,7 @@ Welcome, permissions (Microphone, Accessibility), voice model download, shortcut
 | Modes | Mode list, Create mode, mode detail |
 | Vocabulary | Add word / Replace with, list, replacement editor, import/export |
 | Agents | Connect Claude Code and Codex, reply panel options, per-project mute |
-| Configuration | Appearance (theme, recording window, always show, position), Keyboard Shortcuts, Application, Advanced settings (Dock, menubar click, always close, model active duration, app folder, text input, experimental models) |
+| Configuration | Appearance (theme, recording window, always show, position), Keyboard Shortcuts, Application, Advanced settings (Dock, menubar click, always close, model active duration, app folder, text input) |
 | Sound | Recording toggles, playback behavior, sound effects style and volume |
 | Models library | Model table |
 | History | Search, date groups, detail with audio player and metadata |
