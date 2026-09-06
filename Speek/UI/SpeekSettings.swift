@@ -3,10 +3,8 @@ import AppKit
 import SwiftUI
 import Combine
 
-// MARK: - Enumerations backing Superwhisper-style settings
+// MARK: - Enumerations backing the settings
 
-/// Screen edge for the always-shown mini strip. Bottom is deliberately excluded
-/// (the Dock lives there).
 /// Where the floating panels (recording pill, always-show strip, agent reply) live.
 /// Bottom and top are horizontally centred; left and right are vertically centred.
 enum PanelPosition: String, CaseIterable, Identifiable {
@@ -202,7 +200,7 @@ enum StatsRange: String, CaseIterable, Identifiable {
 
 // MARK: - Settings store
 
-/// Single observable store for the Superwhisper-style settings surface. Every property
+/// Single observable store for the settings surface. Every property
 /// is backed by UserDefaults so the rest of the engine (which reads the legacy keys
 /// directly) keeps working. New keys are prefixed `speek.`; legacy keys are reused
 /// where the engine already consumes them.

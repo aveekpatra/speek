@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The main window: Liquid Glass sidebar + detail column, mirroring Superwhisper.
+/// The main window: Liquid Glass sidebar + detail column.
 struct MainWindowView: View {
     @ObservedObject private var navigation = SpeekNavigation.shared
     @ObservedObject private var settings = SpeekSettings.shared

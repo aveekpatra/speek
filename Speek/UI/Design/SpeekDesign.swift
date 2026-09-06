@@ -410,7 +410,7 @@ struct SpeekCircleIconButton: View {
 
 // MARK: - Speed / accuracy meter
 
-/// Five dashes with `filled` of them highlighted, mirroring Superwhisper's meter.
+/// Five dashes with `filled` of them highlighted.
 struct SpeekMeter: View {
     let value: Double // 0...1
     var segments: Int = 5

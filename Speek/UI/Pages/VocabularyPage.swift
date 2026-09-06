@@ -255,7 +255,7 @@ private struct VocabularyRow: View {
 
 // MARK: - Editor panel
 
-/// Slide-over editor matching Superwhisper's "Edit replacement" panel.
+/// Slide-over "Edit replacement" editor.
 private struct ReplacementEditorPanel: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var scheme

@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// Menu bar menu, mirroring Superwhisper's: Toggle Recording, Transcribe File, History,
+/// Menu bar menu: Toggle Recording, Transcribe File, History,
 /// Settings, microphone and mode pickers, version, updates, quit.
 struct MenuBarView: View {
     @ObservedObject private var agentCenter = AgentUpdateCenter.shared

@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// Replaces Superwhisper's license page: version, update, links.
+/// About: version, update, links, credits.
 struct AboutPage: View {
     @EnvironmentObject private var updaterViewModel: UpdaterViewModel
 

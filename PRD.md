@@ -2,13 +2,12 @@
 
 ## 1. Product vision
 
-Speek is a free, open-source macOS dictation app that matches the Superwhisper workflow
-and look (see `reference/screenshots/`) while running every model locally. Press a
+Speek is a free, open-source macOS dictation app that runs every model locally. Press a
 shortcut, speak, and clean text lands in the focused app.
 
 ## 2. Target user
 
-Mac users who want Superwhisper-class dictation without a subscription or cloud
+Mac users who want high-quality dictation without a subscription or cloud
 processing, including developers who drive coding agents (Claude Code, Codex) by voice.
 
 ## 3. Scope
@@ -70,7 +69,7 @@ Menu bar: Toggle Recording, Transcribe File..., History..., Settings..., microph
 - Cloud transcription or cloud LLM providers.
 - iOS, Windows, Linux.
 - Paid features, licensing, telemetry.
-- Superwhisper's proprietary S1 models (not redistributable).
+- Proprietary third-party models that cannot be redistributed.
 
 ## 8. Status
 

@@ -2,7 +2,7 @@ import Foundation
 import os
 
 /// Installs Speek as a real Claude Code plugin ("speek@speek") so it shows up under
-/// Your plugins, exactly like Superwhisper's. The plugin lives in a local marketplace
+/// Your plugins. The plugin lives in a local marketplace
 /// directory we write under Application Support; the `claude` CLI registers it.
 /// Falls back to plain settings.json hooks when the CLI is not available.
 enum ClaudePluginInstaller {

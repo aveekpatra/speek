@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Top-level destinations in the main window sidebar (mirrors Superwhisper's layout).
+/// Top-level destinations in the main window sidebar.
 enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
     case home
     case modes

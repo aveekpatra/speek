@@ -144,7 +144,7 @@ enum CodexPluginInstaller {
             if let matcher { group["matcher"] = matcher }
             return group
         }
-        // Same six lifecycle hooks as Superwhisper's Codex plugin. SessionStart and
+        // All six Codex lifecycle hooks. SessionStart and
         // PostToolUse return immediately in the script; PreToolUse only waits for
         // request_user_input (questions).
         let hooks: [String: Any] = [

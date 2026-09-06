@@ -7,16 +7,15 @@
   </p>
 </div>
 
-Press a shortcut, speak, and the text lands wherever your cursor is. Speek mirrors the
-workflow of Superwhisper with a macOS 26 Liquid Glass interface, and it only ever uses
-local models: nothing you say leaves your Mac.
+Press a shortcut, speak, and the text lands wherever your cursor is. Speek has a macOS 26
+Liquid Glass interface and only ever uses local models: nothing you say leaves your Mac.
 
 ## Features
 
 - **Local voice models**: Cohere Transcribe (open 2B model, 14 languages), NVIDIA Canary 1B v2 (25 European languages), NVIDIA Parakeet V2/V3/110M/Japanese, Whisper Large v3 Turbo (whisper.cpp), and Apple Speech.
 - **Modes**: presets (Voice to text, Message, Email, Note, Custom) with per-mode language, voice model, text model, app and website triggers, and shortcuts.
 - **Local text models**: S1-mini by Superwhisper (open-weights transcript normalizer, runs through llama.cpp, with tone and structure controls) or any Ollama model.
-- **Agent plugins**: Claude Code and Codex notify Speek when they finish, need permission, or ask a question; answer by voice and the reply is typed into their terminal.
+- **Agent plugins**: Claude Code and Codex notify Speek when they finish, need permission, or ask a question; answer by voice (or type) in a reply panel and the answer goes straight back to the agent.
 - **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the screen edge and expands on hover into change-mode, record, and open-app controls. Its edge (Bottom, Top, Left, Right) is set next to it under Configuration > Appearance.
 - **Vocabulary and replacements**, searchable history with audio playback and a clear-all button, and a menu bar app with Transcribe File.
 - **Sound effects** (Simple / Classic / Off), silence removal, dynamic normalization, playback pause while recording.
@@ -47,7 +46,7 @@ The Agent Panel page in the sidebar connects Claude Code and Codex: it installs 
 `~/Library/Application Support/Speek/hooks/` and wires it into:
 
 - **Claude Code**: installed as a real plugin (`speek@speek`, visible under Claude Code > Plugins) from a local marketplace Speek writes under Application Support, with hooks for Stop, Notification, PermissionRequest, PreToolUse (AskUserQuestion), and UserPromptSubmit plus the `/speek` skill. Without the `claude` CLI it falls back to the same hooks in `~/.claude/settings.json`.
-- **Codex**: installed as a real plugin (`speek@speek`, visible under `/plugins`) from a local marketplace Speek writes under Application Support, with the same six lifecycle hooks as Superwhisper (SessionStart, UserPromptSubmit, PreToolUse for `request_user_input` questions, PostToolUse, PermissionRequest, Stop) plus the `/speek` skill. Codex only runs hooks you have reviewed in `/hooks`, so Speek records that trust itself through `codex app-server` (the same `hooks.state` entry the review screen writes). Without the `codex` CLI it falls back to `~/.codex/hooks.json`, which then needs a one-time `/hooks` review. Your `notify` setting is left alone.
+- **Codex**: installed as a real plugin (`speek@speek`, visible under `/plugins`) from a local marketplace Speek writes under Application Support, with Codex's six lifecycle hooks (SessionStart, UserPromptSubmit, PreToolUse for `request_user_input` questions, PostToolUse, PermissionRequest, Stop) plus the `/speek` skill. Codex only runs hooks you have reviewed in `/hooks`, so Speek records that trust itself through `codex app-server` (the same `hooks.state` entry the review screen writes). Without the `codex` CLI it falls back to `~/.codex/hooks.json`, which then needs a one-time `/hooks` review. Your `notify` setting is left alone.
 
 When the agent finishes, asks a question, or needs permission, a reply panel appears at the Bottom, Center, or Top of the screen (Agent Panel > Position), always horizontally centred: a pill per waiting session (agent icon, project, git branch),
 the selected agent's message rendered as markdown, and a reply card. Press your recording
@@ -71,7 +70,6 @@ the current project directory. Uninstall from the same screen removes everything
 - `Speek/UI/`: the Speek UI (design system, sidebar, pages, recorder windows, agent plugins, onboarding).
 - `Speek/Transcription/`: engines (Whisper, FluidAudio Parakeet, Cohere, Apple Speech) and the recording pipeline.
 - `Speek/Modes/`: mode configuration and app/site triggers.
-- `reference/screenshots/`: Superwhisper screenshots used as the UI reference.
 
 Speek grew out of
 [Whisper Pro](https://github.com/ZdenekCulik/whisper-pro), itself a fork of

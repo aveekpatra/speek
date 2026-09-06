@@ -3,7 +3,7 @@ import AppKit
 
 // MARK: - Presets
 
-/// Superwhisper-style presets. Each maps to a bundled prompt (or no AI at all).
+/// Mode presets. Each maps to a bundled prompt (or no AI at all).
 enum ModePreset: String, CaseIterable, Identifiable {
     case voiceToText
     case message
