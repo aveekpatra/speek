@@ -40,30 +40,24 @@ class MiniRecorderPanel: NSPanel {
     }
     
     static func calculateWindowMetrics() -> NSRect {
-        let width: CGFloat = 540
-        let height: CGFloat = 430
-
-        guard let screen = NSScreen.main else {
-            return NSRect(x: 0, y: 0, width: width, height: height)
+        // Host stays large enough for assistant output; SwiftUI controls the visible
+        // pill size and aligns it to the anchored edge (see SpeekRecorderView.contentInsets).
+        let size = NSSize(width: 540, height: 430)
+        guard let screen = PanelAnchor.screen else {
+            return NSRect(origin: .zero, size: size)
         }
-
-        // Host stays large enough for assistant output; SwiftUI controls the visible mini width.
-        let padding: CGFloat = 8
-
-        let visibleFrame = screen.visibleFrame
-        let edge: RecorderEdge? = MainActor.assumeIsolated {
-            SpeekSettings.shared.keepsRecorderVisibleWhenIdle ? SpeekSettings.shared.alwaysShowEdge : nil
+        let placement = MainActor.assumeIsolated { PanelPlacement.current }
+        var frame = PanelAnchor.frame(for: size, placement: placement, on: screen)
+        // The content already keeps its own gap from the anchored edge; pull the host
+        // back by that much so the visible pill lands exactly on the anchor.
+        let insets = SpeekRecorderView<SpeekEngine>.contentInsets(for: placement)
+        switch placement {
+        case .bottom: frame.origin.y -= insets.bottom
+        case .top: frame.origin.y += insets.top
+        case .left: frame.origin.x -= insets.leading
+        case .right: frame.origin.x += insets.trailing
         }
-        switch edge {
-        case .top:
-            return NSRect(x: visibleFrame.midX - width / 2, y: visibleFrame.maxY - height, width: width, height: height)
-        case .left:
-            return NSRect(x: visibleFrame.minX, y: visibleFrame.midY - height / 2, width: width, height: height)
-        case .right:
-            return NSRect(x: visibleFrame.maxX - width, y: visibleFrame.midY - height / 2, width: width, height: height)
-        case nil:
-            return NSRect(x: visibleFrame.midX - width / 2, y: visibleFrame.minY + padding, width: width, height: height)
-        }
+        return frame
     }
 
     func show() {

@@ -394,22 +394,24 @@ final class AgentUpdateCenter: ObservableObject {
             panel.contentView = NSHostingView(rootView: AgentReplyView(center: self))
             self.panel = panel
         }
-        guard let panel, let screen = NSScreen.main else { return }
+        guard let panel else { return }
+        let size = fittedSize(of: panel)
+        let placement = PanelPlacement.current
+        if panel.isVisible {
+            // Already up (new event, or brought back): grow in place, anchor locked.
+            panel.setFrame(PanelAnchor.resized(panel.frame, to: size, placement: placement), display: true)
+        } else if let screen = PanelAnchor.screen {
+            panel.setFrame(PanelAnchor.frame(for: size, placement: placement, on: screen), display: false)
+        }
+        panel.makeKeyAndOrderFront(nil)
+        startVisibilityWatchdog()
+    }
+
+    private func fittedSize(of panel: NSPanel) -> NSSize {
         panel.contentView?.layoutSubtreeIfNeeded()
         var size = panel.contentView?.fittingSize ?? panel.frame.size
         size.width = Self.panelWidth
-        panel.setContentSize(size)
-        let frame = screen.visibleFrame
-        let settings = SpeekSettings.shared
-        let origin: NSPoint
-        if settings.keepsRecorderVisibleWhenIdle && settings.alwaysShowEdge == .top {
-            origin = NSPoint(x: frame.midX - size.width / 2, y: frame.maxY - size.height - 10)
-        } else {
-            origin = NSPoint(x: frame.midX - size.width / 2, y: frame.minY + 26)
-        }
-        panel.setFrameOrigin(origin)
-        panel.makeKeyAndOrderFront(nil)
-        startVisibilityWatchdog()
+        return size
     }
 
     /// While any session is waiting, the panel must stay on screen. If anything hides it
@@ -446,17 +448,14 @@ final class AgentUpdateCenter: ObservableObject {
         panel.orderOut(nil)
     }
 
-    /// Re-fits the panel height after content changes (longer draft, other session).
+    /// Re-fits the panel height after content changes (longer draft, other session,
+    /// attachments). The anchored edge stays where it is: bottom placement grows upward,
+    /// top placement downward, side placements stay centred.
     fileprivate func refit() {
         guard let panel, panel.isVisible else { return }
-        panel.contentView?.layoutSubtreeIfNeeded()
-        var size = panel.contentView?.fittingSize ?? panel.frame.size
-        size.width = Self.panelWidth
-        let bottomAligned = !(SpeekSettings.shared.keepsRecorderVisibleWhenIdle && SpeekSettings.shared.alwaysShowEdge == .top)
-        var frame = panel.frame
-        if bottomAligned { frame.origin.y = frame.maxY - size.height }
-        frame.size = size
-        panel.setFrame(frame, display: true, animate: false)
+        let size = fittedSize(of: panel)
+        guard size != panel.frame.size else { return }
+        panel.setFrame(PanelAnchor.resized(panel.frame, to: size, placement: PanelPlacement.current), display: true, animate: false)
     }
 }
 

@@ -53,28 +53,30 @@ struct SpeekRecorderView<S: RecorderStateProvider & ObservableObject>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
     }
 
-    /// Always-show mode pins the recorder to the chosen edge; otherwise bottom-center.
-    private var pinnedEdge: RecorderEdge? {
-        settings.keepsRecorderVisibleWhenIdle ? settings.alwaysShowEdge : nil
-    }
-
-    private var alignment: Alignment {
-        switch pinnedEdge {
-        case .top: return .top
-        case .left: return .leading
-        case .right: return .trailing
-        case nil: return .bottom
-        }
-    }
-
-    private var edgeInsets: EdgeInsets {
-        switch pinnedEdge {
+    /// Gap the content keeps from the anchored edge of the host window. Shared with
+    /// MiniRecorderPanel so the host can be placed by PanelAnchor.
+    static func contentInsets(for placement: PanelPlacement) -> EdgeInsets {
+        switch placement {
         case .top: return EdgeInsets(top: 3, leading: 0, bottom: 0, trailing: 0)
         case .left: return EdgeInsets(top: 0, leading: 3, bottom: 0, trailing: 0)
         case .right: return EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 3)
-        case nil: return EdgeInsets(top: 0, leading: 0, bottom: 18, trailing: 0)
+        case .bottom: return EdgeInsets(top: 0, leading: 0, bottom: 18, trailing: 0)
         }
     }
+
+    private var placement: PanelPlacement { PanelPlacement.current }
+
+    /// Content hugs the anchored edge so it grows away from it, never across it.
+    private var alignment: Alignment {
+        switch placement {
+        case .top: return .top
+        case .left: return .leading
+        case .right: return .trailing
+        case .bottom: return .bottom
+        }
+    }
+
+    private var edgeInsets: EdgeInsets { Self.contentInsets(for: placement) }
 
     private var liveTranscript: String {
         let committed = stateProvider.committedTranscript
