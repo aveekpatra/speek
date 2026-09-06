@@ -65,7 +65,11 @@ class WindowManager: NSObject {
         guard let window = resolveMainWindow() else {
             return nil
         }
-        
+        // Back to a regular app (Dock icon) unless the user chose menu bar only.
+        if !UserDefaults.standard.bool(forKey: "IsMenuBarOnly"),
+           NSApplication.shared.activationPolicy() != .regular {
+            NSApplication.shared.setActivationPolicy(.regular)
+        }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
         NotificationCenter.default.post(name: .mainWindowVisibilityChanged, object: nil, userInfo: ["visible": true])
@@ -133,6 +137,10 @@ extension WindowManager: NSWindowDelegate {
         guard let window = notification.object as? NSWindow else { return }
         if window === mainWindow {
             logger.notice("windowWillClose: main window closing, clearing weak reference")
+            // Become a menu bar app right away. Utilities like SwiftQuit kill regular apps
+            // whose last window closes; an accessory app (no Dock icon) is left alone, and
+            // Speek keeps recording, pasting and answering agents from the menu bar.
+            NSApplication.shared.setActivationPolicy(.accessory)
             window.orderOut(nil)
             NotificationCenter.default.post(name: .mainWindowVisibilityChanged, object: nil, userInfo: ["visible": false])
             mainWindow = nil
