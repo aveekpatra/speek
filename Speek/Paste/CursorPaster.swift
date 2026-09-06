@@ -221,11 +221,16 @@ class CursorPaster {
             status = AXUIElementCopyAttributeValue(frontApp, kAXFocusedUIElementAttribute as CFString, &focusedRef)
         }
         guard status == .success, let focused = focusedRef else {
-            // Unknown is not "nowhere": an app that will not tell us what is focused
-            // (Electron before its tree is on, apps without accessibility support) very
-            // likely has a text box under the cursor. Paste; a stray ⌘V is harmless, a
-            // transcript stranded on the clipboard is not.
-            return status != .noValue
+            // Unknown is not "nowhere". Native apps with custom composers (the Codex
+            // desktop app among them) answer "no focused element" even while the user
+            // is typing in them. If the frontmost app has a focused window, the paste
+            // goes ahead; only an app with no window at all (the desktop) refuses.
+            // A stray ⌘V is harmless, a transcript stranded on the clipboard is not.
+            guard let frontApp else { return true }
+            var windowRef: CFTypeRef?
+            let hasWindow = AXUIElementCopyAttributeValue(frontApp, kAXFocusedWindowAttribute as CFString, &windowRef) == .success
+            logger.notice("Focused element unknown (\(status.rawValue)); frontmost has focused window: \(hasWindow)")
+            return hasWindow
         }
         let element = focused as! AXUIElement
 
