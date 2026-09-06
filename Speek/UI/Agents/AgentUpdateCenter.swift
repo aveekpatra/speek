@@ -578,28 +578,26 @@ private struct AgentReplyView: View {
             HStack(spacing: 8) {
                 ForEach(center.pending) { update in
                     let isSelected = update.id == center.current?.id
-                    Button { center.select(update) } label: {
-                        HStack(spacing: 8) {
-                            update.agent.icon.frame(width: 18, height: 18)
-                            Text(pillTitle(update))
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.7))
-                                .lineLimit(1)
-                            if update.kind != .finished {
-                                Circle().fill(Color.orange).frame(width: 6, height: 6)
-                            }
+                    // Same material and properties as the message and reply cards; a plain
+                    // tap target instead of a Button so nothing restyles it when the panel
+                    // is not the key window.
+                    HStack(spacing: 8) {
+                        update.agent.icon.frame(width: 18, height: 18)
+                        Text(pillTitle(update))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.6))
+                            .lineLimit(1)
+                        if update.kind != .finished {
+                            Circle().fill(Color.orange).frame(width: 6, height: 6)
                         }
-                        .padding(.leading, 10)
-                        .padding(.trailing, 14)
-                        .frame(height: 38)
-                        // Solid tint under the glass: tinted glass inside a button washes
-                        // out to near-white once the panel is not the key window.
-                        .background(Capsule(style: .continuous).fill(Color.black.opacity(isSelected ? 0.55 : 0.35)))
-                        .glassEffect(.regular, in: Capsule(style: .continuous))
-                        .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(isSelected ? 0.18 : 0.08), lineWidth: 0.8))
-                        .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .padding(.leading, 10)
+                    .padding(.trailing, 14)
+                    .frame(height: 38)
+                    .glassEffect(.regular.tint(glassTint), in: Capsule(style: .continuous))
+                    .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(isSelected ? 0.18 : 0.1), lineWidth: 0.8))
+                    .contentShape(Capsule())
+                    .onTapGesture { center.select(update) }
                     .help("\(update.agent.displayName) \(update.kind.title) in \(update.workingDirectory)")
                 }
             }
