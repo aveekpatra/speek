@@ -51,7 +51,7 @@ enum AgentHookInstaller {
     ]
 
     /// `/speek on|off` skill: mutes the hook for the current project directory.
-    private static let skillMarkdown = """
+    static let skillMarkdown = """
     ---
     name: speek
     description: Toggle Speek voice notifications for this project (on/off/status, empty toggles)
@@ -91,8 +91,16 @@ enum AgentHookInstaller {
         try installScript()
         switch plugin {
         case .claudeCode:
-            try installClaude()
-            try installSkill(at: claudeSkillURL)
+            // Preferred: a real Claude Code plugin (shows under Your plugins). Falls back
+            // to direct settings.json hooks when the claude CLI is missing.
+            do {
+                try ClaudePluginInstaller.install(hookScript: scriptURL)
+                try? uninstallClaude()   // no duplicate direct hooks next to the plugin
+                try? FileManager.default.removeItem(at: claudeSkillURL.deletingLastPathComponent())
+            } catch {
+                try installClaude()
+                try installSkill(at: claudeSkillURL)
+            }
         case .codex:
             try uninstallCodexNotify()   // migrate away from the old notify wiring
             try installCodexHooks()
@@ -103,6 +111,7 @@ enum AgentHookInstaller {
     static func uninstall(_ plugin: AgentPlugin) throws {
         switch plugin {
         case .claudeCode:
+            ClaudePluginInstaller.uninstall()
             try uninstallClaude()
             try? FileManager.default.removeItem(at: claudeSkillURL.deletingLastPathComponent())
         case .codex:
@@ -124,6 +133,7 @@ enum AgentHookInstaller {
     static func isInstalled(_ plugin: AgentPlugin) -> Bool {
         switch plugin {
         case .claudeCode:
+            if ClaudePluginInstaller.isPluginInstalled { return true }
             guard let data = try? Data(contentsOf: claudeSettingsURL),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let hooks = json["hooks"] as? [String: Any] else { return false }

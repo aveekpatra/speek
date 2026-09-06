@@ -47,7 +47,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
         case .home: return Color(red: 0.98, green: 0.45, blue: 0.20)
         case .modes: return Color(red: 0.20, green: 0.50, blue: 0.98)
         case .vocabulary: return Color(red: 0.20, green: 0.55, blue: 0.98)
-        case .agents: return Color(red: 0.16, green: 0.62, blue: 0.42)
+        case .agents: return Color(red: 0.20, green: 0.52, blue: 0.98)
         case .configuration: return Color(white: 0.45)
         case .sound: return Color(white: 0.45)
         case .modelsLibrary: return Color(white: 0.45)

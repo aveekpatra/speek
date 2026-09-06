@@ -46,7 +46,7 @@ incremental builds and `scripts/dev-show.sh <page>` to launch on a given page.
 The Agents page in the sidebar connects Claude Code and Codex: it installs a small hook script into
 `~/Library/Application Support/Speek/hooks/` and wires it into:
 
-- **Claude Code**: `~/.claude/settings.json` hooks for Stop, Notification, PermissionRequest, PreToolUse (AskUserQuestion), and UserPromptSubmit.
+- **Claude Code**: installed as a real plugin (`speek@speek`, visible under Claude Code > Plugins) from a local marketplace Speek writes under Application Support, with hooks for Stop, Notification, PermissionRequest, PreToolUse (AskUserQuestion), and UserPromptSubmit plus the `/speek` skill. Without the `claude` CLI it falls back to the same hooks in `~/.claude/settings.json`.
 - **Codex**: `~/.codex/hooks.json` (Codex's native hooks) for Stop, PermissionRequest, and UserPromptSubmit. Your `notify` setting is left alone.
 
 When the agent finishes, asks a question, or needs permission, a reply panel appears at

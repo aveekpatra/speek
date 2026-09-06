@@ -26,7 +26,7 @@ enum AgentPlugin: String, CaseIterable, Identifiable {
 
     var installedDescription: String {
         switch self {
-        case .claudeCode: return "Hooks in ~/.claude/settings.json, /speek skill installed"
+        case .claudeCode: return ClaudePluginInstaller.isPluginInstalled ? "Installed as the speek plugin (Claude Code > Plugins)" : "Hooks in ~/.claude/settings.json, /speek skill installed"
         case .codex: return "Hooks in ~/.codex/hooks.json, /speek skill installed"
         }
     }
@@ -63,23 +63,45 @@ final class AgentPluginManager: ObservableObject {
         return AgentHookInstaller.isInstalled(plugin)
     }
 
+    @Published private(set) var busy: AgentPlugin?
+
     func install(_ plugin: AgentPlugin) {
-        do {
-            try AgentHookInstaller.install(plugin)
-            setInstalled(plugin, true)
-            lastMessage = "\(plugin.displayName) plugin installed. Restart \(plugin.displayName) to activate it."
-        } catch {
-            lastMessage = "Could not install \(plugin.displayName) plugin: \(error.localizedDescription)"
+        guard busy == nil else { return }
+        busy = plugin
+        lastMessage = "Connecting \(plugin.displayName)..."
+        Task {
+            let outcome: Result<Void, Error> = await Task.detached(priority: .userInitiated) {
+                Result { try AgentHookInstaller.install(plugin) }
+            }.value
+            switch outcome {
+            case .success:
+                setInstalled(plugin, true)
+                let asPlugin = plugin == .claudeCode && ClaudePluginInstaller.isPluginInstalled
+                lastMessage = asPlugin
+                    ? "Claude Code connected as the \"speek\" plugin. Restart Claude Code to activate it."
+                    : "\(plugin.displayName) connected. Restart \(plugin.displayName) to activate it."
+            case .failure(let error):
+                lastMessage = "Could not connect \(plugin.displayName): \(error.localizedDescription)"
+            }
+            busy = nil
         }
     }
 
     func uninstall(_ plugin: AgentPlugin) {
-        do {
-            try AgentHookInstaller.uninstall(plugin)
-            setInstalled(plugin, false)
-            lastMessage = "\(plugin.displayName) plugin removed."
-        } catch {
-            lastMessage = "Could not remove \(plugin.displayName) plugin: \(error.localizedDescription)"
+        guard busy == nil else { return }
+        busy = plugin
+        Task {
+            let outcome: Result<Void, Error> = await Task.detached(priority: .userInitiated) {
+                Result { try AgentHookInstaller.uninstall(plugin) }
+            }.value
+            switch outcome {
+            case .success:
+                setInstalled(plugin, false)
+                lastMessage = "\(plugin.displayName) disconnected."
+            case .failure(let error):
+                lastMessage = "Could not disconnect \(plugin.displayName): \(error.localizedDescription)"
+            }
+            busy = nil
         }
     }
 

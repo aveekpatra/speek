@@ -6,12 +6,9 @@ import AppKit
 struct AgentsPage: View {
     @ObservedObject private var plugins = AgentPluginManager.shared
     @ObservedObject private var settings = SpeekSettings.shared
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         SpeekPageScroll {
-            hero
-
             VStack(alignment: .leading, spacing: 10) {
                 SpeekSectionHeader("Agents", help: "Installing adds a small hook script to the agent's own settings. Uninstalling removes it again. Restart the agent after changing this.")
                 SpeekGroup {
@@ -61,60 +58,6 @@ struct AgentsPage: View {
         .toolbar { SpeekStandardToolbar() }
     }
 
-    // MARK: Hero
-
-    private var hero: some View {
-        SpeekGroup {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(SpeekPage.agents.tileColor.gradient)
-                        Image(systemName: SpeekPage.agents.systemImage)
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                    .frame(width: 48, height: 48)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Talk to your coding agents")
-                            .font(.system(size: 17, weight: .semibold))
-                        Text("When Claude Code or Codex finishes, asks a question, or needs permission, Speek pops up. Answer by voice and the agent keeps going.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                HStack(alignment: .top, spacing: 12) {
-                    step(1, "Agent stops", "Finished, a question, or a permission prompt.")
-                    step(2, "Speek pops up", "The reply panel shows the message where the recording pill lives.")
-                    step(3, "You answer", "Speak, type, paste a screenshot. Return sends it straight back.")
-                }
-            }
-            .padding(SpeekDesign.rowHorizontalPadding)
-        }
-    }
-
-    private func step(_ number: Int, _ title: String, _ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
-                Text("\(number)")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
-                    .background(Circle().fill(SpeekPage.agents.tileColor))
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-            }
-            Text(detail)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpeekDesign.controlFill(scheme).opacity(0.6)))
-    }
-
     // MARK: Agent rows
 
     private func agentRow(_ plugin: AgentPlugin) -> some View {
@@ -131,7 +74,9 @@ struct AgentsPage: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 12)
-            if installed {
+            if plugins.busy == plugin {
+                ProgressView().controlSize(.small)
+            } else if installed {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
