@@ -98,7 +98,7 @@ if [ "$BLOCKING" = "1" ]; then
   URL="$URL&reply=$(printf '%s' "$REPLY" | sed 's/\//%2F/g; s/ /%20/g')"
 fi
 
-/usr/bin/open -g "$URL" >/dev/null 2>&1
+/usr/bin/open -g "$URL" </dev/null >/dev/null 2>&1
 
 if [ "$BLOCKING" != "1" ]; then
   # Keep a previously configured Codex notify command working (legacy notify mode only).
@@ -113,9 +113,13 @@ fi
 # Wait for Speek's answer (one line on the FIFO). A watchdog releases us before the
 # agent's own hook timeout.
 WAIT_SECONDS="${SPEEK_REPLY_TIMEOUT:-3300}"
-( sleep "$WAIT_SECONDS"; printf 'dismiss\n' > "$REPLY" 2>/dev/null ) &
+# The watchdog must not inherit our stdout/stdin: the agent waits for EOF on the hook's
+# stdout, and a lingering sleep would keep the pipe open long after we answered.
+( sleep "$WAIT_SECONDS"; printf 'dismiss\n' > "$REPLY" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
 WATCHDOG=$!
+disown "$WATCHDOG" 2>/dev/null
 IFS= read -r LINE < "$REPLY"
+pkill -P "$WATCHDOG" 2>/dev/null
 kill "$WATCHDOG" 2>/dev/null
 rm -f "$REPLY"
 
