@@ -8,14 +8,8 @@ struct SoundPage: View {
             VStack(alignment: .leading, spacing: 10) {
                 SpeekSectionHeader("Recording")
                 SpeekGroup {
-                    SpeekRow("Automatically increase microphone volume", help: "Boosts quiet microphones so speech is loud enough for the model.") {
-                        Toggle("", isOn: $settings.autoIncreaseMicVolume).labelsHidden().toggleStyle(.switch)
-                    }
                     SpeekRow("Silence removal", help: "Trims long pauses before transcription. Speeds up processing and reduces hallucinated words.") {
                         Toggle("", isOn: $settings.silenceRemoval).labelsHidden().toggleStyle(.switch)
-                    }
-                    SpeekRow("Dynamic normalization", help: "Evens out loud and quiet passages in the recording.") {
-                        Toggle("", isOn: $settings.dynamicNormalization).labelsHidden().toggleStyle(.switch)
                     }
                     SpeekRow("Playback when recording", help: "Pause sends a real pause to whatever is playing (Music, Spotify, a video in your browser) and resumes it when you stop. Mute only silences the speakers. Do nothing leaves playback alone.") {
                         Picker("", selection: $settings.playbackWhenRecording) {

@@ -23,6 +23,15 @@ class FluidAudioTranscriptionService: TranscriptionService {
         return FluidAudioModelManager.languageHint(from: selectedLanguage, for: model.name)
     }
 
+    /// Frees the CoreML models (idle unload). The next transcription reloads them.
+    func unload() async {
+        await asrManager?.cleanup()
+        asrManager = nil
+        vadManager = nil
+        activeVersion = nil
+        cachedModels = nil
+    }
+
     private func ensureModelsLoaded(for version: AsrModelVersion) async throws {
         if asrManager != nil, activeVersion == version {
             return

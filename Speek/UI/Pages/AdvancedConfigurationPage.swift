@@ -27,12 +27,6 @@ struct AdvancedConfigurationPage: View {
                     ))
                     .labelsHidden().toggleStyle(.switch)
                 }
-                SpeekRow("Start Recording on Menubar Click", help: "Clicking the menu bar icon starts a recording instead of opening the menu. Right-click still opens the menu.") {
-                    Toggle("", isOn: $settings.startRecordingOnMenubarClick).labelsHidden().toggleStyle(.switch)
-                }
-                SpeekRow("Always close", help: "Close the recording window as soon as the text has been pasted, even when the paste failed.") {
-                    Toggle("", isOn: $settings.alwaysClose).labelsHidden().toggleStyle(.switch)
-                }
             }
         }
     }
@@ -65,7 +59,7 @@ struct AdvancedConfigurationPage: View {
                         .truncationMode(.middle)
                     Spacer()
                     SpeekPillButton(title: "Change folder...") { chooseFolder() }
-                    SpeekHelpButton(text: "Recordings, transcripts and logs are stored here. Pick a folder inside a synced drive to keep them on all your Macs.")
+                    SpeekHelpButton(text: "New recordings are saved in a Recordings folder inside this location. Existing recordings stay where they are.")
                 }
                 .padding(.horizontal, SpeekDesign.rowHorizontalPadding)
                 .frame(minHeight: SpeekDesign.rowMinHeight)
@@ -85,9 +79,6 @@ struct AdvancedConfigurationPage: View {
                     }
                     .labelsHidden()
                     .fixedSize()
-                }
-                SpeekRow("Clipboard history", help: "Keep every result on the clipboard history so clipboard managers can pick it up.") {
-                    Toggle("", isOn: $settings.clipboardHistory).labelsHidden().toggleStyle(.switch)
                 }
                 SpeekRow("Paste result text", help: "Turn off to only copy the result to the clipboard without pasting.") {
                     Toggle("", isOn: $settings.pasteResultText).labelsHidden().toggleStyle(.switch)

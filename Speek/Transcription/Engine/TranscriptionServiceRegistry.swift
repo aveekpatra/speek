@@ -25,6 +25,13 @@ class TranscriptionServiceRegistry {
         self.modelContext = modelContext
     }
 
+    /// Drops every loaded voice model. Only touches services that were created.
+    func unloadAllModels() async {
+        await fluidAudioTranscriptionService.unload()
+        cohereTranscriptionService.unload()
+        canaryTranscriptionService.unload()
+    }
+
     func service(for provider: ModelProvider) -> TranscriptionService {
         switch provider {
         case .whisper:

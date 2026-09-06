@@ -183,9 +183,6 @@ private struct ConfigurationRootPage: View {
                     ))
                     .labelsHidden().toggleStyle(.switch)
                 }
-                SpeekRow("Error logging", help: "Writes detailed diagnostics to the app folder. Useful when reporting a bug.") {
-                    Toggle("", isOn: $settings.errorLogging).labelsHidden().toggleStyle(.switch)
-                }
                 SpeekRow("Keep recordings for", help: "Audio files older than this are deleted. Transcripts are always kept.") {
                     Picker("", selection: $settings.recordingRetention) {
                         ForEach(RecordingRetention.allCases) { option in

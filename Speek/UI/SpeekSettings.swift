@@ -350,9 +350,19 @@ final class SpeekSettings: ObservableObject {
         codexPluginInstalled = d.bool(forKey: Keys.codexPlugin)
     }
 
+    /// Default app folder: where recordings have always lived, so existing history keeps working.
     static var defaultAppFolder: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Speek", isDirectory: true)
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("com.aveekpatra.speek", isDirectory: true)
+    }
+
+    /// Recordings folder derived from the app folder setting. Safe from any thread.
+    nonisolated static var recordingsDirectory: URL {
+        let base = UserDefaults.standard.string(forKey: Keys.appFolder).map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("com.aveekpatra.speek", isDirectory: true)
+        let directory = base.appendingPathComponent("Recordings", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
     }
 
     enum Keys {

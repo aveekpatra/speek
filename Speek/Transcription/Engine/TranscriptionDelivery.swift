@@ -166,6 +166,14 @@ final class TranscriptionDelivery {
             return
         }
 
+        // "Paste result text" off: copy only, show the hint, never press keys.
+        let pasteEnabled = UserDefaults.standard.object(forKey: "speek.pasteResultText") as? Bool ?? true
+        if !pasteEnabled {
+            _ = ClipboardManager.setClipboard(pastedText, transient: true, sessionID: nil)
+            await actions.showPasteHint(pastedText)
+            return
+        }
+
         // Check editability up front (not just inside CursorPaster) so we know
         // whether to dismiss now or leave the panel up to show the paste hint.
         guard CursorPaster.focusedElementLikelyEditable() else {

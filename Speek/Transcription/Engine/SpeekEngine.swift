@@ -51,7 +51,8 @@ class SpeekEngine: NSObject, ObservableObject {
 
     let recorder = Recorder()
     var recordedFile: URL? = nil
-    let recordingsDirectory: URL
+    /// Follows Advanced settings > App folder location.
+    var recordingsDirectory: URL { SpeekSettings.recordingsDirectory }
     // Mirrors the live transcript to disk so it survives a crash/kill mid-dictation.
     private let transcriptRecovery: TranscriptRecoveryStore
 
@@ -90,7 +91,6 @@ class SpeekEngine: NSObject, ObservableObject {
 
         let appSupportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("com.aveekpatra.speek")
-        self.recordingsDirectory = appSupportDirectory.appendingPathComponent("Recordings")
         self.transcriptRecovery = TranscriptRecoveryStore(directory: appSupportDirectory)
 
         self.serviceRegistry = TranscriptionServiceRegistry(

@@ -145,6 +145,7 @@ struct SpeekApp: App {
         SnapshotTool.engine = engine
         #endif
         AgentUpdateCenter.shared.engine = engine
+        ModelIdleUnloader.shared.attach(engine: engine)
 
         // 7. Create other services that depend on engine
         let recordingShortcutManager = RecordingShortcutManager(engine: engine, recorderUIManager: recorderUIManager)

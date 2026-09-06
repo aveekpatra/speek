@@ -13,11 +13,7 @@ class TranscriptionAutoCleanupService {
 
     private let defaultRetentionMinutes: Int = 24 * 60
 
-    private var recordingsDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("com.aveekpatra.speek")
-            .appendingPathComponent("Recordings")
-    }
+    private var recordingsDirectory: URL { SpeekSettings.recordingsDirectory }
 
     private init() {}
 
