@@ -34,6 +34,8 @@ struct AgentUpdate: Identifiable, Equatable {
     let session: String
     let workingDirectory: String
     let terminalBundleID: String?
+    /// FIFO the waiting hook reads; the answer written here goes straight back to the agent.
+    let replyPath: String?
     let receivedAt = Date()
 
     init?(url: URL) {
@@ -58,7 +60,12 @@ struct AgentUpdate: Identifiable, Equatable {
         workingDirectory = items["cwd"] ?? ""
         let app = items["app"] ?? ""
         terminalBundleID = app.isEmpty ? nil : app
+        let reply = items["reply"] ?? ""
+        replyPath = reply.isEmpty ? nil : reply
     }
+
+    /// True when the hook is waiting for our answer (no terminal typing needed).
+    var isAwaitingReply: Bool { replyPath != nil }
 
     var projectName: String {
         URL(fileURLWithPath: workingDirectory).lastPathComponent
@@ -126,6 +133,7 @@ final class AgentUpdateCenter: ObservableObject {
         }
         if case .other = update.kind { return }
         let isNewConversation = current?.session != update.session
+        if let previous = current, previous.id != update.id { release(previous, with: "dismiss") }
         current = update
         if isNewConversation { draft = "" }
         showPanel()
@@ -150,14 +158,21 @@ final class AgentUpdateCenter: ObservableObject {
         panel?.makeKeyAndOrderFront(nil)
     }
 
-    /// Sends the reply box to the agent's terminal and presses Return.
+    /// Sends the reply box to the agent. With a waiting hook the text goes back as hook
+    /// output; otherwise (plain notifications) it is pasted into the agent's terminal.
     func send() {
         guard let update = current, !isSending else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         isSending = true
+        if update.isAwaitingReply {
+            release(update, with: "reply:" + Data(text.utf8).base64EncodedString())
+            isSending = false
+            draft = ""
+            finish()
+            return
+        }
         Task { @MainActor in
-            // Drop our key window first so the terminal gets keyboard focus back.
             hidePanel()
             activateTerminal(for: update)
             try? await Task.sleep(nanoseconds: 450_000_000)
@@ -168,13 +183,19 @@ final class AgentUpdateCenter: ObservableObject {
             }
             isSending = false
             draft = ""
-            dismiss()
+            finish()
         }
     }
 
-    /// Picks a numbered choice in the agent's terminal (AskUserQuestion / permission list).
+    /// Picks a numbered choice (AskUserQuestion).
     func choose(number: Int) {
         guard let update = current, !isSending else { return }
+        let label = update.options.indices.contains(number - 1) ? update.options[number - 1] : String(number)
+        if update.isAwaitingReply {
+            release(update, with: "option:" + Data(label.utf8).base64EncodedString())
+            finish()
+            return
+        }
         isSending = true
         Task { @MainActor in
             hidePanel()
@@ -184,14 +205,27 @@ final class AgentUpdateCenter: ObservableObject {
             try? await Task.sleep(nanoseconds: 150_000_000)
             CursorPaster.performAutoSend(.enter)
             isSending = false
-            dismiss()
+            finish()
         }
     }
 
-    func allowPermission() { choose(number: 1) }
+    func allowPermission() {
+        guard let update = current, !isSending else { return }
+        if update.isAwaitingReply {
+            release(update, with: "allow")
+            finish()
+        } else {
+            choose(number: 1)
+        }
+    }
 
     func denyPermission() {
         guard let update = current, !isSending else { return }
+        if update.isAwaitingReply {
+            release(update, with: "deny")
+            finish()
+            return
+        }
         isSending = true
         Task { @MainActor in
             hidePanel()
@@ -199,8 +233,29 @@ final class AgentUpdateCenter: ObservableObject {
             try? await Task.sleep(nanoseconds: 450_000_000)
             Keystrokes.press(virtualKey: 0x35)   // esc
             isSending = false
-            dismiss()
+            finish()
         }
+    }
+
+    /// Answers the waiting hook. Opening a FIFO for writing blocks until the reader is
+    /// there, so this runs off the main thread.
+    private func release(_ update: AgentUpdate, with line: String) {
+        guard let path = update.replyPath else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let fd = open(path, O_WRONLY | O_NONBLOCK)
+            guard fd >= 0 else { return }
+            var payload = line + "\n"
+            payload.withUTF8 { buffer in _ = write(fd, buffer.baseAddress, buffer.count) }
+            close(fd)
+        }
+    }
+
+    /// Closes the panel after an answer was delivered (does not release the hook again).
+    private func finish() {
+        dismissTask?.cancel()
+        dismissTask = nil
+        current = nil
+        hidePanel()
     }
 
     func replyByVoice() {
@@ -222,11 +277,10 @@ final class AgentUpdateCenter: ObservableObject {
         }
     }
 
+    /// Dismiss without answering: a waiting hook is released so the agent stops normally.
     func dismiss() {
-        dismissTask?.cancel()
-        dismissTask = nil
-        current = nil
-        hidePanel()
+        if let update = current { release(update, with: "dismiss") }
+        finish()
     }
 
     private func hidePanel() {
@@ -423,13 +477,15 @@ private struct AgentReplyView: View {
                     .background(Capsule().fill(Color.white.opacity(0.12)))
             }
             Spacer()
-            Button { center.openTerminal() } label: {
-                Image(systemName: "terminal")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.6))
+            if update.terminalBundleID != nil {
+                Button { center.openTerminal() } label: {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .help("Open the terminal")
             }
-            .buttonStyle(.plain)
-            .help("Open the terminal")
             Button { center.dismiss() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .bold))

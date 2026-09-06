@@ -50,11 +50,14 @@ Configuration > Advanced settings > Agent Plugins installs a small hook script i
 - **Codex**: `~/.codex/hooks.json` (Codex's native hooks) for Stop, PermissionRequest, and UserPromptSubmit. Your `notify` setting is left alone.
 
 When the agent finishes, asks a question, or needs permission, the recording pill turns
-into a reply panel at the same spot: the agent's message on top, a reply box below.
-Press your recording shortcut and speak (the transcript lands in the box), or type, then
-Return sends it to the agent's terminal. Questions show their options as buttons,
-permission prompts show Allow and Deny, and Esc dismisses. Answering in the terminal
-closes the panel automatically.
+into a reply panel at the same spot: the agent's message (markdown) on top, a reply box
+below. Press your recording shortcut and speak (the transcript lands in the box), or
+type, then Return sends it. Nothing is typed into the terminal: the hook itself waits
+for your answer and returns it to the agent as hook output (a Stop hook "block" with your
+reply as the reason, an allow/deny decision for permissions, the chosen option for
+questions), so the agent continues in the background while you stay where you are.
+Esc dismisses and lets the agent stop normally. Answering in the terminal closes the
+panel automatically.
 
 Both agents also get a `/speek` skill (`on`, `off`, `status`) that mutes the hook for
 the current project directory. Uninstall from the same screen removes everything.

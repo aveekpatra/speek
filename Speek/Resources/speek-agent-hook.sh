@@ -5,8 +5,12 @@
 #   speek-agent-hook claude        Claude Code hook (~/.claude/settings.json), JSON on stdin
 #   speek-agent-hook codex         Codex hook (~/.codex/hooks.json), JSON on stdin
 #   speek-agent-hook codex <json>  legacy Codex `notify`, JSON as the first argument
-# It never blocks the agent: it forwards the event to Speek through the speek:// URL
-# scheme and exits 0 immediately.
+#
+# For Stop, PermissionRequest and PreToolUse (AskUserQuestion) the hook WAITS: it shows
+# the reply panel in Speek and blocks until the user answers there, then returns the
+# answer to the agent as hook output (Stop -> {"decision":"block","reason":...}, so the
+# agent keeps working on the reply; permissions -> allow/deny). Nothing is typed into a
+# terminal. Dismissing the panel lets the agent stop normally.
 #
 # Mute per project with the /speek skill (or SPEEK_AGENT=0): it creates
 #   /tmp/speek-agent/disabled-<md5 of cwd>
@@ -20,6 +24,7 @@ fi
 
 [ "${SPEEK_AGENT:-1}" = "0" ] && exit 0
 STATE_DIR="${SPEEK_AGENT_STATE_DIR:-/tmp/speek-agent}"
+mkdir -p "$STATE_DIR" 2>/dev/null
 CWD_HASH=$(printf '%s' "$PWD" | /sbin/md5 -q 2>/dev/null || printf '%s' "$PWD" | md5sum | cut -d' ' -f1)
 [ -f "$STATE_DIR/disabled-$CWD_HASH" ] && exit 0
 
@@ -29,7 +34,8 @@ export SPEEK_TERM_APP="${__CFBundleIdentifier:-}"
 export SPEEK_TERM_PROGRAM="${TERM_PROGRAM:-}"
 export SPEEK_CWD="$PWD"
 
-URL=$(/usr/bin/osascript -l JavaScript -e '
+# Line 1: event name. Line 2: speek:// URL.
+PARSED=$(/usr/bin/osascript -l JavaScript -e '
 ObjC.import("stdlib");
 function env(k) { var v = $.getenv(k); return v ? ObjC.unwrap(v) : ""; }
 var p = {};
@@ -55,7 +61,7 @@ if (event === "PermissionRequest") {
   try { detail = p.tool_input && (p.tool_input.command || p.tool_input.file_path || p.tool_input.description || ""); } catch (e) {}
   message = "Permission needed for " + tool + (detail ? ": " + String(detail).slice(0, 300) : "");
 }
-function enc(v) { return encodeURIComponent(String(v == null ? "" : v).slice(0, 2000)); }
+function enc(v) { return encodeURIComponent(String(v == null ? "" : v).slice(0, 4000)); }
 var params = {
   agent: agent,
   event: event,
@@ -66,24 +72,80 @@ var params = {
   term: env("SPEEK_TERM_PROGRAM"),
   notification: p.notification_type || "",
   permission: p.permission_mode || "",
+  tool: p.tool_name || "",
   options: options
 };
 var parts = [];
 for (var k in params) { parts.push(k + "=" + enc(params[k])); }
-"speek://agent-update?" + parts.join("&");
+event + "\n" + "speek://agent-update?" + parts.join("&");
 ' 2>/dev/null)
 
-if [ -n "$URL" ]; then
-  /usr/bin/open -g "$URL" >/dev/null 2>&1 &
+EVENT="${PARSED%%$'\n'*}"
+URL="${PARSED#*$'\n'}"
+[ -z "$URL" ] && exit 0
+
+BLOCKING=0
+case "$EVENT" in
+  Stop|PermissionRequest|PreToolUse) BLOCKING=1 ;;
+esac
+
+if [ "$BLOCKING" = "1" ]; then
+  REPLY="$STATE_DIR/reply-$$-$RANDOM"
+  mkfifo "$REPLY" 2>/dev/null || BLOCKING=0
 fi
 
-# Keep a previously configured Codex notify command working (legacy notify mode only).
-PREV_FILE="$HOME/Library/Application Support/Speek/hooks/codex-notify-previous"
-if [ "$AGENT" = "codex" ] && [ -n "${2:-}" ] && [ -s "$PREV_FILE" ]; then
-  PREV_CMD="$(cat "$PREV_FILE")"
-  if [ -n "$PREV_CMD" ]; then
-    (eval "$PREV_CMD" "\"\$PAYLOAD\"" >/dev/null 2>&1 &)
-  fi
+if [ "$BLOCKING" = "1" ]; then
+  URL="$URL&reply=$(printf '%s' "$REPLY" | sed 's/\//%2F/g; s/ /%20/g')"
 fi
+
+/usr/bin/open -g "$URL" >/dev/null 2>&1
+
+if [ "$BLOCKING" != "1" ]; then
+  # Keep a previously configured Codex notify command working (legacy notify mode only).
+  PREV_FILE="$HOME/Library/Application Support/Speek/hooks/codex-notify-previous"
+  if [ "$AGENT" = "codex" ] && [ -n "${2:-}" ] && [ -s "$PREV_FILE" ]; then
+    PREV_CMD="$(cat "$PREV_FILE")"
+    [ -n "$PREV_CMD" ] && (eval "$PREV_CMD" "\"\$PAYLOAD\"" >/dev/null 2>&1 &)
+  fi
+  exit 0
+fi
+
+# Wait for Speek's answer (one line on the FIFO). A watchdog releases us before the
+# agent's own hook timeout.
+WAIT_SECONDS="${SPEEK_REPLY_TIMEOUT:-3300}"
+( sleep "$WAIT_SECONDS"; printf 'dismiss\n' > "$REPLY" 2>/dev/null ) &
+WATCHDOG=$!
+IFS= read -r LINE < "$REPLY"
+kill "$WATCHDOG" 2>/dev/null
+rm -f "$REPLY"
+
+KIND="${LINE%%:*}"
+DATA="${LINE#*:}"
+[ "$KIND" = "$LINE" ] && DATA=""
+TEXT=""
+if [ -n "$DATA" ]; then
+  TEXT=$(printf '%s' "$DATA" | /usr/bin/base64 -D 2>/dev/null || printf '%s' "$DATA" | /usr/bin/base64 -d 2>/dev/null)
+fi
+
+export SPEEK_REPLY_KIND="$KIND" SPEEK_REPLY_TEXT="$TEXT" SPEEK_EVENT="$EVENT"
+/usr/bin/osascript -l JavaScript -e '
+ObjC.import("stdlib");
+function env(k) { var v = $.getenv(k); return v ? ObjC.unwrap(v) : ""; }
+var kind = env("SPEEK_REPLY_KIND"), text = env("SPEEK_REPLY_TEXT"), event = env("SPEEK_EVENT");
+var out = null;
+if (event === "Stop") {
+  if (kind === "reply" && text) out = { decision: "block", reason: text };
+} else if (event === "PermissionRequest") {
+  if (kind === "allow") out = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } } };
+  else if (kind === "deny") out = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny", message: text || "Denied by the user in Speek." } } };
+  else if (kind === "reply" && text) out = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny", message: text } } };
+} else if (event === "PreToolUse") {
+  var answer = "";
+  if (kind === "option" && text) answer = text;
+  else if (kind === "reply" && text) answer = text;
+  if (answer) out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "The user answered via Speek: " + answer + " (Do not ask this question again; continue with this answer.)" } };
+}
+out ? JSON.stringify(out) : "";
+' 2>/dev/null
 
 exit 0

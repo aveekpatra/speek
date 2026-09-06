@@ -76,6 +76,15 @@ enum AgentHookInstaller {
         ("UserPromptSubmit", nil)
     ]
 
+    /// Waiting hooks (the reply panel) may stay open for a long time; the script's own
+    /// watchdog releases them a little before this.
+    private static func timeout(for event: String) -> Int {
+        switch event {
+        case "Stop", "PermissionRequest", "PreToolUse": return 3600
+        default: return 10
+        }
+    }
+
     // MARK: - Public
 
     static func install(_ plugin: AgentPlugin) throws {
@@ -152,11 +161,19 @@ enum AgentHookInstaller {
         var hooks = json["hooks"] as? [String: Any] ?? [:]
         for spec in codexEvents {
             var groups = hooks[spec.event] as? [[String: Any]] ?? []
-            let alreadyPresent = groups.contains { group in
-                ((group["hooks"] as? [[String: Any]]) ?? []).contains { ($0["command"] as? String)?.contains("speek-agent-hook") == true }
+            var alreadyPresent = false
+            for groupIndex in groups.indices {
+                var entries = (groups[groupIndex]["hooks"] as? [[String: Any]]) ?? []
+                for entryIndex in entries.indices where (entries[entryIndex]["command"] as? String)?.contains("speek-agent-hook") == true {
+                    // Refresh our own entry in place (command path, timeout).
+                    entries[entryIndex]["command"] = codexCommand
+                    entries[entryIndex]["timeout"] = timeout(for: spec.event)
+                    alreadyPresent = true
+                }
+                groups[groupIndex]["hooks"] = entries
             }
-            if alreadyPresent { continue }
-            var group: [String: Any] = ["hooks": [["type": "command", "command": codexCommand, "timeout": 10]]]
+            if alreadyPresent { hooks[spec.event] = groups; continue }
+            var group: [String: Any] = ["hooks": [["type": "command", "command": codexCommand, "timeout": timeout(for: spec.event)]]]
             if let matcher = spec.matcher { group["matcher"] = matcher }
             groups.append(group)
             hooks[spec.event] = groups
@@ -230,11 +247,19 @@ enum AgentHookInstaller {
         var hooks = json["hooks"] as? [String: Any] ?? [:]
         for spec in claudeEvents {
             var groups = hooks[spec.event] as? [[String: Any]] ?? []
-            let alreadyPresent = groups.contains { group in
-                ((group["hooks"] as? [[String: Any]]) ?? []).contains { ($0["command"] as? String)?.contains("speek-agent-hook") == true }
+            var alreadyPresent = false
+            for groupIndex in groups.indices {
+                var entries = (groups[groupIndex]["hooks"] as? [[String: Any]]) ?? []
+                for entryIndex in entries.indices where (entries[entryIndex]["command"] as? String)?.contains("speek-agent-hook") == true {
+                    // Refresh our own entry in place (command path, timeout).
+                    entries[entryIndex]["command"] = claudeCommand
+                    entries[entryIndex]["timeout"] = timeout(for: spec.event)
+                    alreadyPresent = true
+                }
+                groups[groupIndex]["hooks"] = entries
             }
-            if alreadyPresent { continue }
-            var group: [String: Any] = ["hooks": [["type": "command", "command": claudeCommand, "timeout": 10]]]
+            if alreadyPresent { hooks[spec.event] = groups; continue }
+            var group: [String: Any] = ["hooks": [["type": "command", "command": claudeCommand, "timeout": timeout(for: spec.event)]]]
             if let matcher = spec.matcher { group["matcher"] = matcher }
             groups.append(group)
             hooks[spec.event] = groups
