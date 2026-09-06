@@ -199,13 +199,33 @@ class CursorPaster {
     static func focusedElementLikelyEditable() -> Bool {
         guard AXIsProcessTrusted() else { return true } // can't detect → behave as before
 
+        // Electron / Chromium apps (ChatGPT with Codex, Slack, VS Code, Cursor...) keep
+        // their accessibility tree off until a client asks for it; until then every read
+        // fails with kAXErrorCannotComplete. Asking the frontmost app to turn it on makes
+        // the focused element readable from the next call on.
+        var frontApp: AXUIElement?
+        if let front = NSWorkspace.shared.frontmostApplication {
+            let app = AXUIElementCreateApplication(front.processIdentifier)
+            AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+            frontApp = app
+        }
+
         let systemWide = AXUIElementCreateSystemWide()
         var focusedRef: CFTypeRef?
-        let status = AXUIElementCopyAttributeValue(
+        var status = AXUIElementCopyAttributeValue(
             systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef
         )
+        // The system-wide element often fails for Electron apps even once their tree is
+        // on; asking the frontmost application directly still works.
+        if status != .success, let frontApp {
+            status = AXUIElementCopyAttributeValue(frontApp, kAXFocusedUIElementAttribute as CFString, &focusedRef)
+        }
         guard status == .success, let focused = focusedRef else {
-            return false // nothing focused → nowhere to paste
+            // Unknown is not "nowhere": an app that will not tell us what is focused
+            // (Electron before its tree is on, apps without accessibility support) very
+            // likely has a text box under the cursor. Paste; a stray ⌘V is harmless, a
+            // transcript stranded on the clipboard is not.
+            return status != .noValue
         }
         let element = focused as! AXUIElement
 
