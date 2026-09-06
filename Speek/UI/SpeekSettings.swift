@@ -313,6 +313,8 @@ final class SpeekSettings: ObservableObject {
     @Published var keepRunningInMenuBar: Bool { didSet { defaults.set(keepRunningInMenuBar, forKey: Keys.keepRunning) } }
     @Published var agentSound: Bool { didSet { defaults.set(agentSound, forKey: Keys.agentSound) } }
     @Published var agentAutoSend: Bool { didSet { defaults.set(agentAutoSend, forKey: Keys.agentAutoSend) } }
+    /// Seconds the reply panel stays away after Hide (Cmd+H).
+    @Published var agentHideSeconds: Int { didSet { defaults.set(agentHideSeconds, forKey: Keys.agentHideSeconds) } }
     @Published var claudeCodePluginInstalled: Bool { didSet { defaults.set(claudeCodePluginInstalled, forKey: Keys.claudePlugin) } }
     @Published var codexPluginInstalled: Bool { didSet { defaults.set(codexPluginInstalled, forKey: Keys.codexPlugin) } }
 
@@ -354,6 +356,8 @@ final class SpeekSettings: ObservableObject {
         keepRunningInMenuBar = d.object(forKey: Keys.keepRunning) as? Bool ?? true
         agentSound = d.object(forKey: Keys.agentSound) as? Bool ?? true
         agentAutoSend = d.bool(forKey: Keys.agentAutoSend)
+        let hide = d.integer(forKey: Keys.agentHideSeconds)
+        agentHideSeconds = hide > 0 ? hide : 30
         claudeCodePluginInstalled = d.bool(forKey: Keys.claudePlugin)
         codexPluginInstalled = d.bool(forKey: Keys.codexPlugin)
     }
@@ -402,6 +406,7 @@ final class SpeekSettings: ObservableObject {
         static let keepRunning = "speek.keepRunningInMenuBar"
         static let agentSound = "speek.agent.sound"
         static let agentAutoSend = "speek.agent.autoSend"
+        static let agentHideSeconds = "speek.agent.hideSeconds"
         static let claudePlugin = "speek.plugin.claude"
         static let codexPlugin = "speek.plugin.codex"
     }

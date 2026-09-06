@@ -36,6 +36,21 @@ struct AgentsPage: View {
                     SpeekRow("Send dictation right away", help: "Sends your words the moment transcription finishes, without pressing Return. Leave off if you like to review or add screenshots first.") {
                         Toggle("", isOn: $settings.agentAutoSend).labelsHidden().toggleStyle(.switch)
                     }
+                    SpeekRow("Hide duration", help: "How long the panel stays away after Hide (Cmd+H). It comes back by itself, on the next agent event, or from the menu bar.") {
+                        HStack(spacing: 8) {
+                            TextField("", value: $settings.agentHideSeconds, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 64)
+                                .onChange(of: settings.agentHideSeconds) { _, value in
+                                    if value < 3 { settings.agentHideSeconds = 3 }
+                                    if value > 600 { settings.agentHideSeconds = 600 }
+                                }
+                            Text("seconds")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     SpeekRow("Preview the panel", subtitle: "Shows the reply panel with a sample message so you can see where it appears.") {
                         Button("Preview") { showPreview() }
                             .buttonStyle(.glass)

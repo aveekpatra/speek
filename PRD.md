@@ -43,7 +43,7 @@ Welcome, permissions (Microphone, Accessibility), voice model download, shortcut
 | Home | Range picker, stats (WPM, words, apps used, time saved), Get started, What's new |
 | Modes | Mode list, Create mode, mode detail |
 | Vocabulary | Add word / Replace with, list, replacement editor, import/export |
-| Agent Panel | Connect Claude Code and Codex; panel position (Bottom, Top, Left, Right, shared with the recording pill), sound, auto-send, preview; per-project mute |
+| Agent Panel | Connect Claude Code and Codex; panel position (Bottom, Top, Left, Right, shared with the recording pill), sound, auto-send, hide duration, preview; per-project mute |
 | Configuration | Appearance (theme, recording window, always show), Keyboard Shortcuts, Application, Advanced settings (Dock, voice model active duration, app folder, clipboard and paste) |
 | Sound | Recording toggles, playback behavior, sound effects style and volume |
 | Models library | Model table |

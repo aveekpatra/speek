@@ -117,7 +117,7 @@ final class AgentUpdateCenter: ObservableObject {
     /// While set, the panel stays hidden (Hide button / Cmd+H) and comes back by itself.
     private var snoozedUntil: Date?
     private var refitScheduled = false
-    static let snoozeDuration: TimeInterval = 10
+    static var snoozeDuration: TimeInterval { TimeInterval(SpeekSettings.shared.agentHideSeconds) }
     @Published private(set) var isSending = false
 
     var current: AgentUpdate? {
@@ -461,15 +461,16 @@ final class AgentUpdateCenter: ObservableObject {
     }
 
     /// Gets the panel out of the way for a moment without answering anything. It
-    /// returns on its own after `snoozeDuration`, on the next agent event, or from the
-    /// menu bar.
+    /// returns on its own after the Hide duration set under Agent Panel, on the next
+    /// agent event, or from the menu bar.
     func snooze() {
         guard panel?.isVisible == true else { return }
-        let until = Date().addingTimeInterval(Self.snoozeDuration)
+        let duration = Self.snoozeDuration
+        let until = Date().addingTimeInterval(duration)
         snoozedUntil = until
         hidePanel()
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(Self.snoozeDuration))
+            try? await Task.sleep(for: .seconds(duration))
             guard let self, self.snoozedUntil == until, !self.pending.isEmpty else { return }
             self.showPanel()
         }
