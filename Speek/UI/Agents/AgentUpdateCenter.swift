@@ -761,6 +761,10 @@ private struct AgentReplyView: View {
                 .padding(.leading, 10)
                 .padding(.trailing, isSelected ? 8 : 14)
                 .frame(height: 38)
+                // A small capsule of glass comes out brighter than the big cards, so a
+                // dark fill sits between the glass and the content to bring the pill
+                // down to the cards' frosted darkness. The cards themselves are untouched.
+                .background(Capsule(style: .continuous).fill(Color.black.opacity(0.42)))
                 .glassEffect(.regular.tint(glassTint), in: Capsule(style: .continuous))
                 .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(isSelected ? 0.18 : 0.1), lineWidth: 0.8))
                 .contentShape(Capsule())

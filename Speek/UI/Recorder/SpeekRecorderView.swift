@@ -270,9 +270,12 @@ struct MiniRecorderPill: View {
         }
         .padding(.horizontal, 12)
         .frame(minWidth: 96, minHeight: 36)
-        .glassEffect(.regular.tint(Color.black.opacity(0.62)), in: Capsule(style: .continuous))
-        .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 0.8))
-        .shadow(color: Color.black.opacity(0.35), radius: 18, x: 0, y: 8)
+        // Clear, interactive glass: the pill reads as a water droplet that bends what is
+        // behind it instead of a dark capsule. A faint tint and the white content keep the
+        // bars legible over light windows.
+        .glassEffect(.clear.tint(Color.black.opacity(0.16)).interactive(), in: Capsule(style: .continuous))
+        .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(0.22), lineWidth: 0.8))
+        .shadow(color: Color.black.opacity(0.22), radius: 14, x: 0, y: 6)
         .opacity(isCanceling ? 0 : 1)
         .scaleEffect(isCanceling ? 0.9 : 1)
         .animation(.easeOut(duration: 0.25), value: isCanceling)
