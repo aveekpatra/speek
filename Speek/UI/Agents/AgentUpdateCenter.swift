@@ -401,6 +401,11 @@ final class AgentUpdateCenter: ObservableObject {
         }
         logger.notice("Go to window: \(update.agent.displayName, privacy: .public) app=\(update.terminalBundleID ?? "none", privacy: .public) tty=\(update.tty ?? "-", privacy: .public) cmux=\(update.cmuxTarget ?? "-", privacy: .public)")
         TerminalLocator.focus(update)
+        // The user is at the agent now, so the reply box has no job left: release the
+        // waiting hook (the agent stops normally and takes input in its own window) and
+        // drop the entry. Other waiting sessions keep the panel.
+        release(update, with: "dismiss")
+        remove(update)
     }
 
     /// Dismiss the selected session without answering: its hook is released so the agent
