@@ -357,7 +357,7 @@ final class SpeekSettings: ObservableObject {
         agentSound = d.object(forKey: Keys.agentSound) as? Bool ?? true
         agentAutoSend = d.bool(forKey: Keys.agentAutoSend)
         let hide = d.integer(forKey: Keys.agentHideSeconds)
-        agentHideSeconds = hide > 0 ? hide : 30
+        agentHideSeconds = hide > 0 ? hide : 15
         claudeCodePluginInstalled = d.bool(forKey: Keys.claudePlugin)
         codexPluginInstalled = d.bool(forKey: Keys.codexPlugin)
     }
