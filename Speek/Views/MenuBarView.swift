@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 /// Menu bar menu, mirroring Superwhisper's: Toggle Recording, Transcribe File, History,
 /// Settings, microphone and mode pickers, version, updates, quit.
 struct MenuBarView: View {
+    @ObservedObject private var agentCenter = AgentUpdateCenter.shared
     @EnvironmentObject var engine: SpeekEngine
     @EnvironmentObject var recorderUIManager: RecorderUIManager
     @EnvironmentObject var transcriptionModelManager: TranscriptionModelManager
@@ -38,6 +39,12 @@ struct MenuBarView: View {
             }
 
             Button("Transcribe File...") { transcribeFile() }
+
+            if !agentCenter.pending.isEmpty {
+                Button(agentCenter.pending.count == 1 ? "Show agent reply" : "Show agent replies (\(agentCenter.pending.count) waiting)") {
+                    agentCenter.showPendingPanel()
+                }
+            }
 
             Button("History...") { openPage(.history) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])

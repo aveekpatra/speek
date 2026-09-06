@@ -166,6 +166,9 @@ private struct ConfigurationRootPage: View {
                     }
                     .disabled(!updaterViewModel.canCheckForUpdates)
                 }
+                SpeekRow("Keep running in the menu bar", help: "Closing the main window keeps Speek running in the menu bar so shortcuts, dictation and agent replies keep working. Turn off to quit Speek when the window closes.") {
+                    Toggle("", isOn: $settings.keepRunningInMenuBar).labelsHidden().toggleStyle(.switch)
+                }
                 SpeekRow("Automatically check for updates", help: "Speek checks GitHub releases for new versions in the background.") {
                     Toggle("", isOn: Binding(
                         get: { updaterViewModel.automaticallyChecksForUpdates },

@@ -132,6 +132,7 @@ final class AgentUpdateCenter: ObservableObject {
 
     private var panel: AgentReplyPanel?
     private var stateObserver: AnyCancellable?
+    private var visibilityWatchdog: Timer?
     private let logger = Logger(subsystem: "com.aveekpatra.speek", category: "AgentUpdateCenter")
 
     private init() {}
@@ -408,6 +409,35 @@ final class AgentUpdateCenter: ObservableObject {
         }
         panel.setFrameOrigin(origin)
         panel.makeKeyAndOrderFront(nil)
+        startVisibilityWatchdog()
+    }
+
+    /// While any session is waiting, the panel must stay on screen. If anything hides it
+    /// (a Space switch, a screen change, an app going full screen), bring it back.
+    private func startVisibilityWatchdog() {
+        guard visibilityWatchdog == nil else { return }
+        visibilityWatchdog = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard !self.pending.isEmpty else {
+                    self.visibilityWatchdog?.invalidate()
+                    self.visibilityWatchdog = nil
+                    return
+                }
+                if let panel = self.panel, !panel.isVisible {
+                    self.logger.notice("Agent panel was hidden with \(self.pending.count) waiting; showing it again")
+                    panel.orderFrontRegardless()
+                } else if let panel = self.panel, !panel.isOnActiveSpace {
+                    panel.orderFrontRegardless()
+                }
+            }
+        }
+    }
+
+    /// Menu bar / pill entry point: bring the panel forward for the waiting sessions.
+    func showPendingPanel() {
+        guard !pending.isEmpty else { return }
+        showPanel()
     }
 
     private func hidePanel() {

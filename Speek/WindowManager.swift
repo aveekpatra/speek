@@ -140,6 +140,12 @@ extension WindowManager: NSWindowDelegate {
             // Become a menu bar app right away. Utilities like SwiftQuit kill regular apps
             // whose last window closes; an accessory app (no Dock icon) is left alone, and
             // Speek keeps recording, pasting and answering agents from the menu bar.
+            if !UserDefaults.standard.bool(forKey: "speek.keepRunningInMenuBar"),
+               UserDefaults.standard.object(forKey: "speek.keepRunningInMenuBar") != nil {
+                // User chose "quit when the window closes".
+                DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+                return
+            }
             NSApplication.shared.setActivationPolicy(.accessory)
             window.orderOut(nil)
             NotificationCenter.default.post(name: .mainWindowVisibilityChanged, object: nil, userInfo: ["visible": false])
