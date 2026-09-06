@@ -349,6 +349,10 @@ struct SpeekApp: App {
         .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(.presented)
         .restorationBehavior(.disabled)
+        // speek:// URLs (agent hooks) are handled by AppDelegate. Without this SwiftUI
+        // would open a main window just to deliver each URL, popping it up on every
+        // agent event even after the user closed it.
+        .handlesExternalEvents(matching: [])
         .commands {
             CommandGroup(replacing: .newItem) { }
 
@@ -374,13 +378,6 @@ struct SpeekApp: App {
         }
         .menuBarExtraStyle(.menu)
 
-        #if DEBUG
-        WindowGroup("Debug") {
-            Button("Toggle Menu Bar Only") {
-                menuBarManager.isMenuBarOnly.toggle()
-            }
-        }
-        #endif
     }
 
 

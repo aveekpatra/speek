@@ -125,7 +125,19 @@ if [ "$BLOCKING" = "1" ]; then
   URL="$URL&reply=$(printf '%s' "$REPLY" | sed 's/\//%2F/g; s/ /%20/g')"
 fi
 
-/usr/bin/open -g "$URL" </dev/null >/dev/null 2>&1
+# Hand the event to Speek through its pipe. Opening a URL goes through Launch Services,
+# which also "reopens" the app and can drag the user to Speek's Space; the pipe does
+# not. The URL is only the fallback when Speek is not running or has no pipe yet.
+EVENTS="$STATE_DIR/events"
+DELIVERED=0
+if [ -p "$EVENTS" ] && /usr/bin/pgrep -xq Speek; then
+  # O_RDWR open never blocks; Speek holds the pipe open and reads line by line.
+  if exec 3<>"$EVENTS" 2>/dev/null; then
+    printf '%s\n' "$URL" >&3 2>/dev/null && DELIVERED=1
+    exec 3>&-
+  fi
+fi
+[ "$DELIVERED" = "1" ] || /usr/bin/open -g "$URL" </dev/null >/dev/null 2>&1
 
 if [ "$BLOCKING" != "1" ]; then
   # Keep a previously configured Codex notify command working (legacy notify mode only).
