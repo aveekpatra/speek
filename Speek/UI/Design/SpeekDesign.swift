@@ -385,6 +385,7 @@ struct SpeekPillButton: View {
             .font(.system(size: 14))
         }
         .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
         .controlSize(.regular)
     }
 }

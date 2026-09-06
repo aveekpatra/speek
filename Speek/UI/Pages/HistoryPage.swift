@@ -39,6 +39,7 @@ struct HistoryPage: View {
                 if hasMore && !transcriptions.isEmpty {
                     Button("Load more") { Task { await loadMore() } }
                         .buttonStyle(.glass)
+                        .buttonBorderShape(.capsule)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
                 }
@@ -258,6 +259,7 @@ private struct HistoryRow: View {
                 .frame(width: 16, height: 16)
         }
         .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
         .controlSize(.small)
         .help(help)
     }

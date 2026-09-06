@@ -37,6 +37,7 @@ struct AboutPage: View {
                             }
                         }
                         .buttonStyle(.glass)
+                        .buttonBorderShape(.capsule)
                         .controlSize(.regular)
                         .padding(.top, 10)
                     }
@@ -93,6 +94,7 @@ struct AboutPage: View {
                     SpeekRow("Speek is free", subtitle: "Funding options will appear here. For now, a star or a bug report on GitHub helps most.") {
                         Button("Open GitHub") { NSWorkspace.shared.open(SpeekLinks.repository) }
                             .buttonStyle(.glass)
+                            .buttonBorderShape(.capsule)
                     }
                 }
             }
@@ -131,5 +133,6 @@ struct AboutPage: View {
             Label(title, systemImage: symbol)
         }
         .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
     }
 }
