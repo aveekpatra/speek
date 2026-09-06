@@ -137,6 +137,7 @@ final class AgentUpdateCenter: ObservableObject {
     var isShowingPanel: Bool { !pending.isEmpty }
 
     private var panel: AgentReplyPanel?
+    private var keyMonitor: Any?
     private var stateObserver: AnyCancellable?
     private var visibilityWatchdog: Timer?
     private let logger = Logger(subsystem: "com.aveekpatra.speek", category: "AgentUpdateCenter")
@@ -175,17 +176,32 @@ final class AgentUpdateCenter: ObservableObject {
             return
         }
         if case .other = update.kind { return }
+        let isSnoozed = snoozedUntil.map { $0 > Date() } ?? false
+        var isNewSession = true
         // One entry per session: a newer event for the same session replaces the old one.
         if let index = pending.firstIndex(where: { $0.session == update.session }) {
-            release(pending[index], with: "dismiss")
+            let existing = pending[index]
+            if existing.isAwaitingReply && !update.isAwaitingReply {
+                // A plain notification (idle, permission prompt) about a session whose hook
+                // is already waiting on us: keep the waiting entry. Replacing it would
+                // answer that hook with "dismiss", and it must not undo a Hide either.
+                if !isSnoozed { showPanel() }
+                return
+            }
+            release(existing, with: "dismiss")
             pending[index] = update
+            isNewSession = false
         } else {
             pending.append(update)
         }
         if selectedID == nil || pending.count == 1 || pending.first(where: { $0.id == selectedID }) == nil {
             selectedID = update.id
         }
-        showPanel()
+        // Hide keeps the panel away for the chosen time; only something new (another
+        // session, a question, a permission) is worth interrupting that for.
+        if !isSnoozed || isNewSession || update.kind == .permission || update.kind == .question {
+            showPanel()
+        }
         if SpeekSettings.shared.agentSound && SpeekSettings.shared.soundEffects != .off {
             NSSound(named: "Tink")?.play()
         }
@@ -407,6 +423,19 @@ final class AgentUpdateCenter: ObservableObject {
             panel.contentView = host
             self.panel = panel
         }
+        if keyMonitor == nil {
+            // Cmd+H anywhere in Speek while the panel is up hides the panel, not the app:
+            // with the main window focused it would otherwise reach "Hide Speek", which
+            // hides every window without arming the snooze, and the watchdog would bring
+            // the panel straight back.
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.panel?.isVisible == true,
+                      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                      event.charactersIgnoringModifiers?.lowercased() == "h" else { return event }
+                self.snooze()
+                return nil
+            }
+        }
         guard let panel else { return }
         let size = fittedSize(of: panel)
         let position = PanelPosition.current
@@ -444,6 +473,9 @@ final class AgentUpdateCenter: ObservableObject {
                     return
                 }
                 if let until = self.snoozedUntil, until > Date() { return }
+                // The user hid the whole app (Hide Speek / Cmd+Option+H elsewhere): the
+                // panel comes back when Speek is unhidden, not before.
+                if NSApp.isHidden { return }
                 if let panel = self.panel, !panel.isVisible {
                     self.logger.notice("Agent panel was hidden with \(self.pending.count) waiting; showing it again")
                     panel.orderFrontRegardless()
