@@ -76,7 +76,27 @@ enum ClaudePluginInstaller {
             throw Failure(message: "claude plugin install failed: \(result.output.trimmingCharacters(in: .whitespacesAndNewlines))")
         }
         _ = run(cli, ["plugin", "enable", "\(pluginName)@\(marketplaceName)"], timeout: 30)
+        syncCache()
         logger.notice("Claude Code plugin installed (\(pluginVersion, privacy: .public))")
+    }
+
+    /// Claude Code caches a plugin per version and does not re-copy it when the version
+    /// stays the same, so a changed hook script would never reach the cache. Overwrite
+    /// the cached files for the current version with the marketplace copy.
+    private static func syncCache() {
+        let fm = FileManager.default
+        let source = marketplaceDirectory.appendingPathComponent(pluginName, isDirectory: true)
+        let cache = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/plugins/cache/\(marketplaceName)/\(pluginName)/\(pluginVersion)", isDirectory: true)
+        guard fm.fileExists(atPath: cache.path),
+              let items = try? fm.contentsOfDirectory(atPath: source.path) else { return }
+        for item in items {
+            let from = source.appendingPathComponent(item)
+            let to = cache.appendingPathComponent(item)
+            try? fm.removeItem(at: to)
+            try? fm.copyItem(at: from, to: to)
+        }
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cache.appendingPathComponent("scripts/speek-agent-hook").path)
     }
 
     static func uninstall() {
