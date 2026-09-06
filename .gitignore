@@ -125,3 +125,7 @@ Temporary Items
 .claude/settings.local.json
 .local-build-ios/
 .local-build-ios-dev/
+
+# Release output
+dist/
+.release-build/

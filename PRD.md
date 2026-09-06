@@ -21,7 +21,7 @@ processing, including developers who drive coding agents (Claude Code, Codex) by
 
 ### 4.1 Dictate
 1. Press the Toggle Recording shortcut (default: right Command, modifier only) or the Push to Talk key.
-2. The recording window appears at the bottom of the screen (Classic panel, Mini pill, or None).
+2. The recording window appears at the bottom of the screen (Classic panel, Mini pill, or None). With Mini's "Always show" on, a thin strip stays on the top, left, or right edge and expands on hover into change-mode, record, and open-app controls.
 3. Press the shortcut again (or Escape to cancel). Speek transcribes with the active mode's voice model, applies vocabulary replacements and formatting, optionally rewrites with a local text model, then pastes into the focused app. Holding Shift while stopping presses Return after pasting.
 
 ### 4.2 Modes
@@ -43,7 +43,7 @@ Welcome, permissions (Microphone, Accessibility), voice model download, shortcut
 | Home | Range picker, stats (WPM, words, apps used, time saved), Get started, What's new |
 | Modes | Mode list, Create mode, mode detail |
 | Vocabulary | Add word / Replace with, list, replacement editor, import/export |
-| Configuration | Appearance (theme, recording window), Keyboard Shortcuts, Application, Advanced settings (Dock, menubar click, always close, model active duration, app folder, text input, Agent Plugins, experimental models) |
+| Configuration | Appearance (theme, recording window, always show, position), Keyboard Shortcuts, Application, Advanced settings (Dock, menubar click, always close, model active duration, app folder, text input, Agent Plugins, experimental models) |
 | Sound | Recording toggles, playback behavior, sound effects style and volume |
 | Models library | Model table |
 | History | Search, date groups, detail with audio player and metadata |

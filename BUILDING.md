@@ -184,3 +184,18 @@ If you encounter any build issues:
 5. Make sure whisper.xcframework is properly built and linked
 
 For more help, please check the [issues](https://github.com/ZdenekCulik/whisper-pro/issues) section or create a new issue. 
+
+## Release build
+
+```bash
+scripts/release-build.sh
+```
+
+Produces `dist/Speek-<version>.zip`. Without a Developer ID it is ad-hoc signed and
+users must right-click > Open on first launch. With an Apple Developer account:
+
+```bash
+SIGN_ID="Developer ID Application: Your Name (TEAMID)" NOTARIZE=1 KEYCHAIN_PROFILE=speek-notary scripts/release-build.sh
+```
+
+(`xcrun notarytool store-credentials speek-notary` once to save the App Store Connect API key.)
