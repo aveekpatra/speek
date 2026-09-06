@@ -592,7 +592,10 @@ private struct AgentReplyView: View {
                         .padding(.leading, 10)
                         .padding(.trailing, 14)
                         .frame(height: 38)
-                        .glassEffect(.regular.tint(isSelected ? Color.black.opacity(0.7) : Color.black.opacity(0.4)), in: Capsule(style: .continuous))
+                        // Solid tint under the glass: tinted glass inside a button washes
+                        // out to near-white once the panel is not the key window.
+                        .background(Capsule(style: .continuous).fill(Color.black.opacity(isSelected ? 0.55 : 0.35)))
+                        .glassEffect(.regular, in: Capsule(style: .continuous))
                         .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(isSelected ? 0.18 : 0.08), lineWidth: 0.8))
                         .contentShape(Capsule())
                     }
