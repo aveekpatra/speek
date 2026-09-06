@@ -43,14 +43,21 @@ class CursorPaster {
         await startPasteAtCursor(text).value
     }
 
+    /// Pastes without the editability check. For targets we already know accept text
+    /// (an agent's terminal we just activated), where the AX probe is unreliable.
     @MainActor
-    private static func performPasteSession(_ text: String) async -> PasteResult {
+    static func forcePasteAtCursor(_ text: String) async -> PasteResult {
+        await performPasteSession(text, requireEditableTarget: false)
+    }
+
+    @MainActor
+    private static func performPasteSession(_ text: String, requireEditableTarget: Bool = true) async -> PasteResult {
         let pasteboard = NSPasteboard.general
 
         // No editable target to paste into: don't fire ⌘V (which makes macOS beep
         // and, with clipboard-restore on, would also drop the text). Instead just
         // leave the transcript on the clipboard so it can be pasted later with ⌘V.
-        if !focusedElementLikelyEditable() {
+        if requireEditableTarget && !focusedElementLikelyEditable() {
             // transient: true tags the dictated text as auto-generated/transient
             // (org.nspasteboard) so clipboard managers like Maccy/Raycast don't
             // permanently store it — it stays pasteable via ⌘V either way.

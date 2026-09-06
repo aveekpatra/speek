@@ -157,11 +157,13 @@ final class AgentUpdateCenter: ObservableObject {
         guard !text.isEmpty else { return }
         isSending = true
         Task { @MainActor in
+            // Drop our key window first so the terminal gets keyboard focus back.
+            hidePanel()
             activateTerminal(for: update)
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            let result = await CursorPaster.pasteAtCursorAndWaitUntilPosted(text)
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            let result = await CursorPaster.forcePasteAtCursor(text)
             if result.didPostPasteCommand {
-                try? await Task.sleep(nanoseconds: 250_000_000)
+                try? await Task.sleep(nanoseconds: 300_000_000)
                 CursorPaster.performAutoSend(.enter)
             }
             isSending = false
@@ -175,8 +177,9 @@ final class AgentUpdateCenter: ObservableObject {
         guard let update = current, !isSending else { return }
         isSending = true
         Task { @MainActor in
+            hidePanel()
             activateTerminal(for: update)
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            try? await Task.sleep(nanoseconds: 450_000_000)
             Keystrokes.type(String(number))
             try? await Task.sleep(nanoseconds: 150_000_000)
             CursorPaster.performAutoSend(.enter)
@@ -191,8 +194,9 @@ final class AgentUpdateCenter: ObservableObject {
         guard let update = current, !isSending else { return }
         isSending = true
         Task { @MainActor in
+            hidePanel()
             activateTerminal(for: update)
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            try? await Task.sleep(nanoseconds: 450_000_000)
             Keystrokes.press(virtualKey: 0x35)   // esc
             isSending = false
             dismiss()
@@ -212,7 +216,9 @@ final class AgentUpdateCenter: ObservableObject {
     func activateTerminal(for update: AgentUpdate) {
         if let bundleID = update.terminalBundleID,
            let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
-            app.activate()
+            app.activate(options: [.activateIgnoringOtherApps])
+        } else {
+            logger.error("No terminal app recorded for \(update.agent.displayName, privacy: .public); reply may land in the wrong window")
         }
     }
 
@@ -220,7 +226,13 @@ final class AgentUpdateCenter: ObservableObject {
         dismissTask?.cancel()
         dismissTask = nil
         current = nil
-        panel?.orderOut(nil)
+        hidePanel()
+    }
+
+    private func hidePanel() {
+        guard let panel, panel.isVisible else { return }
+        if panel.isKeyWindow { panel.resignKey() }
+        panel.orderOut(nil)
     }
 
     // MARK: Panel
@@ -327,13 +339,9 @@ private struct AgentReplyView: View {
                     header(update)
                     if !update.message.isEmpty {
                         ScrollView {
-                            Text(update.message)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.white.opacity(0.92))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            MarkdownContentView(update.message, fontSize: 13, foregroundColor: .white.opacity(0.92))
                         }
-                        .frame(maxHeight: 190)
+                        .frame(maxHeight: 220)
                         .fixedSize(horizontal: false, vertical: true)
                     }
                     if !update.options.isEmpty {
@@ -433,35 +441,36 @@ private struct AgentReplyView: View {
     }
 
     private func replyBox(_ update: AgentUpdate) -> some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            if center.recordingState == .recording {
-                HStack(spacing: 10) {
-                    if let recorder = center.recorder {
-                        AgentListeningBars(recorder: recorder)
+        HStack(alignment: .center, spacing: 10) {
+            Group {
+                if center.recordingState == .recording {
+                    HStack(spacing: 10) {
+                        if let recorder = center.recorder {
+                            AgentListeningBars(recorder: recorder)
+                        }
+                        Text("Listening...")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white.opacity(0.7))
+                        Spacer(minLength: 0)
                     }
-                    Text("Listening...")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.7))
-                    Spacer()
+                } else if center.recordingState == .transcribing || center.recordingState == .enhancing {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small).tint(.white)
+                        Text(center.recordingState == .enhancing ? "Rewriting..." : "Transcribing...")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white.opacity(0.7))
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    TextField("Reply to \(update.agent.displayName)...", text: $center.draft, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 14))
+                        .lineLimit(1...6)
+                        .focused($replyFocused)
+                        .onSubmit { center.send() }
                 }
-                .frame(minHeight: 22)
-            } else if center.recordingState == .transcribing || center.recordingState == .enhancing {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.mini).tint(.white)
-                    Text(center.recordingState == .enhancing ? "Rewriting..." : "Transcribing...")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.7))
-                    Spacer()
-                }
-                .frame(minHeight: 22)
-            } else {
-                TextField("Reply to \(update.agent.displayName)...", text: $center.draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14))
-                    .lineLimit(1...6)
-                    .focused($replyFocused)
-                    .onSubmit { center.send() }
             }
+            .frame(minHeight: 26)
             Button { center.send() } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 12, weight: .bold))
@@ -473,8 +482,9 @@ private struct AgentReplyView: View {
             .disabled(center.draft.trimmingCharacters(in: .whitespaces).isEmpty || center.isSending)
             .help("Send (Return)")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.08)))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -504,5 +514,6 @@ private struct AgentListeningBars: View {
 
     var body: some View {
         LiveBarsView(audioMeter: recorder.audioMeter, isActive: true, barCount: 9, maxHeight: 16)
+            .frame(height: 26)
     }
 }
