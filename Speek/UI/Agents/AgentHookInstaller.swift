@@ -1,7 +1,8 @@
 import Foundation
 
-/// Installs the `speek-agent-hook` script and wires it into Claude Code
-/// (`~/.claude/settings.json` hooks) or Codex (`~/.codex/config.toml` notify).
+/// Installs the `speek-agent-hook` script and wires it into Claude Code and Codex,
+/// preferably as a real plugin (ClaudePluginInstaller, CodexPluginInstaller) with plain
+/// settings hooks as the fallback.
 enum AgentHookInstaller {
     enum InstallError: LocalizedError {
         case bundledScriptMissing
@@ -103,8 +104,17 @@ enum AgentHookInstaller {
             }
         case .codex:
             try uninstallCodexNotify()   // migrate away from the old notify wiring
-            try installCodexHooks()
-            try installSkill(at: codexSkillURL)
+            // Real plugin with trusted hooks when the codex CLI is around. Plain
+            // ~/.codex/hooks.json entries only run after a manual /hooks review, so
+            // they are the fallback, not the default.
+            do {
+                try CodexPluginInstaller.install(hookScript: scriptURL)
+                try? uninstallCodexHooks()   // no duplicate direct hooks next to the plugin
+                try? FileManager.default.removeItem(at: codexSkillURL.deletingLastPathComponent())
+            } catch {
+                try installCodexHooks()
+                try installSkill(at: codexSkillURL)
+            }
         }
     }
 
@@ -115,6 +125,7 @@ enum AgentHookInstaller {
             try uninstallClaude()
             try? FileManager.default.removeItem(at: claudeSkillURL.deletingLastPathComponent())
         case .codex:
+            CodexPluginInstaller.uninstall()
             try uninstallCodexNotify()
             try uninstallCodexHooks()
             try? FileManager.default.removeItem(at: codexSkillURL.deletingLastPathComponent())
@@ -144,6 +155,7 @@ enum AgentHookInstaller {
                 }
             }
         case .codex:
+            if CodexPluginInstaller.isPluginInstalled { return true }
             if let data = try? Data(contentsOf: codexHooksURL),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                containsSpeekHook(json) { return true }

@@ -31,7 +31,7 @@ A mode combines a preset (Voice to text, Message, Email, Note, Custom prompt), a
 Table of voice models (Cohere Transcribe, Canary 1B v2, Parakeet V2/V3/110M/Japanese, Whisper Large v3 Turbo, Apple Speech, imported GGML files) and text models (S1-mini, Ollama models) with type, speed and accuracy meters, size, download progress and the active model. Provider filter, search, import.
 
 ### 4.4 Agent plugins
-Installing the Claude Code or Codex plugin writes a hook script and registers it. When an agent finishes, needs permission, or asks a question, Speek shows a glass overlay (top right). Recording while the overlay is visible sends the transcript to the agent's terminal followed by Return. A user prompt submitted in the terminal dismisses the overlay.
+Connecting Claude Code or Codex installs Speek as a real plugin of that agent (Claude: `speek@speek` under Plugins; Codex: `speek@speek` under /plugins, with the hook trust Codex requires recorded automatically). When an agent finishes, needs permission, or asks a question, the reply panel takes the recording pill's place; the hook waits and returns the spoken or typed reply as hook output. A user prompt submitted in the terminal dismisses the entry.
 
 ### 4.5 First run
 Welcome, permissions (Microphone, Accessibility), voice model download, shortcut.

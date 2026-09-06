@@ -27,7 +27,13 @@ enum AgentPlugin: String, CaseIterable, Identifiable {
     var installedDescription: String {
         switch self {
         case .claudeCode: return ClaudePluginInstaller.isPluginInstalled ? "Installed as the speek plugin (Claude Code > Plugins)" : "Hooks in ~/.claude/settings.json, /speek skill installed"
-        case .codex: return "Hooks in ~/.codex/hooks.json, /speek skill installed"
+        case .codex:
+            if CodexPluginInstaller.isPluginInstalled {
+                return CodexPluginInstaller.hooksLookTrusted
+                    ? "Installed as the speek plugin (Codex > /plugins), hooks trusted"
+                    : "Installed as the speek plugin. Hooks still need a review: run /hooks in Codex, or reconnect here."
+            }
+            return "Hooks in ~/.codex/hooks.json (run /hooks in Codex to trust them), /speek skill installed"
         }
     }
 
@@ -76,9 +82,10 @@ final class AgentPluginManager: ObservableObject {
             switch outcome {
             case .success:
                 setInstalled(plugin, true)
-                let asPlugin = plugin == .claudeCode && ClaudePluginInstaller.isPluginInstalled
+                let asPlugin = (plugin == .claudeCode && ClaudePluginInstaller.isPluginInstalled)
+                    || (plugin == .codex && CodexPluginInstaller.isPluginInstalled)
                 lastMessage = asPlugin
-                    ? "Claude Code connected as the \"speek\" plugin. Restart Claude Code to activate it."
+                    ? "\(plugin.displayName) connected as the \"speek\" plugin. Restart \(plugin.displayName) to activate it."
                     : "\(plugin.displayName) connected. Restart \(plugin.displayName) to activate it."
             case .failure(let error):
                 lastMessage = "Could not connect \(plugin.displayName): \(error.localizedDescription)"
