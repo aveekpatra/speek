@@ -53,6 +53,8 @@ export SPEEK_ITERM="${ITERM_SESSION_ID:-}"
 export SPEEK_TMUX="${TMUX_PANE:-}"
 # cmux: workspace, panel and surface ids of the terminal the agent runs in.
 export SPEEK_CMUX="${CMUX_SURFACE_ID:+${CMUX_WORKSPACE_ID:-}|${CMUX_PANEL_ID:-}|${CMUX_SURFACE_ID}}"
+# Claude desktop app: its own session id ("local_..."), the one its deep links accept.
+export SPEEK_HOST_SESSION="${CLAUDE_CODE_HOST_SESSION_ID:-}"
 
 # Line 1: event name. Line 2: speek:// URL.
 PARSED=$(/usr/bin/osascript -l JavaScript -e '
@@ -94,6 +96,7 @@ var params = {
   iterm: env("SPEEK_ITERM"),
   tmux: env("SPEEK_TMUX"),
   cmux: env("SPEEK_CMUX"),
+  host: env("SPEEK_HOST_SESSION"),
   notification: p.notification_type || "",
   permission: p.permission_mode || "",
   tool: p.tool_name || "",

@@ -6,6 +6,8 @@ import os
 enum TerminalLocator {
     private static let logger = Logger(subsystem: "com.aveekpatra.speek", category: "TerminalLocator")
 
+    /// Runs on the main thread: AppKit activation and AppleScript want it, and the CLI
+    /// calls it makes are short.
     static func focus(_ update: AgentUpdate) {
         // tmux first: the pane switch happens inside the terminal whatever app hosts it.
         if let pane = update.tmuxPane { selectTmuxPane(pane) }
@@ -19,9 +21,11 @@ enum TerminalLocator {
         case "com.cmuxterm.app":
             if let target = update.cmuxTarget { handled = selectCmuxSurface(target) }
         case "com.anthropic.claudefordesktop":
-            // The Claude desktop app resumes a specific Code session through its own link.
-            if !update.session.isEmpty, update.session != "preview",
-               let url = URL(string: "claude://code/continue?session=\(update.session)&source=speek") {
+            // The Claude desktop app opens a specific Code session through its own link,
+            // but only by its host session id ("local_..."), which the hook captures from
+            // CLAUDE_CODE_HOST_SESSION_ID. A bare Claude Code UUID is rejected by the app.
+            if let host = update.hostSession, host.hasPrefix("local_"),
+               let url = URL(string: "claude://code/continue?session=\(host)&source=speek") {
                 NSWorkspace.shared.open(url)
                 handled = true
             }
@@ -34,7 +38,8 @@ enum TerminalLocator {
             logger.error("No terminal app recorded for \(update.agent.displayName, privacy: .public)")
             return
         }
-        app.activate(options: [.activateIgnoringOtherApps])
+        let activated = app.activate(options: [.activateIgnoringOtherApps])
+        logger.notice("Focus \(bundleID, privacy: .public): specific=\(handled) activated=\(activated)")
         if !handled {
             // Generic apps: raise the window whose title mentions the project or branch.
             raiseWindow(of: app, matching: [update.projectName, update.branchName ?? ""].filter { !$0.isEmpty })

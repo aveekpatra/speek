@@ -42,6 +42,8 @@ struct AgentUpdate: Identifiable, Equatable {
     let tmuxPane: String?
     /// cmux "workspace|panel|surface" ids.
     let cmuxTarget: String?
+    /// Claude desktop app's own session id ("local_..."), for its claude:// links.
+    let hostSession: String?
     /// FIFO the waiting hook reads; the answer written here goes straight back to the agent.
     let replyPath: String?
     let receivedAt = Date()
@@ -78,6 +80,7 @@ struct AgentUpdate: Identifiable, Equatable {
         itermSession = nonEmpty("iterm")
         tmuxPane = nonEmpty("tmux")
         cmuxTarget = nonEmpty("cmux")
+        hostSession = nonEmpty("host")
     }
 
     /// True when the hook is waiting for our answer (no terminal typing needed).
@@ -170,6 +173,9 @@ final class AgentUpdateCenter: ObservableObject {
             return true
         case "record":
             NotificationCenter.default.post(name: .toggleRecorderPanel, object: nil)
+            return true
+        case "agent-window":
+            goToAgentWindow()
             return true
         case "settings":
             NotificationCenter.default.post(name: .speekNavigate, object: nil, userInfo: ["page": SpeekPage.configuration.rawValue])
@@ -389,10 +395,12 @@ final class AgentUpdateCenter: ObservableObject {
     /// Code, Cursor, the Claude desktop app) gets activated and its window whose title
     /// mentions the project is raised.
     func goToAgentWindow(_ update: AgentUpdate? = nil) {
-        guard let update = update ?? current else { return }
-        DispatchQueue.global(qos: .userInitiated).async {
-            TerminalLocator.focus(update)
+        guard let update = update ?? current else {
+            logger.notice("Go to window: nothing selected")
+            return
         }
+        logger.notice("Go to window: \(update.agent.displayName, privacy: .public) app=\(update.terminalBundleID ?? "none", privacy: .public) tty=\(update.tty ?? "-", privacy: .public) cmux=\(update.cmuxTarget ?? "-", privacy: .public)")
+        TerminalLocator.focus(update)
     }
 
     /// Dismiss the selected session without answering: its hook is released so the agent
