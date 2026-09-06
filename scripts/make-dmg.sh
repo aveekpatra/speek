@@ -15,11 +15,11 @@ cd "$(dirname "$0")/.." || exit 1
 
 PROJECT="Speek.xcodeproj"
 SCHEME="Speek"
-SIGN_IDENTITY="${DIST_IDENTITY:-Apple Development}"
+SIGN_IDENTITY="${DIST_IDENTITY:--}"
 APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.aveekpatra.speek}"
 DERIVED_DATA="${DIST_DERIVED_DATA:-$PWD/.local-build-release}"
 ENTITLEMENTS="${DIST_ENTITLEMENTS:-$PWD/Speek/Speek.dist.entitlements}"
-NOTARY_PROFILE="whisperpro-notary"
+NOTARY_PROFILE="speek-notary"
 
 echo "▶ Reading version…"
 VERSION=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
@@ -96,14 +96,15 @@ fi
 
 ln -s /Applications "$WORK/Applications"
 cat > "$WORK/READ ME.txt" <<'EOF'
-Speek, install
+Speek
 
-1. Drag "Speek" into the Applications folder.
-2. If macOS blocks the first launch: System Settings > Privacy & Security >
-   scroll down > "Open Anyway".
-3. On first launch the app walks you through connecting Soniox (speech
-   service). You'll need a free Soniox account + ~$5 credit at
-   https://console.soniox.com
+1. Drag Speek into the Applications folder.
+2. First launch: right-click Speek > Open (this build is not notarized), or
+   System Settings > Privacy & Security > "Open Anyway".
+3. Grant Microphone and Accessibility when asked, pick a voice model, done.
+
+Everything runs on your Mac. Nothing leaves it.
+https://github.com/aveekpatra/speek
 EOF
 
 mkdir -p dist
