@@ -278,6 +278,17 @@ final class SpeekSettings: ObservableObject {
             defaults.set(playbackWhenRecording.rawValue, forKey: Keys.playbackWhenRecording)
             defaults.set(playbackWhenRecording == .pause, forKey: "isPauseMediaEnabled")
             defaults.set(playbackWhenRecording == .mute, forKey: "isSystemMuteEnabled")
+            Self.applyPlaybackPolicy(playbackWhenRecording)
+        }
+    }
+
+    /// The recorder reads these singletons live; they cached the defaults at launch.
+    static func applyPlaybackPolicy(_ policy: PlaybackWhenRecording) {
+        if PlaybackController.shared.isPauseMediaEnabled != (policy == .pause) {
+            PlaybackController.shared.isPauseMediaEnabled = (policy == .pause)
+        }
+        if MediaController.shared.isSystemMuteEnabled != (policy == .mute) {
+            MediaController.shared.isSystemMuteEnabled = (policy == .mute)
         }
     }
     @Published var soundEffects: SoundEffectsStyle {
@@ -324,7 +335,10 @@ final class SpeekSettings: ObservableObject {
         autoIncreaseMicVolume = d.object(forKey: Keys.autoGain) as? Bool ?? true
         silenceRemoval = d.object(forKey: Keys.silenceRemoval) as? Bool ?? true
         dynamicNormalization = d.object(forKey: Keys.dynamicNormalization) as? Bool ?? true
-        playbackWhenRecording = PlaybackWhenRecording(rawValue: d.string(forKey: Keys.playbackWhenRecording) ?? "") ?? .pause
+        let playback = PlaybackWhenRecording(rawValue: d.string(forKey: Keys.playbackWhenRecording) ?? "") ?? .pause
+        playbackWhenRecording = playback
+        d.set(playback == .pause, forKey: "isPauseMediaEnabled")
+        d.set(playback == .mute, forKey: "isSystemMuteEnabled")
         soundEffects = SoundEffectsStyle(rawValue: d.string(forKey: Keys.soundEffects) ?? "") ?? .classic
         soundVolume = d.object(forKey: Keys.soundVolume) as? Double ?? 1.0
         statsRange = StatsRange(rawValue: d.string(forKey: Keys.statsRange) ?? "") ?? .allTime

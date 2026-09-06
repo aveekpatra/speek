@@ -17,7 +17,7 @@ struct SoundPage: View {
                     SpeekRow("Dynamic normalization", help: "Evens out loud and quiet passages in the recording.") {
                         Toggle("", isOn: $settings.dynamicNormalization).labelsHidden().toggleStyle(.switch)
                     }
-                    SpeekRow("Playback when recording", help: "What happens to music or video playing on your Mac while you dictate.") {
+                    SpeekRow("Playback when recording", help: "Pause sends a real pause to whatever is playing (Music, Spotify, a video in your browser) and resumes it when you stop. Mute only silences the speakers. Do nothing leaves playback alone.") {
                         Picker("", selection: $settings.playbackWhenRecording) {
                             ForEach(PlaybackWhenRecording.allCases) { option in
                                 Text(option.displayName).tag(option)

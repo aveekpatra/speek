@@ -3,6 +3,7 @@ import Combine
 import Foundation
 import SwiftUI
 import MediaRemoteAdapter
+import os
 @MainActor
 class PlaybackController: ObservableObject {
     static let shared = PlaybackController()
@@ -12,6 +13,7 @@ class PlaybackController: ObservableObject {
     private var lastKnownTrackInfo: TrackInfo?
     private var originalMediaAppBundleId: String?
     private var resumeTask: Task<Void, Never>?
+    private let logger = Logger(subsystem: "com.aveekpatra.speek", category: "PlaybackController")
 
     @Published var isPauseMediaEnabled: Bool = UserDefaults.standard.bool(forKey: "isPauseMediaEnabled") {
         didSet {
@@ -69,15 +71,18 @@ class PlaybackController: ObservableObject {
         // which can be empty or stale at the moment recording starts (the loop
         // listener mainly emits on changes). This is the authoritative check.
         let trackInfo = await currentTrackInfo()
-        guard let payload = trackInfo?.payload,
-              payload.isPlaying == true,
-              let bundleId = payload.bundleIdentifier else {
+        let payload = trackInfo?.payload
+        // Browsers sometimes report isPlaying=false with a non-zero playback rate.
+        let isPlaying = (payload?.isPlaying ?? false) || ((payload?.playbackRate ?? 0) > 0)
+        guard let payload, isPlaying, let bundleId = payload.bundleIdentifier else {
+            logger.notice("pauseMedia: nothing playing (app=\(payload?.bundleIdentifier ?? "none", privacy: .public), isPlaying=\(payload?.isPlaying ?? false), rate=\(payload?.playbackRate ?? 0))")
             return
         }
 
         wasPlayingWhenRecordingStarted = true
         originalMediaAppBundleId = bundleId
         lastKnownTrackInfo = trackInfo
+        logger.notice("pauseMedia: pausing \(bundleId, privacy: .public) (\(payload.title ?? "", privacy: .public))")
 
         try? await Task.sleep(nanoseconds: 50_000_000)
 
