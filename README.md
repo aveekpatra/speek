@@ -18,7 +18,7 @@ local models: nothing you say leaves your Mac.
 - **Local text models**: S1-mini by Superwhisper (open-weights transcript normalizer, runs through llama.cpp, with tone and structure controls) or any Ollama model.
 - **Agent plugins**: Claude Code and Codex notify Speek when they finish, need permission, or ask a question; answer by voice and the reply is typed into their terminal.
 - **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the screen edge and expands on hover into change-mode, record, and open-app controls. The edge (Bottom, Top, Left, Right) is the panel position set under Agent Panel and is shared by the recording pill and the agent reply panel.
-- **Vocabulary and replacements**, searchable history with audio playback, and a menu bar app with Transcribe File.
+- **Vocabulary and replacements**, searchable history with audio playback and a clear-all button, and a menu bar app with Transcribe File.
 - **Sound effects** (Simple / Classic / Off), silence removal, dynamic normalization, playback pause while recording.
 
 ## Install

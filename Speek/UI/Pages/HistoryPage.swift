@@ -11,6 +11,7 @@ struct HistoryPage: View {
     @State private var selected: Transcription?
     @State private var hasMore = true
     @State private var isLoading = false
+    @State private var confirmClearAll = false
     private let pageSize = 40
 
     var body: some View {
@@ -54,7 +55,22 @@ struct HistoryPage: View {
         }
         .animation(.snappy(duration: 0.25), value: selected?.id)
         .navigationTitle("")
-        .toolbar { SpeekSearchToolbar(text: $searchText, prompt: "Search history") }
+        .toolbar {
+            SpeekSearchToolbar(text: $searchText, prompt: "Search history") {
+                Button {
+                    confirmClearAll = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help("Clear history")
+                .disabled(transcriptions.isEmpty)
+            }
+        }
+        .confirmationDialog("Clear all history?", isPresented: $confirmClearAll) {
+            Button("Clear History", role: .destructive) { clearAll() }
+        } message: {
+            Text("Every transcript and its recording will be deleted. This cannot be undone.")
+        }
         .task(id: searchText) { await reload() }
         .onReceive(NotificationCenter.default.publisher(for: .transcriptionCompleted)) { _ in Task { await reload() } }
         .onReceive(NotificationCenter.default.publisher(for: .transcriptionDeleted)) { _ in Task { await reload() } }
@@ -142,6 +158,21 @@ struct HistoryPage: View {
         hasMore = items.count == pageSize
     }
 
+    private func clearAll() {
+        let all = (try? modelContext.fetch(FetchDescriptor<Transcription>())) ?? []
+        for transcription in all {
+            if let urlString = transcription.audioFileURL, let url = URL(string: urlString) {
+                try? FileManager.default.removeItem(at: url)
+            }
+            modelContext.delete(transcription)
+        }
+        try? modelContext.save()
+        transcriptions = []
+        selected = nil
+        hasMore = false
+        NotificationCenter.default.post(name: .transcriptionDeleted, object: nil)
+    }
+
     private func delete(_ transcription: Transcription) {
         if let urlString = transcription.audioFileURL, let url = URL(string: urlString) {
             try? FileManager.default.removeItem(at: url)
@@ -181,27 +212,17 @@ private struct HistoryRow: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // Actions float over the row's trailing edge so the text never reflows.
+                // Two glass buttons float over the row's trailing edge; glass reads fine
+                // over text, so nothing else is needed and the text never reflows.
                 .overlay(alignment: .trailing) {
                     if hovering {
                         HStack(spacing: 6) {
-                            Text(transcription.timestamp, style: .time)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
-                                .padding(.trailing, 4)
                             rowButton("doc.on.doc", help: "Copy") {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(displayText, forType: .string)
                             }
                             rowButton("trash", help: "Delete", action: onDelete)
                         }
-                        .padding(.leading, 28)
-                        .background(
-                            LinearGradient(
-                                colors: [SpeekDesign.controlFill(scheme).opacity(0), SpeekDesign.controlFill(scheme), SpeekDesign.controlFill(scheme)],
-                                startPoint: .leading, endPoint: .trailing
-                            )
-                        )
                         .transition(.opacity)
                     }
                 }
@@ -233,12 +254,11 @@ private struct HistoryRow: View {
     private func rowButton(_ systemName: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(Color.primary.opacity(scheme == .dark ? 0.10 : 0.07)))
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 16, height: 16)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .controlSize(.small)
         .help(help)
     }
 }

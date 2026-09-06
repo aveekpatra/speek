@@ -47,7 +47,7 @@ Welcome, permissions (Microphone, Accessibility), voice model download, shortcut
 | Configuration | Appearance (theme, recording window, always show), Keyboard Shortcuts, Application, Advanced settings (Dock, voice model active duration, app folder, clipboard and paste) |
 | Sound | Recording toggles, playback behavior, sound effects style and volume |
 | Models library | Model table |
-| History | Search, date groups, detail with audio player and metadata |
+| History | Search, date groups, detail with audio player and metadata, clear all |
 | Speek (footer) | Version, updates, credits, links |
 
 Menu bar: Toggle Recording, Transcribe File..., History..., Settings..., microphone and mode submenus, version, Check for Updates..., Quit.
