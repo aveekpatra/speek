@@ -114,6 +114,10 @@ final class AgentUpdateCenter: ObservableObject {
     @Published private(set) var recordingState: RecordingState = .idle
     /// Bumped whenever the reply box should take keyboard focus again.
     @Published private(set) var focusTick = 0
+    /// While set, the panel stays hidden (Hide button / Cmd+H) and comes back by itself.
+    private var snoozedUntil: Date?
+    private var refitScheduled = false
+    static let snoozeDuration: TimeInterval = 10
     @Published private(set) var isSending = false
 
     var current: AgentUpdate? {
@@ -397,18 +401,24 @@ final class AgentUpdateCenter: ObservableObject {
     private func showPanel() {
         if panel == nil {
             let panel = AgentReplyPanel(contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: 300))
-            panel.contentView = NSHostingView(rootView: AgentReplyView(center: self))
+            let host = NSHostingView(rootView: AgentReplyView(center: self))
+            // Never let SwiftUI size the window; PanelAnchor owns the frame.
+            host.sizingOptions = [.intrinsicContentSize]
+            panel.contentView = host
             self.panel = panel
         }
         guard let panel else { return }
         let size = fittedSize(of: panel)
         let position = PanelPosition.current
-        if panel.isVisible {
-            // Already up (new event, or brought back): grow in place, anchor locked.
-            panel.setFrame(PanelAnchor.resized(panel.frame, to: size, position: position, on: panel.screen), display: true)
-        } else if let screen = PanelAnchor.screen {
-            panel.setFrame(PanelAnchor.frame(for: size, position: position, on: screen, contentInset: Self.contentMargin), display: false)
+        panel.apply {
+            if panel.isVisible {
+                // Already up (new event, or brought back): grow in place, anchor locked.
+                panel.setFrame(PanelAnchor.resized(panel.frame, to: size, position: position, on: panel.screen), display: true)
+            } else if let screen = PanelAnchor.screen {
+                panel.setFrame(PanelAnchor.frame(for: size, position: position, on: screen, contentInset: Self.contentMargin), display: false)
+            }
         }
+        snoozedUntil = nil
         panel.makeKeyAndOrderFront(nil)
         focusTick += 1
         startVisibilityWatchdog()
@@ -433,6 +443,7 @@ final class AgentUpdateCenter: ObservableObject {
                     self.visibilityWatchdog = nil
                     return
                 }
+                if let until = self.snoozedUntil, until > Date() { return }
                 if let panel = self.panel, !panel.isVisible {
                     self.logger.notice("Agent panel was hidden with \(self.pending.count) waiting; showing it again")
                     panel.orderFrontRegardless()
@@ -449,6 +460,21 @@ final class AgentUpdateCenter: ObservableObject {
         showPanel()
     }
 
+    /// Gets the panel out of the way for a moment without answering anything. It
+    /// returns on its own after `snoozeDuration`, on the next agent event, or from the
+    /// menu bar.
+    func snooze() {
+        guard panel?.isVisible == true else { return }
+        let until = Date().addingTimeInterval(Self.snoozeDuration)
+        snoozedUntil = until
+        hidePanel()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.snoozeDuration))
+            guard let self, self.snoozedUntil == until, !self.pending.isEmpty else { return }
+            self.showPanel()
+        }
+    }
+
     private func hidePanel() {
         guard let panel, panel.isVisible else { return }
         if panel.isKeyWindow { panel.resignKey() }
@@ -456,13 +482,23 @@ final class AgentUpdateCenter: ObservableObject {
     }
 
     /// Re-fits the panel height after content changes (longer draft, other session,
-    /// attachments). The anchored edge stays where it is: bottom placement grows upward,
-    /// top placement downward, side placements stay centred.
+    /// attachments). Runs on the next run loop turn: it is triggered from inside a
+    /// SwiftUI update, where the hosting view's fitting size is not settled yet (it can
+    /// even report zero). The anchored edge stays where it is: bottom placement grows
+    /// upward, top placement downward, side placements stay centred.
     fileprivate func refit() {
-        guard let panel, panel.isVisible else { return }
-        let size = fittedSize(of: panel)
-        guard size != panel.frame.size else { return }
-        panel.setFrame(PanelAnchor.resized(panel.frame, to: size, position: PanelPosition.current, on: panel.screen), display: true, animate: false)
+        guard !refitScheduled else { return }
+        refitScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.refitScheduled = false
+            guard let panel = self.panel, panel.isVisible else { return }
+            let size = self.fittedSize(of: panel)
+            guard size.height >= Self.contentMargin * 2 + 80, size != panel.frame.size else { return }
+            panel.apply {
+                panel.setFrame(PanelAnchor.resized(panel.frame, to: size, position: PanelPosition.current, on: panel.screen), display: true, animate: false)
+            }
+        }
     }
 }
 
@@ -495,8 +531,50 @@ final class AgentReplyPanel: NSPanel {
         frameRect
     }
 
-    /// Cmd+V with an image on the clipboard attaches it; text pastes fall through to the field.
+    // MARK: Frame lock
+    // NSHostingView resizes its window on its own when the SwiftUI content changes
+    // (windowDidLayout -> updateAnimatedWindowSize), anchoring wherever it likes; a
+    // shrinking reply box could push the whole panel off screen. Only frames set through
+    // `apply` (PanelAnchor placement and refit) are accepted.
+
+    private var allowsFrameChange = false
+
+    func apply(_ change: () -> Void) {
+        allowsFrameChange = true
+        change()
+        allowsFrameChange = false
+    }
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        guard allowsFrameChange || !isVisible else { return }
+        super.setFrame(frameRect, display: flag)
+    }
+
+
+    override func setFrame(_ frameRect: NSRect, display displayFlag: Bool, animate animateFlag: Bool) {
+        guard allowsFrameChange || !isVisible else { return }
+        super.setFrame(frameRect, display: displayFlag, animate: animateFlag)
+    }
+
+    override func setContentSize(_ size: NSSize) {
+        guard allowsFrameChange || !isVisible else { return }
+        super.setContentSize(size)
+    }
+
+    override func setFrameOrigin(_ point: NSPoint) {
+        guard allowsFrameChange || !isVisible else { return }
+        super.setFrameOrigin(point)
+    }
+
+    /// Cmd+V with an image on the clipboard attaches it; text pastes fall through to the
+    /// field. Cmd+H hides the panel for a moment.
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown,
+           event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "h" {
+            AgentUpdateCenter.shared.snooze()
+            return
+        }
         if event.type == .keyDown,
            event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
            event.charactersIgnoringModifiers?.lowercased() == "v" {
@@ -689,6 +767,14 @@ private struct AgentReplyView: View {
             HStack(spacing: 14) {
                 voiceStatus
                 Spacer()
+                Button { center.snooze() } label: {
+                    HStack(spacing: 8) {
+                        Text("Hide")
+                        SpeekKeycapRow(keys: ["⌘", "H"])
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Hide the panel for \(Int(AgentUpdateCenter.snoozeDuration)) seconds. It comes back by itself, on the next agent event, or from the menu bar.")
                 Button { center.dismiss() } label: {
                     HStack(spacing: 8) {
                         Text("Dismiss")
