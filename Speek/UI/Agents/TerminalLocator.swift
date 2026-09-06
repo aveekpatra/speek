@@ -20,6 +20,14 @@ enum TerminalLocator {
             if let session = update.itermSession { handled = selectITermSession(session) }
         case "com.cmuxterm.app":
             if let target = update.cmuxTarget { handled = selectCmuxSurface(target) }
+        case "com.openai.codex":
+            // The Codex desktop app: its own "copy thread link" format is
+            // codex://threads/<thread id>, and the hook's session id is that thread id.
+            if !update.session.isEmpty, update.session != "preview",
+               let url = URL(string: "codex://threads/\(update.session)") {
+                NSWorkspace.shared.open(url)
+                handled = true
+            }
         case "com.anthropic.claudefordesktop":
             // The Claude desktop app opens a specific Code session through its own link,
             // but only by its host session id ("local_..."), which the hook captures from
@@ -38,6 +46,9 @@ enum TerminalLocator {
             logger.error("No terminal app recorded for \(update.agent.displayName, privacy: .public)")
             return
         }
+        // Cooperative activation (macOS 14+): when Speek itself is the active app, another
+        // app only comes forward if Speek yields to it first.
+        if NSApp.isActive { NSApp.yieldActivation(to: app) }
         let activated = app.activate(options: [.activateIgnoringOtherApps])
         logger.notice("Focus \(bundleID, privacy: .public): specific=\(handled) activated=\(activated)")
         if !handled {
