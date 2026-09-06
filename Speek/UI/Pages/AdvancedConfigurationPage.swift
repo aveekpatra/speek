@@ -92,8 +92,6 @@ struct AdvancedConfigurationPage: View {
                 SpeekRow("Paste result text", help: "Turn off to only copy the result to the clipboard without pasting.") {
                     Toggle("", isOn: $settings.pasteResultText).labelsHidden().toggleStyle(.switch)
                 }
-                }
-                }
             }
         }
     }
