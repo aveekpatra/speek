@@ -30,7 +30,11 @@ struct AboutPage: View {
                             .padding(.top, 6)
                         HStack(spacing: 8) {
                             Button("Check for Updates...") { updaterViewModel.checkForUpdates() }
-                            Button("Source code") { NSWorkspace.shared.open(SpeekLinks.repository) }
+                            Button {
+                                NSWorkspace.shared.open(SpeekLinks.repository)
+                            } label: {
+                                Label("Star on GitHub", systemImage: "star")
+                            }
                         }
                         .buttonStyle(.glass)
                         .controlSize(.regular)

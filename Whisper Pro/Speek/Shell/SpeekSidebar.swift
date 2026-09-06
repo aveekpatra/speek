@@ -40,16 +40,8 @@ struct SpeekSidebar: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
             Spacer(minLength: 8)
-            HStack(spacing: 6) {
-                footerLink("Credits", isCurrent: navigation.page == .about, help: "Version, credits and licenses") {
-                    navigation.open(.about)
-                }
-                Text("·")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.quaternary)
-                footerLink("Star on GitHub", isCurrent: false, help: SpeekLinks.repository.absoluteString) {
-                    NSWorkspace.shared.open(SpeekLinks.repository)
-                }
+            footerLink("Credits", isCurrent: navigation.page == .about, help: "Version, credits and licenses") {
+                navigation.open(.about)
             }
         }
         .padding(.horizontal, 18)
