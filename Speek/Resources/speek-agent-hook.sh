@@ -128,6 +128,7 @@ if [ -n "$DATA" ]; then
 fi
 
 export SPEEK_REPLY_KIND="$KIND" SPEEK_REPLY_TEXT="$TEXT" SPEEK_EVENT="$EVENT"
+# SPEEK_PAYLOAD is still exported: the question answer is returned as updatedInput.
 /usr/bin/osascript -l JavaScript -e '
 ObjC.import("stdlib");
 function env(k) { var v = $.getenv(k); return v ? ObjC.unwrap(v) : ""; }
@@ -140,10 +141,27 @@ if (event === "Stop") {
   else if (kind === "deny") out = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny", message: text || "Denied by the user in Speek." } } };
   else if (kind === "reply" && text) out = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny", message: text } } };
 } else if (event === "PreToolUse") {
+  // AskUserQuestion: hand the answer back as pre-filled `answers`, the tool then
+  // auto-approves instead of showing its picker in the terminal.
   var answer = "";
   if (kind === "option" && text) answer = text;
   else if (kind === "reply" && text) answer = text;
-  if (answer) out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "The user answered via Speek: " + answer + " (Do not ask this question again; continue with this answer.)" } };
+  if (answer) {
+    var p = {};
+    try { p = JSON.parse(env("SPEEK_PAYLOAD") || "{}"); } catch (e) { p = {}; }
+    var input = (p && p.tool_input) ? p.tool_input : {};
+    var answers = {};
+    var qs = (input.questions && input.questions.length) ? input.questions : [];
+    if (qs.length) {
+      qs.forEach(function (q, i) { answers[q.question || ("q" + i)] = answer; });
+    } else {
+      answers[input.question || "question"] = answer;
+    }
+    var updated = {};
+    for (var k in input) updated[k] = input[k];
+    updated.answers = answers;
+    out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow", updatedInput: updated } };
+  }
 }
 out ? JSON.stringify(out) : "";
 ' 2>/dev/null
