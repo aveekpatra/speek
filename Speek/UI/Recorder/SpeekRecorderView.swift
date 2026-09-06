@@ -34,7 +34,7 @@ struct SpeekRecorderView<S: RecorderStateProvider & ObservableObject>: View {
                 if stateProvider.recordingState == .idle,
                    stateProvider.pasteHintText == nil,
                    settings.keepsRecorderVisibleWhenIdle {
-                    IdleRecorderStrip(edge: settings.alwaysShowEdge, onRecord: onStopTapped)
+                    IdleRecorderStrip(edge: settings.panelPosition, onRecord: onStopTapped)
                 } else {
                     MiniRecorderPill(
                         state: stateProvider.recordingState,
@@ -53,22 +53,17 @@ struct SpeekRecorderView<S: RecorderStateProvider & ObservableObject>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
     }
 
-    /// Gap the content keeps from the anchored edge of the host window. Shared with
-    /// MiniRecorderPanel so the host can be placed by PanelAnchor.
-    static func contentInsets(for placement: PanelPlacement) -> EdgeInsets {
-        switch placement {
-        case .top: return EdgeInsets(top: 3, leading: 0, bottom: 0, trailing: 0)
-        case .left: return EdgeInsets(top: 0, leading: 3, bottom: 0, trailing: 0)
-        case .right: return EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 3)
-        case .bottom: return EdgeInsets(top: 0, leading: 0, bottom: 18, trailing: 0)
-        }
+    /// Gap the content keeps from the anchored edge of the host window (room for the
+    /// glass shadow). MiniRecorderPanel pulls the host back by the same amount.
+    static func contentInset(for position: PanelPosition) -> CGFloat {
+        position == .bottom ? 18 : 3
     }
 
-    private var placement: PanelPlacement { PanelPlacement.current }
+    private var position: PanelPosition { settings.panelPosition }
 
     /// Content hugs the anchored edge so it grows away from it, never across it.
     private var alignment: Alignment {
-        switch placement {
+        switch position {
         case .top: return .top
         case .left: return .leading
         case .right: return .trailing
@@ -76,7 +71,15 @@ struct SpeekRecorderView<S: RecorderStateProvider & ObservableObject>: View {
         }
     }
 
-    private var edgeInsets: EdgeInsets { Self.contentInsets(for: placement) }
+    private var edgeInsets: EdgeInsets {
+        let inset = Self.contentInset(for: position)
+        switch position {
+        case .top: return EdgeInsets(top: inset, leading: 0, bottom: 0, trailing: 0)
+        case .left: return EdgeInsets(top: 0, leading: inset, bottom: 0, trailing: 0)
+        case .right: return EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: inset)
+        case .bottom: return EdgeInsets(top: 0, leading: 0, bottom: inset, trailing: 0)
+        }
+    }
 
     private var liveTranscript: String {
         let committed = stateProvider.committedTranscript
@@ -279,16 +282,16 @@ struct MiniRecorderPill: View {
 
 // MARK: - Always-show idle strip
 
-/// "Always show" mini window at rest: a thin strip at the bottom of the screen that
+/// "Always show" mini window at rest: a thin strip on the chosen screen edge that
 /// expands on hover into three controls (change mode, start recording, open Speek).
 struct IdleRecorderStrip: View {
-    let edge: RecorderEdge
+    let edge: PanelPosition
     let onRecord: () -> Void
 
     @State private var isHovering = false
     @State private var collapseTask: Task<Void, Never>?
 
-    private var isVertical: Bool { edge != .top }
+    private var isVertical: Bool { edge == .left || edge == .right }
 
     private var recordTokens: String {
         (ShortcutStore.shortcut(for: .primaryRecording)?.displayTokens ?? ["⌘"]).joined()
@@ -296,6 +299,7 @@ struct IdleRecorderStrip: View {
 
     private var anchor: UnitPoint {
         switch edge {
+        case .bottom: return .bottom
         case .top: return .top
         case .left: return .leading
         case .right: return .trailing
@@ -304,6 +308,7 @@ struct IdleRecorderStrip: View {
 
     private var frameAlignment: Alignment {
         switch edge {
+        case .bottom: return .bottom
         case .top: return .top
         case .left: return .leading
         case .right: return .trailing

@@ -63,13 +63,8 @@ private struct ConfigurationRootPage: View {
                 }
                 .padding(.vertical, 6)
                 if settings.recordingWindowStyle == .mini {
-                    SpeekRow("Always show", help: "If enabled, the mini window will always be visible. Useful if you want to activate with your mouse.") {
+                    SpeekRow("Always show", help: "If enabled, the mini window stays on screen as a thin strip. Useful if you want to activate with your mouse. It sits at the position chosen under Agent Panel.") {
                         Toggle("", isOn: $settings.alwaysShowMiniWindow).labelsHidden().toggleStyle(.switch)
-                    }
-                    if settings.alwaysShowMiniWindow {
-                        SpeekRow("Position", help: "Which screen edge the mini window sits on.") {
-                            SpeekSegmentedPicker(selection: $settings.alwaysShowEdge, options: RecorderEdge.allCases) { $0.displayName }
-                        }
                     }
                 }
             }

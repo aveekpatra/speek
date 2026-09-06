@@ -17,7 +17,7 @@ local models: nothing you say leaves your Mac.
 - **Modes**: presets (Voice to text, Message, Email, Note, Custom) with per-mode language, voice model, text model, app and website triggers, and shortcuts.
 - **Local text models**: S1-mini by Superwhisper (open-weights transcript normalizer, runs through llama.cpp, with tone and structure controls) or any Ollama model.
 - **Agent plugins**: Claude Code and Codex notify Speek when they finish, need permission, or ask a question; answer by voice and the reply is typed into their terminal.
-- **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the top, left, or right screen edge and expands on hover into change-mode, record, and open-app controls.
+- **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the screen edge and expands on hover into change-mode, record, and open-app controls. The edge (Bottom, Top, Left, Right) is the panel position set under Agent Panel and is shared by the recording pill and the agent reply panel.
 - **Vocabulary and replacements**, searchable history with audio playback, and a menu bar app with Transcribe File.
 - **Sound effects** (Simple / Classic / Off), silence removal, dynamic normalization, playback pause while recording.
 
@@ -43,7 +43,7 @@ incremental builds and `scripts/dev-show.sh <page>` to launch on a given page.
 
 ## Agent plugins
 
-The Agents page in the sidebar connects Claude Code and Codex: it installs a small hook script into
+The Agent Panel page in the sidebar connects Claude Code and Codex: it installs a small hook script into
 `~/Library/Application Support/Speek/hooks/` and wires it into:
 
 - **Claude Code**: installed as a real plugin (`speek@speek`, visible under Claude Code > Plugins) from a local marketplace Speek writes under Application Support, with hooks for Stop, Notification, PermissionRequest, PreToolUse (AskUserQuestion), and UserPromptSubmit plus the `/speek` skill. Without the `claude` CLI it falls back to the same hooks in `~/.claude/settings.json`.
@@ -52,8 +52,9 @@ The Agents page in the sidebar connects Claude Code and Codex: it installs a sma
 When the agent finishes, asks a question, or needs permission, a reply panel appears at
 the recording pill's spot: a pill per waiting session (agent icon, project, git branch),
 the selected agent's message rendered as markdown, and a reply card. Press your recording
-shortcut and speak (the transcript lands in the box), type, paste or drop screenshots,
-then Return sends. Nothing is typed into the terminal: the hook itself waits for your
+shortcut and speak (the transcript is appended to the box), edit the text like any text
+field (select, arrow keys, type), paste or drop screenshots, then Return sends
+(Shift+Return breaks a line). Nothing is typed into the terminal: the hook itself waits for your
 answer and returns it to the agent as hook output (a Stop hook "block" with your reply as
 the reason, an allow/deny decision for permissions, the chosen option for questions), so
 the agent continues in the background while you stay where you are. Images are saved

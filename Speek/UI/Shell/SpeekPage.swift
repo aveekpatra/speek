@@ -19,7 +19,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
         case .home: return "Home"
         case .modes: return "Modes"
         case .vocabulary: return "Vocabulary"
-        case .agents: return "Agents"
+        case .agents: return "Agent Panel"
         case .configuration: return "Configuration"
         case .sound: return "Sound"
         case .modelsLibrary: return "Models library"

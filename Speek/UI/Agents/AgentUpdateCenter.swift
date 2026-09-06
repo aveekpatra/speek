@@ -112,6 +112,8 @@ final class AgentUpdateCenter: ObservableObject {
     /// Images pasted or dropped into the reply box; sent to the agent as file paths.
     @Published private(set) var attachments: [URL] = []
     @Published private(set) var recordingState: RecordingState = .idle
+    /// Bumped whenever the reply box should take keyboard focus again.
+    @Published private(set) var focusTick = 0
     @Published private(set) var isSending = false
 
     var current: AgentUpdate? {
@@ -198,6 +200,7 @@ final class AgentUpdateCenter: ObservableObject {
         guard !trimmed.isEmpty else { return }
         draft = draft.isEmpty ? trimmed : draft + " " + trimmed
         panel?.makeKeyAndOrderFront(nil)
+        focusTick += 1
         if SpeekSettings.shared.agentAutoSend { send() }
     }
 
@@ -387,6 +390,9 @@ final class AgentUpdateCenter: ObservableObject {
     // MARK: Panel
 
     static let panelWidth: CGFloat = 600
+    /// Transparent margin around the glass cards so their soft shadow is not cut off by
+    /// the window edge. PanelAnchor pulls the window back by the same amount.
+    static let contentMargin: CGFloat = 28
 
     private func showPanel() {
         if panel == nil {
@@ -396,21 +402,22 @@ final class AgentUpdateCenter: ObservableObject {
         }
         guard let panel else { return }
         let size = fittedSize(of: panel)
-        let placement = PanelPlacement.current
+        let position = PanelPosition.current
         if panel.isVisible {
             // Already up (new event, or brought back): grow in place, anchor locked.
-            panel.setFrame(PanelAnchor.resized(panel.frame, to: size, placement: placement), display: true)
+            panel.setFrame(PanelAnchor.resized(panel.frame, to: size, position: position, on: panel.screen), display: true)
         } else if let screen = PanelAnchor.screen {
-            panel.setFrame(PanelAnchor.frame(for: size, placement: placement, on: screen), display: false)
+            panel.setFrame(PanelAnchor.frame(for: size, position: position, on: screen, contentInset: Self.contentMargin), display: false)
         }
         panel.makeKeyAndOrderFront(nil)
+        focusTick += 1
         startVisibilityWatchdog()
     }
 
     private func fittedSize(of panel: NSPanel) -> NSSize {
         panel.contentView?.layoutSubtreeIfNeeded()
         var size = panel.contentView?.fittingSize ?? panel.frame.size
-        size.width = Self.panelWidth
+        size.width = Self.panelWidth + Self.contentMargin * 2
         return size
     }
 
@@ -455,7 +462,7 @@ final class AgentUpdateCenter: ObservableObject {
         guard let panel, panel.isVisible else { return }
         let size = fittedSize(of: panel)
         guard size != panel.frame.size else { return }
-        panel.setFrame(PanelAnchor.resized(panel.frame, to: size, placement: PanelPlacement.current), display: true, animate: false)
+        panel.setFrame(PanelAnchor.resized(panel.frame, to: size, position: PanelPosition.current, on: panel.screen), display: true, animate: false)
     }
 }
 
@@ -473,11 +480,19 @@ final class AgentReplyPanel: NSPanel {
         isOpaque = false
         hasShadow = false
         hidesOnDeactivate = false
-        isMovableByWindowBackground = true
+        // Always centred on its anchor; a drag inside the reply box selects text.
+        isMovable = false
+        isMovableByWindowBackground = false
     }
 
     override func cancelOperation(_ sender: Any?) {
         AgentUpdateCenter.shared.dismiss()
+    }
+
+    /// PanelAnchor places the window exactly; the transparent shadow margin may overlap
+    /// the menu bar or screen edge, so AppKit must not nudge it back inside.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
     }
 
     /// Cmd+V with an image on the clipboard attaches it; text pastes fall through to the field.
@@ -523,7 +538,7 @@ enum Keystrokes {
 private struct AgentReplyView: View {
     @ObservedObject var center: AgentUpdateCenter
     @ObservedObject private var modeManager = ModeManager.shared
-    @FocusState private var replyFocused: Bool
+    @State private var replyFocused = false
     @State private var appeared = false
 
     private let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -539,21 +554,16 @@ private struct AgentReplyView: View {
                     if update.kind == .permission { permissionRow }
                     replyCard(update)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 10)
                 .frame(width: AgentUpdateCenter.panelWidth)
+                .padding(AgentUpdateCenter.contentMargin)
                 .scaleEffect(appeared ? 1 : 0.94, anchor: .bottom)
                 .opacity(appeared ? 1 : 0)
                 .onAppear {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { appeared = true }
-                    replyFocused = true
                 }
                 .onDisappear { appeared = false }
                 .onChange(of: center.draft) { _, _ in center.refit() }
-                .onChange(of: center.selectedID) { _, _ in
-                    center.refit()
-                    replyFocused = true
-                }
+                .onChange(of: center.selectedID) { _, _ in center.refit() }
             } else {
                 Color.clear.frame(width: 1, height: 1)
             }
@@ -659,13 +669,21 @@ private struct AgentReplyView: View {
 
     private func replyCard(_ update: AgentUpdate) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("Type or dictate what you want changed.", text: $center.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 17))
-                .lineLimit(2...8)
-                .focused($replyFocused)
-                .onSubmit { center.send() }
-                .frame(minHeight: 48, alignment: .topLeading)
+            ReplyEditor(
+                text: $center.draft,
+                isFocused: $replyFocused,
+                focusTick: center.focusTick,
+                onSend: { center.send() },
+                onEscape: { center.dismiss() }
+            )
+            .overlay(alignment: .topLeading) {
+                if center.draft.isEmpty {
+                    Text("Type or dictate what you want changed.")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .allowsHitTesting(false)
+                }
+            }
             if !center.attachments.isEmpty { attachmentStrip }
             HStack(spacing: 14) {
                 voiceStatus
@@ -767,6 +785,119 @@ private struct AgentReplyView: View {
                 }
             }
             .padding(.vertical, 4)
+        }
+    }
+}
+
+/// Editable, selectable reply box backed by NSTextView: the SwiftUI TextField does not
+/// reliably take keyboard focus inside a non-activating panel, and a text view gives
+/// proper selection, arrow keys and paste. Return sends, Shift+Return breaks a line,
+/// Escape dismisses. Dictation appends at the end (see AgentUpdateCenter.insertTranscript).
+private struct ReplyEditor: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let focusTick: Int
+    let onSend: () -> Void
+    let onEscape: () -> Void
+
+    static let font = NSFont.systemFont(ofSize: 17)
+    static let minHeight: CGFloat = 48
+    static let maxHeight: CGFloat = 8 * 22
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> ReplyTextView {
+        let view = ReplyTextView()
+        view.delegate = context.coordinator
+        view.font = Self.font
+        view.textColor = .white
+        view.insertionPointColor = .white
+        view.drawsBackground = false
+        view.isRichText = false
+        view.allowsUndo = true
+        view.isAutomaticQuoteSubstitutionEnabled = false
+        view.isAutomaticDashSubstitutionEnabled = false
+        view.textContainerInset = .zero
+        view.textContainer?.lineFragmentPadding = 0
+        view.textContainer?.widthTracksTextView = true
+        view.isVerticallyResizable = true
+        view.isHorizontallyResizable = false
+        view.selectedTextAttributes = [.backgroundColor: NSColor.white.withAlphaComponent(0.25)]
+        view.onSend = onSend
+        view.onEscape = onEscape
+        view.onFocusChange = { focused in Task { @MainActor in context.coordinator.parent.isFocused = focused } }
+        view.string = text
+        return view
+    }
+
+    func updateNSView(_ view: ReplyTextView, context: Context) {
+        context.coordinator.parent = self
+        view.onSend = onSend
+        view.onEscape = onEscape
+        if view.string != text {
+            view.string = text
+            view.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+        }
+        if context.coordinator.lastFocusTick != focusTick {
+            context.coordinator.lastFocusTick = focusTick
+            DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
+        }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView view: ReplyTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? view.bounds.width
+        guard width > 0, let container = view.textContainer, let layout = view.layoutManager else {
+            return CGSize(width: proposal.width ?? 0, height: Self.minHeight)
+        }
+        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        layout.ensureLayout(for: container)
+        let used = layout.usedRect(for: container).height
+        return CGSize(width: width, height: min(max(used, Self.minHeight), Self.maxHeight))
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: ReplyEditor
+        var lastFocusTick = -1
+        init(_ parent: ReplyEditor) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let view = notification.object as? NSTextView else { return }
+            parent.text = view.string
+        }
+    }
+}
+
+private final class ReplyTextView: NSTextView {
+    var onSend: (() -> Void)?
+    var onEscape: (() -> Void)?
+    var onFocusChange: ((Bool) -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok { onFocusChange?(true) }
+        return ok
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let ok = super.resignFirstResponder()
+        if ok { onFocusChange?(false) }
+        return ok
+    }
+
+    override func doCommand(by selector: Selector) {
+        switch selector {
+        case #selector(insertNewline(_:)):
+            if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
+                super.insertNewline(nil)
+            } else {
+                onSend?()
+            }
+        case #selector(cancelOperation(_:)):
+            onEscape?()
+        default:
+            super.doCommand(by: selector)
         }
     }
 }

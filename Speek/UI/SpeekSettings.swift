@@ -7,18 +7,23 @@ import Combine
 
 /// Screen edge for the always-shown mini strip. Bottom is deliberately excluded
 /// (the Dock lives there).
-enum RecorderEdge: String, CaseIterable, Identifiable {
-    case top, left, right
+/// Where the floating panels (recording pill, always-show strip, agent reply) live.
+/// Bottom and top are horizontally centred; left and right are vertically centred.
+enum PanelPosition: String, CaseIterable, Identifiable {
+    case bottom, top, left, right
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
+        case .bottom: return "Bottom"
         case .top: return "Top"
         case .left: return "Left"
         case .right: return "Right"
         }
     }
+
+    @MainActor static var current: PanelPosition { SpeekSettings.shared.panelPosition }
 }
 
 enum RecordingWindowStyle: String, CaseIterable, Identifiable {
@@ -222,9 +227,9 @@ final class SpeekSettings: ObservableObject {
         }
     }
 
-    @Published var alwaysShowEdge: RecorderEdge {
+    @Published var panelPosition: PanelPosition {
         didSet {
-            defaults.set(alwaysShowEdge.rawValue, forKey: Keys.alwaysShowEdge)
+            defaults.set(panelPosition.rawValue, forKey: Keys.panelPosition)
             NotificationCenter.default.post(name: .speekRecordingWindowStyleDidChange, object: nil)
         }
     }
@@ -318,7 +323,10 @@ final class SpeekSettings: ObservableObject {
         Self.applyAppearance(storedTheme)
         recordingWindowStyle = RecordingWindowStyle(rawValue: d.string(forKey: Keys.recordingWindowStyle) ?? "") ?? .classic
         alwaysShowMiniWindow = d.bool(forKey: Keys.alwaysShowMini)
-        alwaysShowEdge = RecorderEdge(rawValue: d.string(forKey: Keys.alwaysShowEdge) ?? "") ?? .top
+        // Older builds only stored an edge for the always-show strip; keep it when it was in use.
+        let storedPosition = d.string(forKey: Keys.panelPosition)
+            ?? (d.bool(forKey: Keys.alwaysShowMini) ? d.string(forKey: "speek.alwaysShowEdge") : nil)
+        panelPosition = PanelPosition(rawValue: storedPosition ?? "") ?? .bottom
         automaticallyCheckForUpdates = d.object(forKey: Keys.autoUpdate) as? Bool ?? true
         errorLogging = d.bool(forKey: Keys.errorLogging)
         recordingRetention = RecordingRetention(rawValue: d.integer(forKey: Keys.recordingRetention)) ?? .forever
@@ -369,7 +377,7 @@ final class SpeekSettings: ObservableObject {
         static let theme = "speek.theme"
         static let recordingWindowStyle = "speek.recordingWindowStyle"
         static let alwaysShowMini = "speek.alwaysShowMiniWindow"
-        static let alwaysShowEdge = "speek.alwaysShowEdge"
+        static let panelPosition = "speek.panelPosition"
         static let autoUpdate = "speek.autoUpdate"
         static let errorLogging = "speek.errorLogging"
         static let recordingRetention = "speek.recordingRetention"

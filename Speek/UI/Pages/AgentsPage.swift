@@ -10,7 +10,7 @@ struct AgentsPage: View {
     var body: some View {
         SpeekPageScroll {
             VStack(alignment: .leading, spacing: 10) {
-                SpeekSectionHeader("Agents", help: "Installing adds a small hook script to the agent's own settings. Uninstalling removes it again. Restart the agent after changing this.")
+                SpeekSectionHeader("Agents", help: "Connecting adds a small hook script to the agent's own settings. Uninstalling removes it again. Restart the agent after changing this.")
                 SpeekGroup {
                     ForEach(AgentPlugin.allCases) { plugin in
                         agentRow(plugin)
@@ -25,8 +25,11 @@ struct AgentsPage: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                SpeekSectionHeader("Reply panel")
+                SpeekSectionHeader("Panel", help: "The reply panel takes the place of the recording pill, so this position applies to both. Bottom and Top stay horizontally centred; the anchored edge never moves while the panel grows.")
                 SpeekGroup {
+                    SpeekRow("Position", help: "Which screen edge the panel and the recording pill sit on.") {
+                        SpeekSegmentedPicker(selection: $settings.panelPosition, options: PanelPosition.allCases) { $0.displayName }
+                    }
                     SpeekRow("Play a sound", help: "A short chime when an agent finishes, asks a question, or needs permission.") {
                         Toggle("", isOn: $settings.agentSound).labelsHidden().toggleStyle(.switch)
                     }

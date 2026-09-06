@@ -46,18 +46,9 @@ class MiniRecorderPanel: NSPanel {
         guard let screen = PanelAnchor.screen else {
             return NSRect(origin: .zero, size: size)
         }
-        let placement = MainActor.assumeIsolated { PanelPlacement.current }
-        var frame = PanelAnchor.frame(for: size, placement: placement, on: screen)
-        // The content already keeps its own gap from the anchored edge; pull the host
-        // back by that much so the visible pill lands exactly on the anchor.
-        let insets = SpeekRecorderView<SpeekEngine>.contentInsets(for: placement)
-        switch placement {
-        case .bottom: frame.origin.y -= insets.bottom
-        case .top: frame.origin.y += insets.top
-        case .left: frame.origin.x -= insets.leading
-        case .right: frame.origin.x += insets.trailing
-        }
-        return frame
+        let position = MainActor.assumeIsolated { PanelPosition.current }
+        let inset = SpeekRecorderView<SpeekEngine>.contentInset(for: position)
+        return PanelAnchor.frame(for: size, position: position, on: screen, contentInset: inset)
     }
 
     func show() {
