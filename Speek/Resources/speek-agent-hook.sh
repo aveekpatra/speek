@@ -46,6 +46,13 @@ export SPEEK_PAYLOAD="$PAYLOAD"
 export SPEEK_TERM_APP="${__CFBundleIdentifier:-}"
 export SPEEK_TERM_PROGRAM="${TERM_PROGRAM:-}"
 export SPEEK_CWD="$PWD"
+# Which tab/pane the agent lives in, so Speek can jump straight to it: the controlling
+# tty (Terminal.app tabs are found by tty), the iTerm2 session id, the tmux pane.
+export SPEEK_TTY="$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ')"
+export SPEEK_ITERM="${ITERM_SESSION_ID:-}"
+export SPEEK_TMUX="${TMUX_PANE:-}"
+# cmux: workspace, panel and surface ids of the terminal the agent runs in.
+export SPEEK_CMUX="${CMUX_SURFACE_ID:+${CMUX_WORKSPACE_ID:-}|${CMUX_PANEL_ID:-}|${CMUX_SURFACE_ID}}"
 
 # Line 1: event name. Line 2: speek:// URL.
 PARSED=$(/usr/bin/osascript -l JavaScript -e '
@@ -83,6 +90,10 @@ var params = {
   cwd: p.cwd || env("SPEEK_CWD"),
   app: env("SPEEK_TERM_APP"),
   term: env("SPEEK_TERM_PROGRAM"),
+  tty: env("SPEEK_TTY"),
+  iterm: env("SPEEK_ITERM"),
+  tmux: env("SPEEK_TMUX"),
+  cmux: env("SPEEK_CMUX"),
   notification: p.notification_type || "",
   permission: p.permission_mode || "",
   tool: p.tool_name || "",

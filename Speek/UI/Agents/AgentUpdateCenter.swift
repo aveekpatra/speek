@@ -35,6 +35,13 @@ struct AgentUpdate: Identifiable, Equatable {
     let session: String
     let workingDirectory: String
     let terminalBundleID: String?
+    /// Controlling tty of the agent ("ttys003"), iTerm2 session id, tmux pane: enough to
+    /// bring the exact tab or pane forward, not just the app.
+    let tty: String?
+    let itermSession: String?
+    let tmuxPane: String?
+    /// cmux "workspace|panel|surface" ids.
+    let cmuxTarget: String?
     /// FIFO the waiting hook reads; the answer written here goes straight back to the agent.
     let replyPath: String?
     let receivedAt = Date()
@@ -63,6 +70,14 @@ struct AgentUpdate: Identifiable, Equatable {
         terminalBundleID = app.isEmpty ? nil : app
         let reply = items["reply"] ?? ""
         replyPath = reply.isEmpty ? nil : reply
+        func nonEmpty(_ key: String) -> String? {
+            let value = (items[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty || value == "??" ? nil : value
+        }
+        tty = nonEmpty("tty")
+        itermSession = nonEmpty("iterm")
+        tmuxPane = nonEmpty("tmux")
+        cmuxTarget = nonEmpty("cmux")
     }
 
     /// True when the hook is waiting for our answer (no terminal typing needed).
@@ -368,6 +383,18 @@ final class AgentUpdateCenter: ObservableObject {
         }
     }
 
+    /// "Go to window": brings the agent's own tab or pane to the front. The panel stays
+    /// up; nothing is answered. Terminal.app tabs are matched by tty, iTerm2 sessions by
+    /// id, tmux panes through tmux itself; every other app (cmux, Ghostty, WezTerm, VS
+    /// Code, Cursor, the Claude desktop app) gets activated and its window whose title
+    /// mentions the project is raised.
+    func goToAgentWindow(_ update: AgentUpdate? = nil) {
+        guard let update = update ?? current else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            TerminalLocator.focus(update)
+        }
+    }
+
     /// Dismiss the selected session without answering: its hook is released so the agent
     /// stops normally. Other waiting sessions stay.
     func dismiss() {
@@ -430,10 +457,12 @@ final class AgentUpdateCenter: ObservableObject {
             // the panel straight back.
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self, self.panel?.isVisible == true,
-                      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-                      event.charactersIgnoringModifiers?.lowercased() == "h" else { return event }
-                self.snooze()
-                return nil
+                      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else { return event }
+                switch event.charactersIgnoringModifiers?.lowercased() {
+                case "h": self.snooze(); return nil
+                case "o": self.goToAgentWindow(); return nil
+                default: return event
+                }
             }
         }
         guard let panel else { return }
@@ -603,10 +632,12 @@ final class AgentReplyPanel: NSPanel {
     /// field. Cmd+H hides the panel for a moment.
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown,
-           event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-           event.charactersIgnoringModifiers?.lowercased() == "h" {
-            AgentUpdateCenter.shared.snooze()
-            return
+           event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "h": AgentUpdateCenter.shared.snooze(); return
+            case "o": AgentUpdateCenter.shared.goToAgentWindow(); return
+            default: break
+            }
         }
         if event.type == .keyDown,
            event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
@@ -702,9 +733,20 @@ private struct AgentReplyView: View {
                     if update.kind != .finished {
                         Circle().fill(Color.orange).frame(width: 6, height: 6)
                     }
+                    if isSelected {
+                        Button { center.goToAgentWindow(update) } label: {
+                            Image(systemName: "arrow.up.forward.square")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Go to the \(update.agent.displayName) window  (⌘O)")
+                    }
                 }
                 .padding(.leading, 10)
-                .padding(.trailing, 14)
+                .padding(.trailing, isSelected ? 8 : 14)
                 .frame(height: 38)
                 .glassEffect(.regular.tint(glassTint), in: Capsule(style: .continuous))
                 .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(isSelected ? 0.18 : 0.1), lineWidth: 0.8))

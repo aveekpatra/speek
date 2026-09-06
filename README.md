@@ -53,7 +53,7 @@ When the agent finishes, asks a question, or needs permission, a reply panel app
 the selected agent's message rendered as markdown, and a reply card. Press your recording
 shortcut and speak (the transcript is appended to the box), edit the text like any text
 field (select, arrow keys, type), paste or drop screenshots, then Return sends
-(Shift+Return breaks a line). Hide (Cmd+H) tucks the panel away for 15 seconds (adjustable under Agent Panel); it
+(Shift+Return breaks a line). The arrow on the selected session pill (Cmd+O) jumps to the agent's own window: the exact Terminal.app tab (by tty), iTerm2 session, tmux pane, cmux surface, or Claude desktop session, and for other apps the window whose title mentions the project. Hide (Cmd+H) tucks the panel away for 15 seconds (adjustable under Agent Panel); it
 comes back by itself, on the next agent event, or from the menu bar. Nothing is typed into the terminal: the hook itself waits for your
 answer and returns it to the agent as hook output (a Stop hook "block" with your reply as
 the reason, an allow/deny decision for permissions, the chosen option for questions), so
