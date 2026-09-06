@@ -438,13 +438,13 @@ final class AgentUpdateCenter: ObservableObject {
         }
         guard let panel else { return }
         let size = fittedSize(of: panel)
-        let position = PanelPosition.current
+        let edge = AgentPanelPosition.current.anchorEdge
         panel.apply {
             if panel.isVisible {
                 // Already up (new event, or brought back): grow in place, anchor locked.
-                panel.setFrame(PanelAnchor.resized(panel.frame, to: size, position: position, on: panel.screen), display: true)
+                panel.setFrame(PanelAnchor.resized(panel.frame, to: size, edge: edge, on: panel.screen), display: true)
             } else if let screen = PanelAnchor.screen {
-                panel.setFrame(PanelAnchor.frame(for: size, position: position, on: screen, contentInset: Self.contentMargin), display: false)
+                panel.setFrame(PanelAnchor.frame(for: size, edge: edge, on: screen, contentInset: Self.contentMargin), display: false)
             }
         }
         snoozedUntil = nil
@@ -529,7 +529,7 @@ final class AgentUpdateCenter: ObservableObject {
             let size = self.fittedSize(of: panel)
             guard size.height >= Self.contentMargin * 2 + 80, size != panel.frame.size else { return }
             panel.apply {
-                panel.setFrame(PanelAnchor.resized(panel.frame, to: size, position: PanelPosition.current, on: panel.screen), display: true, animate: false)
+                panel.setFrame(PanelAnchor.resized(panel.frame, to: size, edge: AgentPanelPosition.current.anchorEdge, on: panel.screen), display: true, animate: false)
             }
         }
     }

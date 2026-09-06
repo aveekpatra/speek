@@ -48,7 +48,7 @@ class MiniRecorderPanel: NSPanel {
         }
         let position = MainActor.assumeIsolated { PanelPosition.current }
         let inset = SpeekRecorderView<SpeekEngine>.contentInset(for: position)
-        return PanelAnchor.frame(for: size, position: position, on: screen, contentInset: inset)
+        return PanelAnchor.frame(for: size, edge: position.anchorEdge, on: screen, contentInset: inset)
     }
 
     func show() {

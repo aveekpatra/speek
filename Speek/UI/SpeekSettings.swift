@@ -26,6 +26,23 @@ enum PanelPosition: String, CaseIterable, Identifiable {
     @MainActor static var current: PanelPosition { SpeekSettings.shared.panelPosition }
 }
 
+/// Where the agent reply panel appears: always horizontally centred on the screen.
+enum AgentPanelPosition: String, CaseIterable, Identifiable {
+    case bottom, center, top
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .bottom: return "Bottom"
+        case .center: return "Center"
+        case .top: return "Top"
+        }
+    }
+
+    @MainActor static var current: AgentPanelPosition { SpeekSettings.shared.agentPanelPosition }
+}
+
 enum RecordingWindowStyle: String, CaseIterable, Identifiable {
     case classic
     case mini
@@ -315,6 +332,8 @@ final class SpeekSettings: ObservableObject {
     @Published var agentAutoSend: Bool { didSet { defaults.set(agentAutoSend, forKey: Keys.agentAutoSend) } }
     /// Seconds the reply panel stays away after Hide (Cmd+H).
     @Published var agentHideSeconds: Int { didSet { defaults.set(agentHideSeconds, forKey: Keys.agentHideSeconds) } }
+    /// Where the reply panel sits: bottom, centre, or top, always horizontally centred.
+    @Published var agentPanelPosition: AgentPanelPosition { didSet { defaults.set(agentPanelPosition.rawValue, forKey: Keys.agentPanelPosition) } }
     @Published var claudeCodePluginInstalled: Bool { didSet { defaults.set(claudeCodePluginInstalled, forKey: Keys.claudePlugin) } }
     @Published var codexPluginInstalled: Bool { didSet { defaults.set(codexPluginInstalled, forKey: Keys.codexPlugin) } }
 
@@ -358,6 +377,10 @@ final class SpeekSettings: ObservableObject {
         agentAutoSend = d.bool(forKey: Keys.agentAutoSend)
         let hide = d.integer(forKey: Keys.agentHideSeconds)
         agentHideSeconds = hide > 0 ? hide : 15
+        // First run after the split: a Top pill position carries over to the panel.
+        let storedAgentPosition = d.string(forKey: Keys.agentPanelPosition)
+            ?? (d.string(forKey: Keys.panelPosition) == "top" ? "top" : nil)
+        agentPanelPosition = AgentPanelPosition(rawValue: storedAgentPosition ?? "") ?? .bottom
         claudeCodePluginInstalled = d.bool(forKey: Keys.claudePlugin)
         codexPluginInstalled = d.bool(forKey: Keys.codexPlugin)
     }
@@ -407,6 +430,7 @@ final class SpeekSettings: ObservableObject {
         static let agentSound = "speek.agent.sound"
         static let agentAutoSend = "speek.agent.autoSend"
         static let agentHideSeconds = "speek.agent.hideSeconds"
+        static let agentPanelPosition = "speek.agent.panelPosition"
         static let claudePlugin = "speek.plugin.claude"
         static let codexPlugin = "speek.plugin.codex"
     }

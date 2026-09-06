@@ -2,10 +2,15 @@ import AppKit
 
 /// Positions floating panels and keeps them locked to their anchor while they resize.
 /// Bottom placement grows upward from a fixed bottom edge, top placement grows downward
-/// from just under the menu bar, left/right placements stay vertically centred. Bottom
-/// and top are always horizontally centred on the screen; a side placement keeps its
-/// edge pinned. Nothing else ever moves.
+/// from just under the menu bar, centre placement stays centred both ways, left/right
+/// placements stay vertically centred with their edge pinned. Horizontal centring uses
+/// the full screen width, not the Dock-reduced visible area, so a Dock on the side
+/// never pushes a panel off centre.
 enum PanelAnchor {
+    enum Edge {
+        case bottom, top, left, right, center
+    }
+
     static let topInset: CGFloat = 3
     static let bottomInset: CGFloat = 26
     static let sideInset: CGFloat = 3
@@ -20,33 +25,62 @@ enum PanelAnchor {
     /// keeps between its own edge and the visible content on the anchored side (room for
     /// the glass shadow); the window is pulled back by that much so the visible content,
     /// not the transparent margin, lands on the anchor.
-    static func frame(for size: NSSize, position: PanelPosition, on screen: NSScreen, contentInset: CGFloat = 0) -> NSRect {
+    static func frame(for size: NSSize, edge: Edge, on screen: NSScreen, contentInset: CGFloat = 0) -> NSRect {
+        let full = screen.frame
         let visible = screen.visibleFrame
-        switch position {
+        switch edge {
         case .bottom:
-            return NSRect(x: visible.midX - size.width / 2, y: visible.minY + bottomInset - contentInset, width: size.width, height: size.height)
+            return NSRect(x: full.midX - size.width / 2, y: visible.minY + bottomInset - contentInset, width: size.width, height: size.height)
         case .top:
-            return NSRect(x: visible.midX - size.width / 2, y: visible.maxY - topInset + contentInset - size.height, width: size.width, height: size.height)
+            return NSRect(x: full.midX - size.width / 2, y: visible.maxY - topInset + contentInset - size.height, width: size.width, height: size.height)
+        case .center:
+            return NSRect(x: full.midX - size.width / 2, y: full.midY - size.height / 2, width: size.width, height: size.height)
         case .left:
-            return NSRect(x: visible.minX + sideInset - contentInset, y: visible.midY - size.height / 2, width: size.width, height: size.height)
+            return NSRect(x: visible.minX + sideInset - contentInset, y: full.midY - size.height / 2, width: size.width, height: size.height)
         case .right:
-            return NSRect(x: visible.maxX - sideInset + contentInset - size.width, y: visible.midY - size.height / 2, width: size.width, height: size.height)
+            return NSRect(x: visible.maxX - sideInset + contentInset - size.width, y: full.midY - size.height / 2, width: size.width, height: size.height)
         }
     }
 
     /// Frame for a window that changed size: the anchored edge of `current` stays put and
-    /// the window is re-centred on `screen` (bottom/top horizontally, sides vertically).
-    static func resized(_ current: NSRect, to size: NSSize, position: PanelPosition, on screen: NSScreen?) -> NSRect {
-        let visible = screen?.visibleFrame
-        switch position {
+    /// the window is re-centred on `screen` (horizontally for bottom/top, both ways for
+    /// centre, vertically for the sides).
+    static func resized(_ current: NSRect, to size: NSSize, edge: Edge, on screen: NSScreen?) -> NSRect {
+        let full = screen?.frame
+        let midX = full?.midX ?? current.midX
+        let midY = full?.midY ?? current.midY
+        switch edge {
         case .bottom:
-            return NSRect(x: (visible?.midX ?? current.midX) - size.width / 2, y: current.minY, width: size.width, height: size.height)
+            return NSRect(x: midX - size.width / 2, y: current.minY, width: size.width, height: size.height)
         case .top:
-            return NSRect(x: (visible?.midX ?? current.midX) - size.width / 2, y: current.maxY - size.height, width: size.width, height: size.height)
+            return NSRect(x: midX - size.width / 2, y: current.maxY - size.height, width: size.width, height: size.height)
+        case .center:
+            return NSRect(x: midX - size.width / 2, y: midY - size.height / 2, width: size.width, height: size.height)
         case .left:
-            return NSRect(x: current.minX, y: (visible?.midY ?? current.midY) - size.height / 2, width: size.width, height: size.height)
+            return NSRect(x: current.minX, y: midY - size.height / 2, width: size.width, height: size.height)
         case .right:
-            return NSRect(x: current.maxX - size.width, y: (visible?.midY ?? current.midY) - size.height / 2, width: size.width, height: size.height)
+            return NSRect(x: current.maxX - size.width, y: midY - size.height / 2, width: size.width, height: size.height)
+        }
+    }
+}
+
+extension PanelPosition {
+    var anchorEdge: PanelAnchor.Edge {
+        switch self {
+        case .bottom: return .bottom
+        case .top: return .top
+        case .left: return .left
+        case .right: return .right
+        }
+    }
+}
+
+extension AgentPanelPosition {
+    var anchorEdge: PanelAnchor.Edge {
+        switch self {
+        case .bottom: return .bottom
+        case .center: return .center
+        case .top: return .top
         }
     }
 }

@@ -17,7 +17,7 @@ local models: nothing you say leaves your Mac.
 - **Modes**: presets (Voice to text, Message, Email, Note, Custom) with per-mode language, voice model, text model, app and website triggers, and shortcuts.
 - **Local text models**: S1-mini by Superwhisper (open-weights transcript normalizer, runs through llama.cpp, with tone and structure controls) or any Ollama model.
 - **Agent plugins**: Claude Code and Codex notify Speek when they finish, need permission, or ask a question; answer by voice and the reply is typed into their terminal.
-- **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the screen edge and expands on hover into change-mode, record, and open-app controls. The edge (Bottom, Top, Left, Right) is the panel position set under Agent Panel and is shared by the recording pill and the agent reply panel.
+- **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the screen edge and expands on hover into change-mode, record, and open-app controls. Its edge (Bottom, Top, Left, Right) is set next to it under Configuration > Appearance.
 - **Vocabulary and replacements**, searchable history with audio playback and a clear-all button, and a menu bar app with Transcribe File.
 - **Sound effects** (Simple / Classic / Off), silence removal, dynamic normalization, playback pause while recording.
 
@@ -49,8 +49,7 @@ The Agent Panel page in the sidebar connects Claude Code and Codex: it installs 
 - **Claude Code**: installed as a real plugin (`speek@speek`, visible under Claude Code > Plugins) from a local marketplace Speek writes under Application Support, with hooks for Stop, Notification, PermissionRequest, PreToolUse (AskUserQuestion), and UserPromptSubmit plus the `/speek` skill. Without the `claude` CLI it falls back to the same hooks in `~/.claude/settings.json`.
 - **Codex**: installed as a real plugin (`speek@speek`, visible under `/plugins`) from a local marketplace Speek writes under Application Support, with the same six lifecycle hooks as Superwhisper (SessionStart, UserPromptSubmit, PreToolUse for `request_user_input` questions, PostToolUse, PermissionRequest, Stop) plus the `/speek` skill. Codex only runs hooks you have reviewed in `/hooks`, so Speek records that trust itself through `codex app-server` (the same `hooks.state` entry the review screen writes). Without the `codex` CLI it falls back to `~/.codex/hooks.json`, which then needs a one-time `/hooks` review. Your `notify` setting is left alone.
 
-When the agent finishes, asks a question, or needs permission, a reply panel appears at
-the recording pill's spot: a pill per waiting session (agent icon, project, git branch),
+When the agent finishes, asks a question, or needs permission, a reply panel appears at the Bottom, Center, or Top of the screen (Agent Panel > Position), always horizontally centred: a pill per waiting session (agent icon, project, git branch),
 the selected agent's message rendered as markdown, and a reply card. Press your recording
 shortcut and speak (the transcript is appended to the box), edit the text like any text
 field (select, arrow keys, type), paste or drop screenshots, then Return sends

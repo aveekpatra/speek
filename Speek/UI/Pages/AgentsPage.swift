@@ -25,10 +25,10 @@ struct AgentsPage: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                SpeekSectionHeader("Panel", help: "The reply panel takes the place of the recording pill, so this position applies to both. Bottom and Top stay horizontally centred; the anchored edge never moves while the panel grows.")
+                SpeekSectionHeader("Panel", help: "The reply panel is always horizontally centred on the screen. Bottom and Top keep that edge locked while the panel grows; Center stays centred both ways.")
                 SpeekGroup {
-                    SpeekRow("Position", help: "Which screen edge the panel and the recording pill sit on.") {
-                        SpeekSegmentedPicker(selection: $settings.panelPosition, options: PanelPosition.allCases) { $0.displayName }
+                    SpeekRow("Position", help: "Bottom, Center, or Top of the screen. The recording pill has its own position under Configuration.") {
+                        SpeekSegmentedPicker(selection: $settings.agentPanelPosition, options: AgentPanelPosition.allCases) { $0.displayName }
                     }
                     SpeekRow("Play a sound", help: "A short chime when an agent finishes, asks a question, or needs permission.") {
                         Toggle("", isOn: $settings.agentSound).labelsHidden().toggleStyle(.switch)
