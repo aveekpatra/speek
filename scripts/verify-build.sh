@@ -5,9 +5,9 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 
-echo "▶ Building Whisper Pro (Debug, no code signing)…"
+echo "▶ Building Speek (Debug, no code signing)…"
 LOG=$(mktemp)
-xcodebuild -project "Whisper Pro.xcodeproj" -scheme "Whisper Pro" -configuration Debug \
+xcodebuild -project "Speek.xcodeproj" -scheme "Speek" -configuration Debug \
   -destination 'platform=macOS' \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build 2>&1 | tee "$LOG" >/dev/null
 

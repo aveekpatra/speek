@@ -53,7 +53,7 @@ Menu bar: Toggle Recording, Transcribe File..., History..., Settings..., microph
 
 ## 6. Technical overview
 
-- SwiftUI app (`WhisperProApp` in `Whisper Pro/WhisperPro.swift`), `NavigationSplitView` shell in `Whisper Pro/Speek/Shell/`, pages in `Whisper Pro/Speek/Pages/`, design tokens and components in `Whisper Pro/Speek/Design/`.
+- SwiftUI app (`SpeekApp` in `Speek/Speek.swift`), `NavigationSplitView` shell in `Speek/UI/Shell/`, pages in `Speek/UI/Pages/`, design tokens and components in `Speek/UI/Design/`.
 - Settings store: `SpeekSettings` (UserDefaults-backed, `speek.*` keys, mirrors legacy keys the engine reads).
 - Transcription: `TranscriptionServiceRegistry` dispatches to `WhisperTranscriptionService` (whisper.cpp), `FluidAudioTranscriptionService` (Parakeet), `CohereTranscriptionService` (FluidAudio `CoherePipeline`), `CanaryTranscriptionService` (FluidAudio `CanaryManager`), `NativeAppleTranscriptionService`.
 - Text normalization: `S1MiniService` runs the S1-mini GGUF through `LlamaRunner` (llama.cpp XCFramework); `AIProvider.s1Mini`.

@@ -1,5 +1,5 @@
 # Define a directory for dependencies in the user's home folder
-DEPS_DIR := $(HOME)/WhisperPro-Dependencies
+DEPS_DIR := $(HOME)/Speek-Dependencies
 WHISPER_CPP_DIR := $(DEPS_DIR)/whisper.cpp
 FRAMEWORK_PATH := $(WHISPER_CPP_DIR)/build-apple/whisper.xcframework
 LOCAL_DERIVED_DATA := $(CURDIR)/.local-build
@@ -16,11 +16,11 @@ LOCAL_DERIVED_DATA := $(CURDIR)/.local-build
 # Find your identity with:  security find-identity -v -p codesigning
 SIGN_IDENTITY := Apple Development
 DEV_TEAM :=
-SIGNED_APP := /Applications/Whisper Pro.app
+SIGNED_APP := /Applications/Speek.app
 # Build under the bundle id the app's live data (transcripts, stats, streak,
 # settings) already lives under, so the signed build keeps that history instead
 # of starting fresh under a separate identity.
-APP_BUNDLE_ID := com.prakashjoshipax.WhisperPro
+APP_BUNDLE_ID := com.aveekpatra.speek
 
 # Local, untracked overrides (your personal SIGN_IDENTITY / DEV_TEAM). Optional;
 # silently skipped if absent.
@@ -42,11 +42,11 @@ dev: build run
 # Run the unit + snapshot tests. Must stay on Debug and ad-hoc signing: a Release
 # test host loads whisper.framework with a different Team ID and dies at launch.
 # UI tests are skipped, they drive a second copy of the app and fail whenever
-# your own Whisper Pro is already running.
+# your own Speek is already running.
 test: check setup
-	xcodebuild test -project "Whisper Pro.xcodeproj" -scheme "Whisper Pro" \
+	xcodebuild test -project "Speek.xcodeproj" -scheme "Speek" \
 		-configuration Debug -destination 'platform=macOS' \
-		-skip-testing:WhisperProUITests \
+		-skip-testing:SpeekUITests \
 		-derivedDataPath "$(CURDIR)/.local-test-build" \
 		CODE_SIGN_IDENTITY="-" \
 		CODE_SIGN_STYLE=Manual \
@@ -55,7 +55,7 @@ test: check setup
 		DEVELOPMENT_TEAM="" \
 		PROVISIONING_PROFILE_SPECIFIER="" \
 		ENABLE_TESTABILITY=YES \
-		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Whisper Pro/WhisperPro.local.entitlements"
+		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Speek/Speek.local.entitlements"
 
 # Prerequisites
 check:
@@ -88,13 +88,13 @@ setup: whisper
 	@echo "Please ensure your Xcode project references the framework from this new location."
 
 build: setup
-	xcodebuild -project "Whisper Pro.xcodeproj" -scheme "Whisper Pro" -configuration Debug CODE_SIGN_IDENTITY="" build
+	xcodebuild -project "Speek.xcodeproj" -scheme "Speek" -configuration Debug CODE_SIGN_IDENTITY="" build
 
 # Build for local use without Apple Developer certificate
 local: check setup
-	@echo "Building Whisper Pro for local use (no Apple Developer certificate required)..."
+	@echo "Building Speek for local use (no Apple Developer certificate required)..."
 	@rm -rf "$(LOCAL_DERIVED_DATA)"
-	xcodebuild -project "Whisper Pro.xcodeproj" -scheme "Whisper Pro" -configuration Debug \
+	xcodebuild -project "Speek.xcodeproj" -scheme "Speek" -configuration Debug \
 		-derivedDataPath "$(LOCAL_DERIVED_DATA)" \
 		-xcconfig LocalBuild.xcconfig \
 		CODE_SIGN_IDENTITY="-" \
@@ -102,24 +102,24 @@ local: check setup
 		CODE_SIGNING_ALLOWED=YES \
 		DEVELOPMENT_TEAM="" \
 		ENABLE_DEBUG_DYLIB=NO \
-		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Whisper Pro/WhisperPro.local.entitlements" \
+		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Speek/Speek.local.entitlements" \
 		SWIFT_ACTIVE_COMPILATION_CONDITIONS='$$(inherited) LOCAL_BUILD' \
 		build
-	@APP_PATH="$(LOCAL_DERIVED_DATA)/Build/Products/Debug/Whisper Pro.app" && \
+	@APP_PATH="$(LOCAL_DERIVED_DATA)/Build/Products/Debug/Speek.app" && \
 	if [ -d "$$APP_PATH" ]; then \
-		echo "Copying Whisper Pro.app to ~/Downloads..."; \
-		rm -rf "$$HOME/Downloads/Whisper Pro.app"; \
-		ditto "$$APP_PATH" "$$HOME/Downloads/Whisper Pro.app"; \
-		xattr -cr "$$HOME/Downloads/Whisper Pro.app"; \
+		echo "Copying Speek.app to ~/Downloads..."; \
+		rm -rf "$$HOME/Downloads/Speek.app"; \
+		ditto "$$APP_PATH" "$$HOME/Downloads/Speek.app"; \
+		xattr -cr "$$HOME/Downloads/Speek.app"; \
 		echo ""; \
-		echo "Build complete! App saved to: ~/Downloads/Whisper Pro.app"; \
-		echo "Run with: open ~/Downloads/Whisper Pro.app"; \
+		echo "Build complete! App saved to: ~/Downloads/Speek.app"; \
+		echo "Run with: open ~/Downloads/Speek.app"; \
 		echo ""; \
 		echo "Limitations of local builds:"; \
 		echo "  - No iCloud dictionary sync"; \
 		echo "  - No automatic updates (pull new code and rebuild to update)"; \
 	else \
-		echo "Error: Could not find built Whisper Pro.app at $$APP_PATH"; \
+		echo "Error: Could not find built Speek.app at $$APP_PATH"; \
 		exit 1; \
 	fi
 
@@ -129,7 +129,7 @@ sync-api-keys:
 signed: check setup sync-api-keys
 	@echo "Building signed dev build (stable Apple Development signature)..."
 	@rm -rf "$(LOCAL_DERIVED_DATA)"
-	xcodebuild -project "Whisper Pro.xcodeproj" -scheme "Whisper Pro" -configuration Debug \
+	xcodebuild -project "Speek.xcodeproj" -scheme "Speek" -configuration Debug \
 		-derivedDataPath "$(LOCAL_DERIVED_DATA)" \
 		-xcconfig LocalBuild.xcconfig \
 		CODE_SIGN_IDENTITY="-" \
@@ -138,26 +138,26 @@ signed: check setup sync-api-keys
 		DEVELOPMENT_TEAM="" \
 		PRODUCT_BUNDLE_IDENTIFIER="$(APP_BUNDLE_ID)" \
 		ENABLE_DEBUG_DYLIB=NO \
-		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Whisper Pro/WhisperPro.local.entitlements" \
+		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Speek/Speek.local.entitlements" \
 		SWIFT_ACTIVE_COMPILATION_CONDITIONS='$$(inherited) LOCAL_BUILD' \
 		build
-	@APP_PATH="$(LOCAL_DERIVED_DATA)/Build/Products/Debug/Whisper Pro.app" && \
+	@APP_PATH="$(LOCAL_DERIVED_DATA)/Build/Products/Debug/Speek.app" && \
 	if [ ! -d "$$APP_PATH" ]; then echo "Error: build product not found"; exit 1; fi && \
 	echo "Killing any running instances..." && \
-	pkill -x "Whisper Pro" 2>/dev/null; pkill -x "Whisper" 2>/dev/null; sleep 1; \
+	pkill -x "Speek" 2>/dev/null; pkill -x "Whisper" 2>/dev/null; sleep 1; \
 	echo "Installing to $(SIGNED_APP)..." && \
 	mkdir -p "$(SIGNED_APP)" && \
 	rsync -a --delete "$$APP_PATH/" "$(SIGNED_APP)/" && \
 	xattr -cr "$(SIGNED_APP)" && \
 	echo "Re-signing with your Apple Development cert..." && \
 	codesign --force --deep --options runtime \
-		--entitlements "$(CURDIR)/Whisper Pro/WhisperPro.local.entitlements" \
+		--entitlements "$(CURDIR)/Speek/Speek.local.entitlements" \
 		--sign "$(SIGN_IDENTITY)" "$(SIGNED_APP)" && \
 	echo "" && \
 	echo "Done. Launching $(SIGNED_APP)" && \
 	open "$(SIGNED_APP)" && \
 	echo "" && \
-	echo ">> First time only: grant Accessibility + Microphone to 'Whisper Pro Dev'." && \
+	echo ">> First time only: grant Accessibility + Microphone to 'Speek Dev'." && \
 	echo ">> Every future 'make signed' keeps the same signature — no re-granting."
 
 # Build a distributable DMG (Release, ad-hoc/personal-cert signed with minimal
@@ -171,17 +171,17 @@ dmg: check setup
 
 # Run application
 run:
-	@if [ -d "$$HOME/Downloads/Whisper Pro.app" ]; then \
-		echo "Opening ~/Downloads/Whisper Pro.app..."; \
-		open "$$HOME/Downloads/Whisper Pro.app"; \
+	@if [ -d "$$HOME/Downloads/Speek.app" ]; then \
+		echo "Opening ~/Downloads/Speek.app..."; \
+		open "$$HOME/Downloads/Speek.app"; \
 	else \
-		echo "Looking for Whisper Pro.app in DerivedData..."; \
-		APP_PATH=$$(find "$$HOME/Library/Developer/Xcode/DerivedData" -name "Whisper Pro.app" -type d | head -1) && \
+		echo "Looking for Speek.app in DerivedData..."; \
+		APP_PATH=$$(find "$$HOME/Library/Developer/Xcode/DerivedData" -name "Speek.app" -type d | head -1) && \
 		if [ -n "$$APP_PATH" ]; then \
 			echo "Found app at: $$APP_PATH"; \
 			open "$$APP_PATH"; \
 		else \
-			echo "Whisper Pro.app not found. Please run 'make build' or 'make local' first."; \
+			echo "Speek.app not found. Please run 'make build' or 'make local' first."; \
 			exit 1; \
 		fi; \
 	fi
@@ -197,11 +197,11 @@ help:
 	@echo "Available targets:"
 	@echo "  check/healthcheck  Check if required CLI tools are installed"
 	@echo "  whisper            Clone and build whisper.cpp XCFramework"
-	@echo "  setup              Copy whisper XCFramework to Whisper Pro project"
-	@echo "  build              Build the Whisper Pro Xcode project"
+	@echo "  setup              Copy whisper XCFramework to Speek project"
+	@echo "  build              Build the Speek Xcode project"
 	@echo "  local              Build for local use (no Apple Developer certificate needed)"
-	@echo "  dmg                Build a distributable DMG (dist/WhisperPro-<version>.dmg)"
-	@echo "  run                Launch the built Whisper Pro app"
+	@echo "  dmg                Build a distributable DMG (dist/Speek-<version>.dmg)"
+	@echo "  run                Launch the built Speek app"
 	@echo "  dev                Build and run the app (for development)"
 	@echo "  all                Run full build process (default)"
 	@echo "  clean              Remove build artifacts"

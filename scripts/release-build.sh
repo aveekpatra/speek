@@ -14,14 +14,14 @@ SIGN_ID=${SIGN_ID:-"-"}
 BUILD=.release-build
 DIST=dist
 
-VERSION=$(sed -n 's/.*MARKETING_VERSION = \([^;]*\);.*/\1/p' "Whisper Pro.xcodeproj/project.pbxproj" | head -1)
+VERSION=$(sed -n 's/.*MARKETING_VERSION = \([^;]*\);.*/\1/p' "Speek.xcodeproj/project.pbxproj" | head -1)
 echo "Building Speek $VERSION (signing: $SIGN_ID)"
 
 rm -rf "$BUILD" && mkdir -p "$DIST"
-xcodebuild -project "Whisper Pro.xcodeproj" -scheme "Whisper Pro" -configuration Release \
+xcodebuild -project "Speek.xcodeproj" -scheme "Speek" -configuration Release \
   -derivedDataPath "$BUILD" \
   CODE_SIGN_IDENTITY="$SIGN_ID" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES DEVELOPMENT_TEAM="" \
-  CODE_SIGN_ENTITLEMENTS="$PWD/Whisper Pro/WhisperPro.local.entitlements" \
+  CODE_SIGN_ENTITLEMENTS="$PWD/Speek/Speek.local.entitlements" \
   OTHER_CODE_SIGN_FLAGS="--timestamp --options runtime" \
   build > "$LOG" 2>&1 || { grep -E "error:" "$LOG" | sort -u | head -40; echo "BUILD FAILED. Log: $LOG"; exit 1; }
 

@@ -1,4 +1,4 @@
-# CLAUDE.md - Whisper Pro
+# CLAUDE.md - Speek
 
 ## Dokumentace se udržuje aktuální
 

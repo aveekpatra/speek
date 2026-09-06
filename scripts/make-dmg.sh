@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build a distributable DMG of Whisper Pro: Release build, ad-hoc/personal-cert
+# Build a distributable DMG of Speek: Release build, ad-hoc/personal-cert
 # signed with a minimal (no iCloud, no keychain-access-groups, no aps-environment)
 # entitlements set, none of which need a provisioning profile. Meant for sharing
 # with someone outside this Mac, e.g. "make dmg".
@@ -13,12 +13,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
-PROJECT="Whisper Pro.xcodeproj"
-SCHEME="Whisper Pro"
+PROJECT="Speek.xcodeproj"
+SCHEME="Speek"
 SIGN_IDENTITY="${DIST_IDENTITY:-Apple Development}"
-APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.prakashjoshipax.WhisperPro}"
+APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.aveekpatra.speek}"
 DERIVED_DATA="${DIST_DERIVED_DATA:-$PWD/.local-build-release}"
-ENTITLEMENTS="${DIST_ENTITLEMENTS:-$PWD/Whisper Pro/WhisperPro.dist.entitlements}"
+ENTITLEMENTS="${DIST_ENTITLEMENTS:-$PWD/Speek/Speek.dist.entitlements}"
 NOTARY_PROFILE="whisperpro-notary"
 
 echo "▶ Reading version…"
@@ -27,7 +27,7 @@ VERSION=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Releas
 [ -n "$VERSION" ] || { echo "❌ Could not read MARKETING_VERSION"; exit 1; }
 echo "  Version: $VERSION"
 
-echo "▶ Building Whisper Pro (Release, ad-hoc, minimal entitlements)…"
+echo "▶ Building Speek (Release, ad-hoc, minimal entitlements)…"
 rm -rf "$DERIVED_DATA"
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
   -derivedDataPath "$DERIVED_DATA" \
@@ -42,22 +42,22 @@ xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
   SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) LOCAL_BUILD' \
   build
 
-BUILT_APP="$DERIVED_DATA/Build/Products/Release/Whisper Pro.app"
+BUILT_APP="$DERIVED_DATA/Build/Products/Release/Speek.app"
 [ -d "$BUILT_APP" ] || { echo "❌ Build product not found at $BUILT_APP"; exit 1; }
 
 echo "▶ Re-signing with $SIGN_IDENTITY (hardened runtime, minimal entitlements)…"
 WORK="$DERIVED_DATA/dmg-staging"
 rm -rf "$WORK"
 mkdir -p "$WORK"
-ditto "$BUILT_APP" "$WORK/Whisper Pro.app"
-xattr -cr "$WORK/Whisper Pro.app"
+ditto "$BUILT_APP" "$WORK/Speek.app"
+xattr -cr "$WORK/Speek.app"
 codesign --force --deep --options runtime \
   --entitlements "$ENTITLEMENTS" \
-  --sign "$SIGN_IDENTITY" "$WORK/Whisper Pro.app"
+  --sign "$SIGN_IDENTITY" "$WORK/Speek.app"
 
 echo "▶ Verifying signature…"
-codesign --verify --deep --strict "$WORK/Whisper Pro.app"
-codesign -d --entitlements - "$WORK/Whisper Pro.app" 2>/dev/null | tail -n +2
+codesign --verify --deep --strict "$WORK/Speek.app"
+codesign -d --entitlements - "$WORK/Speek.app" 2>/dev/null | tail -n +2
 
 # Decide up front whether this build can be notarized. A missing keychain profile
 # is a normal "you have no paid membership" case; anything else (locked keychain,
@@ -86,19 +86,19 @@ fi
 # launch then needs a working internet connection to pass Gatekeeper.
 if [ "$NOTARIZE" = "1" ]; then
   echo "▶ Notarizing the app…"
-  APP_ZIP="$DERIVED_DATA/WhisperPro-app.zip"
+  APP_ZIP="$DERIVED_DATA/Speek-app.zip"
   rm -f "$APP_ZIP"
-  ditto -c -k --keepParent "$WORK/Whisper Pro.app" "$APP_ZIP"
+  ditto -c -k --keepParent "$WORK/Speek.app" "$APP_ZIP"
   xcrun notarytool submit "$APP_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
-  xcrun stapler staple "$WORK/Whisper Pro.app"
+  xcrun stapler staple "$WORK/Speek.app"
   rm -f "$APP_ZIP"
 fi
 
 ln -s /Applications "$WORK/Applications"
 cat > "$WORK/READ ME.txt" <<'EOF'
-Whisper Pro, install
+Speek, install
 
-1. Drag "Whisper Pro" into the Applications folder.
+1. Drag "Speek" into the Applications folder.
 2. If macOS blocks the first launch: System Settings > Privacy & Security >
    scroll down > "Open Anyway".
 3. On first launch the app walks you through connecting Soniox (speech
@@ -107,11 +107,11 @@ Whisper Pro, install
 EOF
 
 mkdir -p dist
-DMG="$PWD/dist/WhisperPro-$VERSION.dmg"
+DMG="$PWD/dist/Speek-$VERSION.dmg"
 rm -f "$DMG"
 
 echo "▶ Packaging DMG…"
-hdiutil create -volname "Whisper Pro" -srcfolder "$WORK" -ov -format UDZO "$DMG" >/dev/null
+hdiutil create -volname "Speek" -srcfolder "$WORK" -ov -format UDZO "$DMG" >/dev/null
 
 if [ "$NOTARIZE" = "1" ]; then
   echo "▶ Notarizing the DMG…"
@@ -133,7 +133,7 @@ rm -rf "$WORK"
 echo "▶ Verifying DMG mounts…"
 MOUNT_OUT=$(hdiutil attach "$DMG" -nobrowse -readonly)
 MOUNT_POINT=$(echo "$MOUNT_OUT" | grep -o '/Volumes/.*' | tail -1)
-if [ ! -d "$MOUNT_POINT/Whisper Pro.app" ]; then
+if [ ! -d "$MOUNT_POINT/Speek.app" ]; then
   echo "❌ App missing from mounted DMG"
   hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1 || true
   exit 1

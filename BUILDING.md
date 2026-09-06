@@ -1,6 +1,6 @@
-# Building Whisper Pro
+# Building Speek
 
-This guide provides detailed instructions for building Whisper Pro from source.
+This guide provides detailed instructions for building Speek from source.
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ Before you begin, ensure you have:
 
 ## Quick Start with Makefile (Recommended)
 
-The easiest way to build Whisper Pro is using the included Makefile, which automates the entire build process including building and linking the whisper framework.
+The easiest way to build Speek is using the included Makefile, which automates the entire build process including building and linking the whisper framework.
 
 ### Simple Build Commands
 
@@ -34,11 +34,11 @@ make dev
 - `make check` or `make healthcheck` - Verify all required tools are installed
 - `make whisper` - Clone and build whisper.cpp XCFramework automatically
 - `make setup` - Prepare the whisper framework for linking
-- `make build` - Build the Whisper Pro Xcode project
+- `make build` - Build the Speek Xcode project
 - `make local` - Build for local use (no Apple Developer certificate needed)
 - `make signed` - Stable signed dev build, installed to /Applications (survives rebuilds without re-granting Accessibility/Microphone permissions)
-- `make dmg` - Build a distributable DMG (`dist/WhisperPro-<version>.dmg`) for sharing the app with someone else
-- `make run` - Launch the built Whisper Pro app
+- `make dmg` - Build a distributable DMG (`dist/Speek-<version>.dmg`) for sharing the app with someone else
+- `make run` - Launch the built Speek app
 - `make dev` - Build and run (ideal for development workflow)
 - `make all` - Complete build process (default)
 - `make clean` - Remove build artifacts and dependencies
@@ -47,7 +47,7 @@ make dev
 ### How the Makefile Helps
 
 The Makefile automatically:
-1. **Manages Dependencies**: Creates a dedicated `~/WhisperPro-Dependencies` directory for all external frameworks
+1. **Manages Dependencies**: Creates a dedicated `~/Speek-Dependencies` directory for all external frameworks
 2. **Builds Whisper Framework**: Clones whisper.cpp and builds the XCFramework with the correct configuration
 3. **Handles Framework Linking**: Sets up the whisper.xcframework in the proper location for Xcode to find
 4. **Verifies Prerequisites**: Checks that git, xcodebuild, and swift are installed before building
@@ -65,16 +65,16 @@ If you don't have an Apple Developer certificate, use `make local`:
 git clone https://github.com/ZdenekCulik/whisper-pro.git
 cd whisper-pro
 make local
-open ~/Downloads/Whisper Pro.app
+open ~/Downloads/Speek.app
 ```
 
-This builds Whisper Pro with ad-hoc signing using a separate build configuration (`LocalBuild.xcconfig`) that requires no Apple Developer account.
+This builds Speek with ad-hoc signing using a separate build configuration (`LocalBuild.xcconfig`) that requires no Apple Developer account.
 
 ### How It Works
 
 The `make local` command uses:
 - `LocalBuild.xcconfig` to override signing and entitlements settings
-- `WhisperPro.local.entitlements` (stripped-down, no CloudKit/keychain groups)
+- `Speek.local.entitlements` (stripped-down, no CloudKit/keychain groups)
 - `LOCAL_BUILD` Swift compilation flag for conditional code paths
 
 Your normal `make all` / `make build` commands are completely unaffected.
@@ -86,7 +86,7 @@ Your normal `make all` / `make build` commands are completely unaffected.
 Ad-hoc signed builds (`make local`) get a new signature on every rebuild, so macOS makes
 you re-grant Accessibility and Microphone permissions each time. `make signed` fixes that
 by signing with your own Apple Development certificate and installing to
-`/Applications/Whisper Pro.app` — same signature every time, so permissions granted once
+`/Applications/Speek.app` — same signature every time, so permissions granted once
 survive future rebuilds.
 
 ```bash
@@ -139,9 +139,9 @@ cd whisper.cpp
 ```
 This will create the XCFramework at `build-apple/whisper.xcframework`.
 
-### Building Whisper Pro
+### Building Speek
 
-1. Clone the Whisper Pro repository:
+1. Clone the Speek repository:
 ```bash
 git clone https://github.com/ZdenekCulik/whisper-pro.git
 cd whisper-pro

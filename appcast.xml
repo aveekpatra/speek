@@ -1,7 +1,7 @@
 <?xml version="1.0" standalone="yes"?>
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
-        <title>Whisper Pro</title>
+        <title>Speek</title>
         <!-- Private fork: no public release feed. Build from source instead. -->
     </channel>
 </rss>

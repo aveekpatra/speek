@@ -37,7 +37,7 @@ cd speek
 make local
 ```
 
-`make local` builds `whisper.cpp` as an XCFramework the first time (a few minutes); `llama.cpp` is built the same way (`~/WhisperPro-Dependencies/llama.cpp`, `./build-xcframework.sh macos`), then
+`make local` builds `whisper.cpp` as an XCFramework the first time (a few minutes); `llama.cpp` is built the same way (`~/Speek-Dependencies/llama.cpp`, `./build-xcframework.sh macos`), then
 produces an ad-hoc signed `Speek.app`. During development use `scripts/dev-build.sh` for
 incremental builds and `scripts/dev-show.sh <page>` to launch on a given page.
 
@@ -53,12 +53,12 @@ The hook opens a `speek://agent-update` URL; Speek shows an overlay in the top-r
 
 ## Project layout
 
-- `Whisper Pro/Speek/`: the Speek UI (design system, sidebar, pages, recorder windows, agent plugins, onboarding).
-- `Whisper Pro/Transcription/`: engines (Whisper, FluidAudio Parakeet, Cohere, Apple Speech) and the recording pipeline.
-- `Whisper Pro/Modes/`: mode configuration and app/site triggers.
+- `Speek/UI/`: the Speek UI (design system, sidebar, pages, recorder windows, agent plugins, onboarding).
+- `Speek/Transcription/`: engines (Whisper, FluidAudio Parakeet, Cohere, Apple Speech) and the recording pipeline.
+- `Speek/Modes/`: mode configuration and app/site triggers.
 - `reference/screenshots/`: Superwhisper screenshots used as the UI reference.
 
-The folder is still named `Whisper Pro` because the project grew out of
+Speek grew out of
 [Whisper Pro](https://github.com/ZdenekCulik/whisper-pro), itself a fork of
 [VoiceInk](https://github.com/Beingpax/VoiceInk). Cloud providers, licensing, the English
 coach, and the iOS keyboard from that lineage are not part of Speek.

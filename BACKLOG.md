@@ -27,7 +27,7 @@ same engine.
 
 ### Fallback if that also fails: dictate in the main app
 
-Move dictation into the main Whisper Pro iOS app (microphone works there), then hand the text
+Move dictation into the main Speek iOS app (microphone works there), then hand the text
 back. Downside: no dictation directly inside the field the user is typing in, which is the whole
 point of the keyboard. This is why iOS system dictation is a built-in feature and third-party
 keyboards struggle here.

@@ -1,7 +1,7 @@
 # Speek: build plan
 
 Speek is a free, open-source macOS dictation app whose UI mirrors Superwhisper 2.18
-(see `../reference/screenshots`), rebuilt on the Whisper Pro / VoiceInk codebase with a
+(see `../reference/screenshots`), rebuilt on the Speek / VoiceInk codebase with a
 macOS 26 Liquid Glass design. Local models only. No cloud speech or cloud LLM providers.
 
 ## Scope decisions
