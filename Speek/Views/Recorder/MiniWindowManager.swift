@@ -9,22 +9,27 @@ private final class PanelAppearance: ObservableObject {
     @Published var isVisible = false
 }
 
-/// Wraps the panel's SwiftUI content with the show/hide animation: a spring scale-up
-/// + fade + slight upward drift on appear, mirrored (scale-down + fade) on dismiss.
+/// Wraps the panel's SwiftUI content with the show/hide animation. Appearing is a
+/// bubbly inflate, like Spotlight on macOS 26: the glass starts as a squashed drop,
+/// springs past full size and settles with a visible bounce. Dismissing is a quick,
+/// soft deflate so the pill gets out of the way without theatrics.
 private struct AnimatedPanelHost<Content: View>: View {
     @ObservedObject var appearance: PanelAppearance
     let content: Content
 
+    private var showAnimation: Animation { .spring(response: 0.55, dampingFraction: 0.52, blendDuration: 0.1) }
+    private var hideAnimation: Animation { .easeIn(duration: 0.16) }
+
     var body: some View {
+        let visible = appearance.isVisible
         content
-            .scaleEffect(appearance.isVisible ? 1 : 0.85, anchor: .bottom)
-            .opacity(appearance.isVisible ? 1 : 0)
-            .offset(y: appearance.isVisible ? 0 : 10)
-            // Blur alongside the fade so the panel melts away on dismiss instead of
-            // just fading flat — shared by both widget looks since this host wraps
-            // whichever WidgetVariant is currently rendered.
-            .blur(radius: appearance.isVisible ? 0 : 12)
-            .animation(.spring(response: 0.3, dampingFraction: 0.82), value: appearance.isVisible)
+            // Wider than tall while hidden: a drop that inflates rather than a card
+            // that zooms.
+            .scaleEffect(x: visible ? 1 : 0.55, y: visible ? 1 : 0.35, anchor: .bottom)
+            .opacity(visible ? 1 : 0)
+            .offset(y: visible ? 0 : 14)
+            .blur(radius: visible ? 0 : 6)
+            .animation(visible ? showAnimation : hideAnimation, value: visible)
     }
 }
 
