@@ -81,7 +81,9 @@ private struct ModesListView: View {
                     }
                 }
             }
-            Spacer(minLength: 40)
+        }
+        // Pinned to the bottom of the window, outside the scrolling content.
+        .safeAreaInset(edge: .bottom) {
             HStack(spacing: 6) {
                 Spacer()
                 SpeekKeycapRow(keys: ShortcutStore.shortcut(for: .changeMode)?.displayTokens ?? ["⌥", "⇧", "K"])
@@ -90,6 +92,7 @@ private struct ModesListView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
             }
+            .padding(.vertical, 18)
         }
         .navigationTitle("")
         .toolbar { SpeekStandardToolbar() }

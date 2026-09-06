@@ -697,7 +697,6 @@ private struct AgentReplyView: View {
     @State private var appeared = false
 
     private let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-    private let glassTint = Color.black.opacity(0.55)
 
     var body: some View {
         Group {
@@ -761,11 +760,7 @@ private struct AgentReplyView: View {
                 .padding(.leading, 10)
                 .padding(.trailing, isSelected ? 8 : 14)
                 .frame(height: 38)
-                // A small capsule of glass comes out brighter than the big cards, so a
-                // dark fill sits between the glass and the content to bring the pill
-                // down to the cards' frosted darkness. The cards themselves are untouched.
-                .background(Capsule(style: .continuous).fill(Color.black.opacity(0.42)))
-                .glassEffect(.regular.tint(glassTint), in: Capsule(style: .continuous))
+                .frosted(Capsule(style: .continuous))
                 .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(isSelected ? 0.18 : 0.1), lineWidth: 0.8))
                 .contentShape(Capsule())
                 .onTapGesture { center.select(update) }
@@ -799,7 +794,7 @@ private struct AgentReplyView: View {
         .padding(.horizontal, 22)
         .padding(.vertical, 20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular.tint(glassTint), in: cardShape)
+        .frosted(cardShape)
         .overlay(cardShape.strokeBorder(Color.white.opacity(0.1), lineWidth: 0.8))
     }
 
@@ -890,7 +885,7 @@ private struct AgentReplyView: View {
         .padding(.horizontal, 22)
         .padding(.top, 18)
         .padding(.bottom, 14)
-        .glassEffect(.regular.tint(glassTint), in: cardShape)
+        .frosted(cardShape)
         .overlay(cardShape.strokeBorder(replyFocused ? Color.white.opacity(0.16) : Color.white.opacity(0.1), lineWidth: 0.8))
         .onDrop(of: [UTType.image, UTType.fileURL], isTargeted: nil) { providers in
             let pasteboard = NSPasteboard(name: .init("com.aveekpatra.speek.drop"))
@@ -1087,5 +1082,17 @@ private struct AgentListeningBars: View {
     var body: some View {
         LiveBarsView(audioMeter: recorder.audioMeter, isActive: true, barCount: 9, maxHeight: 16)
             .frame(height: 22)
+    }
+}
+
+/// The one frosted material every piece of the agent panel uses: tinted Liquid Glass
+/// with a dark layer between glass and content. Same layering for the session pill,
+/// the message card and the reply card, so any remaining difference is only the
+/// backdrop the glass samples.
+private extension View {
+    func frosted<S: InsettableShape>(_ shape: S) -> some View {
+        self
+            .background(shape.fill(Color.black.opacity(0.3)))
+            .glassEffect(.regular.tint(Color.black.opacity(0.55)), in: shape)
     }
 }
