@@ -33,18 +33,29 @@ class SoundManager: ObservableObject {
         setupSounds()
     }
 
+    private var isEnabled: Bool {
+        SpeekSettings.shared.soundEffects != .off
+    }
+
+    private func applyVolume() {
+        playbackEngine.volumeMultiplier = Float(SpeekSettings.shared.soundVolume)
+    }
+
     func playStartSound() {
-        guard CustomSoundManager.shared.isSoundEnabled(for: .start) else { return }
+        guard isEnabled else { return }
+        applyVolume()
         playbackEngine.playStartSound()
     }
 
     func playStopSound() {
-        guard CustomSoundManager.shared.isSoundEnabled(for: .stop) else { return }
+        guard isEnabled else { return }
+        applyVolume()
         playbackEngine.playStopSound()
     }
 
     func playEscSound() {
-        guard CustomSoundManager.shared.hasAnyRecordingSoundEnabled else { return }
+        guard isEnabled else { return }
+        applyVolume()
         playbackEngine.playEscSound()
     }
 }

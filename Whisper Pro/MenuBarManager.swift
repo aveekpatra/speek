@@ -143,17 +143,6 @@ class MenuBarManager: ObservableObject {
     }
 
     func openHistoryWindow() {
-        guard let modelContainer = modelContainer,
-              let engine = engine else {
-            logger.error("openHistoryWindow: dependencies not configured (modelContainer=\(self.modelContainer != nil, privacy: .public), engine=\(self.engine != nil, privacy: .public))")
-            return
-        }
-        logger.notice("openHistoryWindow: opening history window")
-        NSApplication.shared.setActivationPolicy(.regular)
-        logger.notice("openHistoryWindow: activation policy set to .regular")
-        HistoryWindowController.shared.showHistoryWindow(
-            modelContainer: modelContainer,
-            engine: engine
-        )
+        openMainWindowAndNavigate(to: "History")
     }
 }

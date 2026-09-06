@@ -1,5 +1,5 @@
 {
-  "originHash" : "828523cdcc792142481537a3dfac25a5813de67d2e756e14210f822ecf89a26f",
+  "originHash" : "e805a0083f11b367299be0271a4145f9bf45e8082ce8569f5321bb4caa759816",
   "pins" : [
     {
       "identity" : "axswift",
@@ -16,7 +16,7 @@
       "location" : "https://github.com/FluidInference/FluidAudio.git",
       "state" : {
         "branch" : "main",
-        "revision" : "50aa07193e84b9cf192d8f36041c24a9a4867cd6"
+        "revision" : "5c19d5e12320e22bbfb7a1877b089d2665a69add"
       }
     },
     {
@@ -65,15 +65,6 @@
       }
     },
     {
-      "identity" : "pow",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/EmergeTools/Pow",
-      "state" : {
-        "revision" : "1b4b1dda28c50b95f0872927ee2226fe8b58950e",
-        "version" : "1.0.6"
-      }
-    },
-    {
       "identity" : "selectedtextkit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Beingpax/SelectedTextKit.git",
@@ -89,15 +80,6 @@
       "state" : {
         "revision" : "6276ba2b404829d139c45ff98427cf90e2efc59b",
         "version" : "2.9.2"
-      }
-    },
-    {
-      "identity" : "sticker",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/bpisano/Sticker",
-      "state" : {
-        "revision" : "301b9e0fb802c01edb2ed25695b3ba62e9c61da3",
-        "version" : "1.4.0"
       }
     },
     {

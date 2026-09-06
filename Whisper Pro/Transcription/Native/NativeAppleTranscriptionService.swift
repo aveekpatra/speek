@@ -66,8 +66,9 @@ class NativeAppleTranscriptionService: TranscriptionService {
         let audioDuration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
         
         // Apple Speech stores and consumes actual BCP-47 locale identifiers directly.
-        let selectedLanguage = context.language ?? "en-US"
-        guard let assetContext = await NativeAppleSpeechAssetManager.assetContext(for: selectedLanguage) else {
+        // "auto"/empty falls back to the Mac's current locale.
+        let selectedLanguage = NativeAppleSpeechAssetManager.normalizedLocaleIdentifier(context.language)
+        guard var assetContext = await NativeAppleSpeechAssetManager.assetContext(for: selectedLanguage) else {
             let requestedIdentifier = Locale(identifier: selectedLanguage).identifier(.bcp47)
             logger.error("Transcription failed: Locale '\(requestedIdentifier, privacy: .public)' is not supported by SpeechTranscriber.")
             throw ServiceError.localeNotSupported
@@ -77,8 +78,19 @@ class NativeAppleTranscriptionService: TranscriptionService {
         case .installed:
             break
         case .supported, .downloading:
-            logger.error("Transcription failed: Assets for '\(assetContext.localeIdentifier, privacy: .public)' are not ready. Status: \(String(describing: assetContext.status), privacy: .public).")
-            throw ServiceError.assetDownloadRequired(assetContext.displayName)
+            // Language pack missing: fetch it now instead of failing.
+            let label = "Apple Speech (\(assetContext.displayName))"
+            await VoiceModelLoadState.shared.beginLoading(label)
+            let state = await NativeAppleSpeechAssetManager.installAsset(for: assetContext.localeIdentifier)
+            await VoiceModelLoadState.shared.finishLoading(label, success: state == .downloaded)
+            guard state == .downloaded,
+                  let refreshed = await NativeAppleSpeechAssetManager.assetContext(for: assetContext.localeIdentifier),
+                  refreshed.status == .installed else {
+                logger.error("Transcription failed: Assets for '\(assetContext.localeIdentifier, privacy: .public)' could not be installed. State: \(String(describing: state), privacy: .public).")
+                if case .reservationLimitReached = state { throw ServiceError.assetReservationFailed(assetContext.displayName) }
+                throw ServiceError.assetDownloadRequired(assetContext.displayName)
+            }
+            assetContext = refreshed
         case .unsupported:
             logger.error("Transcription failed: Locale '\(assetContext.localeIdentifier, privacy: .public)' is not supported by SpeechTranscriber.")
             throw ServiceError.localeNotSupported

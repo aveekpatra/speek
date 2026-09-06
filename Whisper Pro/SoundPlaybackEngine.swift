@@ -17,6 +17,8 @@ final class SoundPlaybackEngine: @unchecked Sendable {
     private var escSound: AVAudioPlayer?
     private var customStartSound: AVAudioPlayer?
     private var customStopSound: AVAudioPlayer?
+    /// 0...1 user volume from Sound settings, applied on top of each clip's base level.
+    var volumeMultiplier: Float = 1
 
     func setup(
         defaultStartURL: URL?,
@@ -28,9 +30,9 @@ final class SoundPlaybackEngine: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self else { return }
 
-            self.startSound = self.makePlayer(from: defaultStartURL, volume: 0.4)
-            self.stopSound = self.makePlayer(from: defaultStopURL, volume: 0.4)
-            self.escSound = self.makePlayer(from: defaultEscURL, volume: 0.3)
+            self.startSound = self.makePlayer(from: defaultStartURL, volume: 0.6)
+            self.stopSound = self.makePlayer(from: defaultStopURL, volume: 0.6)
+            self.escSound = self.makePlayer(from: defaultEscURL, volume: 0.45)
             self.reloadCustomSoundsOnQueue(startURL: customStartURL, stopURL: customStopURL)
         }
     }
@@ -79,8 +81,15 @@ final class SoundPlaybackEngine: @unchecked Sendable {
                 player = self.escSound
             }
 
-            player?.play()
+            guard let player else { return }
+            player.volume = self.baseVolume(for: sound) * self.volumeMultiplier
+            player.currentTime = 0
+            player.play()
         }
+    }
+
+    private func baseVolume(for sound: Sound) -> Float {
+        sound == .esc ? 0.45 : 0.6
     }
 
     private func makePlayer(from url: URL?, volume: Float) -> AVAudioPlayer? {

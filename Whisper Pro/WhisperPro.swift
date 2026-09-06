@@ -5,7 +5,6 @@ import AppKit
 import OSLog
 import AppIntents
 import FluidAudio
-import Sticker
 
 @main
 struct WhisperProApp: App {
@@ -24,7 +23,6 @@ struct WhisperProApp: App {
     @StateObject private var enhancementService: AIEnhancementService
     @StateObject private var activeWindowService = ActiveWindowService.shared
     @AppStorage("hasCompletedOnboardingV2") private var hasCompletedOnboardingV2 = false
-    @AppStorage("enableAnnouncements") private var enableAnnouncements = true
     @State private var showMenuBarIcon = true
     @State private var didShowAccessibilityReminder = false
 
@@ -42,7 +40,6 @@ struct WhisperProApp: App {
         URLCache.shared = URLCache(memoryCapacity: 0, diskCapacity: 0)
 
         AppDefaults.registerDefaults()
-        OnboardingV2Migration.prepareIfNeeded()
         WaveformStyleMigration.prepareIfNeeded()
 
         let logger = Logger(subsystem: "com.prakashjoshipax.whisperpro", category: "Initialization")
@@ -98,11 +95,6 @@ struct WhisperProApp: App {
         let enhancementService = AIEnhancementService(aiService: aiService, modelContext: resolvedContainer.mainContext)
         _enhancementService = StateObject(wrappedValue: enhancementService)
 
-        // Ambient English coach: reuses the user's configured AI provider + the coach store.
-        EnglishCoachService.shared.configure(aiService: aiService, container: resolvedContainer)
-        #if LOCAL_BUILD
-        EnglishCoachService.shared.runLocalSmokeTestIfRequested()
-        #endif
 
         // 1. Create modelsDirectory URL
         let appSupportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -149,6 +141,9 @@ struct WhisperProApp: App {
         _transcriptionModelManager = StateObject(wrappedValue: transcriptionModelManager)
         _recorderUIManager = StateObject(wrappedValue: recorderUIManager)
         _engine = StateObject(wrappedValue: engine)
+        #if DEBUG
+        SnapshotTool.engine = engine
+        #endif
 
         // 7. Create other services that depend on engine
         let recordingShortcutManager = RecordingShortcutManager(engine: engine, recorderUIManager: recorderUIManager)
@@ -313,9 +308,7 @@ struct WhisperProApp: App {
         WindowGroup {
             Group {
                 if hasCompletedOnboardingV2 {
-                    ThemedRootView {
-                        ContentView()
-                    }
+                    MainWindowView()
                         .environmentObject(engine)
                         .environmentObject(whisperModelManager)
                         .environmentObject(fluidAudioModelManager)
@@ -329,10 +322,6 @@ struct WhisperProApp: App {
                         .environmentObject(ThemeManager.shared)
                         .modelContainer(container)
                         .onAppear {
-                            if enableAnnouncements {
-                                AnnouncementsService.shared.start()
-                            }
-
                             showAccessibilityReminderIfNeeded()
 
                             // Start the automatic audio cleanup process only if transcript cleanup is not enabled
@@ -344,33 +333,26 @@ struct WhisperProApp: App {
                             WindowManager.shared.configureWindow(window)
                         })
                         .onDisappear {
-                            AnnouncementsService.shared.stop()
                             whisperModelManager.unloadModel()
 
                             // Stop the automatic audio cleanup process
                             audioCleanupManager.stopAutomaticCleanup()
                         }
                 } else {
-                    OnboardingView(hasCompletedOnboardingV2: $hasCompletedOnboardingV2)
+                    SpeekOnboardingView(hasCompleted: $hasCompletedOnboardingV2)
                         .environmentObject(fluidAudioModelManager)
-                        .environmentObject(aiService)
-                        .environmentObject(enhancementService)
                         .environmentObject(transcriptionModelManager)
-                        .frame(width: 950)
-                        .frame(minHeight: 730)
                         .background(WindowAccessor { window in
                             WindowManager.shared.configureWindow(window)
                         })
                 }
             }
-            .confettiCelebrationPresenter()
-            .task {
-                await precompileStickerShadersIfAvailable()
-            }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 950, height: 730)
-        .windowResizability(.contentSize)
+        .defaultSize(width: 1000, height: 700)
+        .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(.presented)
+        .restorationBehavior(.disabled)
         .commands {
             CommandGroup(replacing: .newItem) { }
 
@@ -392,14 +374,7 @@ struct WhisperProApp: App {
                 .environmentObject(aiService)
                 .environmentObject(enhancementService)
         } label: {
-            let image: NSImage = {
-                let ratio = $0.size.height / $0.size.width
-                $0.size.height = 22
-                $0.size.width = 22 / ratio
-                return $0
-            }(NSImage(named: "menuBarIcon")!)
-
-            Image(nsImage: image)
+            Image(systemName: engine.recordingState == .recording ? "waveform.badge.mic" : "waveform")
         }
         .menuBarExtraStyle(.menu)
 
@@ -412,16 +387,6 @@ struct WhisperProApp: App {
         #endif
     }
 
-    private func precompileStickerShadersIfAvailable() async {
-        guard #available(macOS 15.0, *) else { return }
-
-        do {
-            try await ShaderLibrary.compileStickerShaders()
-        } catch {
-            Logger(subsystem: "com.prakashjoshipax.whisperpro", category: "Sticker")
-                .debug("Sticker shader precompile failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
 
     private func showAccessibilityReminderIfNeeded() {
         #if LOCAL_BUILD

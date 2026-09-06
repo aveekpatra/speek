@@ -23,8 +23,8 @@ struct WhisperModelFile: Identifiable {
 
     // Core ML related properties
     var coreMLZipDownloadURL: String? {
-        // Only non-quantized models have Core ML versions
-        guard !name.contains("q5") && !name.contains("q8") else { return nil }
+        // Only non-quantized models have Core ML versions; Distil-Whisper ships none.
+        guard !name.contains("q5") && !name.contains("q8") && !name.contains("distil") else { return nil }
         return "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(name)-encoder.mlmodelc.zip"
     }
 

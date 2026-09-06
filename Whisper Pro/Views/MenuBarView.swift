@@ -1,150 +1,130 @@
 import SwiftUI
-import LaunchAtLogin
+import AppKit
+import UniformTypeIdentifiers
 
-@MainActor
-private final class LaunchAtLoginMenuState: ObservableObject {
-    static let shared = LaunchAtLoginMenuState()
-
-    @Published private(set) var isEnabled = false
-    private var hasLoaded = false
-
-    private init() {}
-
-    func loadIfNeeded() {
-        guard !hasLoaded else { return }
-        hasLoaded = true
-        isEnabled = LaunchAtLogin.isEnabled
-    }
-
-    func setEnabled(_ newValue: Bool) {
-        guard isEnabled != newValue else { return }
-        isEnabled = newValue
-        LaunchAtLogin.isEnabled = newValue
-    }
-}
-
+/// Menu bar menu, mirroring Superwhisper's: Toggle Recording, Transcribe File, History,
+/// Settings, microphone and mode pickers, version, updates, quit.
 struct MenuBarView: View {
     @EnvironmentObject var engine: WhisperProEngine
     @EnvironmentObject var recorderUIManager: RecorderUIManager
     @EnvironmentObject var transcriptionModelManager: TranscriptionModelManager
-    @EnvironmentObject var whisperModelManager: WhisperModelManager
-    @EnvironmentObject var recordingShortcutManager: RecordingShortcutManager
     @EnvironmentObject var menuBarManager: MenuBarManager
     @EnvironmentObject var updaterViewModel: UpdaterViewModel
-    @EnvironmentObject var enhancementService: AIEnhancementService
-    @EnvironmentObject var aiService: AIService
-    @ObservedObject private var launchAtLoginState = LaunchAtLoginMenuState.shared
-    @ObservedObject var audioDeviceManager = AudioDeviceManager.shared
+    @ObservedObject private var audioDeviceManager = AudioDeviceManager.shared
+    @ObservedObject private var modeManager = ModeManager.shared
     @AppStorage("hasCompletedOnboardingV2") private var hasCompletedOnboardingV2 = false
-    
+
+    private var versionText: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        return "Version \(short)"
+    }
+
     var body: some View {
-        VStack {
+        Group {
             if hasCompletedOnboardingV2 {
-                completedOnboardingMenu
+                mainMenu
             } else {
-                onboardingMenu
-            }
-        }
-        .task {
-            launchAtLoginState.loadIfNeeded()
-        }
-    }
-
-    private var onboardingMenu: some View {
-        Group {
-            Button("Complete Onboarding") {
-                menuBarManager.focusMainWindow()
-            }
-
-            Divider()
-
-            Button("Quit Whisper Pro") {
-                NSApplication.shared.terminate(nil)
+                Button("Finish setting up Speek") { menuBarManager.focusMainWindow() }
+                Divider()
+                Button("Quit Speek") { NSApplication.shared.terminate(nil) }
             }
         }
     }
 
-    private var completedOnboardingMenu: some View {
+    private var mainMenu: some View {
         Group {
-            Button("Toggle Recorder") {
+            Button(engine.recordingState == .recording ? "Stop Recording" : "Toggle Recording") {
                 recorderUIManager.handleToggleRecorderPanelNotification()
             }
 
+            Button("Transcribe File...") { transcribeFile() }
+
+            Button("History...") { openPage(.history) }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+
+            Button("Settings...") { openPage(.configuration) }
+                .keyboardShortcut(",", modifiers: .command)
+
             Divider()
 
-            Button("Manage Models") {
-                menuBarManager.openMainWindowAndNavigate(to: "AI Models")
-            }
-
-            Menu {
+            Menu(currentMicrophoneName) {
+                Button {
+                    audioDeviceManager.selectInputMode(.systemDefault)
+                } label: {
+                    Text(audioDeviceManager.inputMode == .systemDefault ? "System default  ✓" : "System default")
+                }
+                Divider()
                 ForEach(audioDeviceManager.availableDevices, id: \.id) { device in
                     Button {
                         audioDeviceManager.selectDeviceAndSwitchToCustomMode(id: device.id)
                     } label: {
-                        let isActive = audioDeviceManager.getCurrentDevice() == device.id
-                        Text(isActive ? "\(device.name)  ✓" : device.name)
+                        let active = audioDeviceManager.inputMode == .custom && audioDeviceManager.getCurrentDevice() == device.id
+                        Text(active ? "\(device.name)  ✓" : device.name)
                     }
                 }
+            }
 
-                if audioDeviceManager.availableDevices.isEmpty {
-                    Text("No devices available")
-                        .foregroundColor(.secondary)
+            Menu(modeManager.currentEffectiveConfiguration?.name ?? "Voice to text") {
+                ForEach(modeManager.enabledConfigurations) { config in
+                    Button {
+                        modeManager.setActiveConfiguration(config)
+                    } label: {
+                        let active = modeManager.currentEffectiveConfiguration?.id == config.id
+                        Text(active ? "\(config.name)  ✓" : config.name)
+                    }
                 }
-            } label: {
-                HStack {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 11, weight: .medium))
-                    Text("Audio Input")
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10))
-                }
+                Divider()
+                Button("Manage Modes...") { openPage(.modes) }
             }
 
             Divider()
 
-            Button("Retry Last Transcription") {
-                LastTranscriptionService.retryLastTranscription(
-                    from: engine.modelContext,
-                    transcriptionModelManager: transcriptionModelManager,
-                    serviceRegistry: engine.serviceRegistry,
-                    enhancementService: enhancementService
-                )
-            }
-
-            Button("Copy Last Transcription") {
-                LastTranscriptionService.copyLastTranscription(from: engine.modelContext)
-            }
-            .keyboardShortcut("c", modifiers: [.command, .shift])
-            
-            Button("History") {
-                menuBarManager.openHistoryWindow()
-            }
-            .keyboardShortcut("h", modifiers: [.command, .shift])
-            
-            Button(menuBarManager.isMenuBarOnly ? "Show Dock Icon" : "Hide Dock Icon") {
-                menuBarManager.toggleMenuBarOnly()
-            }
-            .keyboardShortcut("d", modifiers: [.command, .shift])
-
-            Toggle("Launch at Login", isOn: Binding(
-                get: { launchAtLoginState.isEnabled },
-                set: { launchAtLoginState.setEnabled($0) }
-            ))
+            Text(versionText)
+            Button("Check for Updates...") { updaterViewModel.checkForUpdates() }
+                .disabled(!updaterViewModel.canCheckForUpdates)
 
             Divider()
 
-            Button("Settings") {
-                menuBarManager.openMainWindowAndNavigate(to: "Settings")
-            }
-            .keyboardShortcut(",", modifiers: .command)
+            Button("Quit Speek") { NSApplication.shared.terminate(nil) }
+                .keyboardShortcut("q", modifiers: .command)
+        }
+        .task { audioDeviceManager.loadAvailableDevices() }
+    }
 
-            Button("Check for Updates") {
-                updaterViewModel.checkForUpdates()
-            }
-            .disabled(!updaterViewModel.canCheckForUpdates)
+    private var currentMicrophoneName: String {
+        let id = audioDeviceManager.getCurrentDevice()
+        let name = audioDeviceManager.getDeviceName(deviceID: id) ?? "No microphone"
+        return audioDeviceManager.inputMode == .custom ? name : "\(name) (Default)"
+    }
 
-            Button("Quit Whisper Pro") {
-                NSApplication.shared.terminate(nil)
+    private func openPage(_ page: SpeekPage) {
+        menuBarManager.focusMainWindow()
+        SpeekNavigation.shared.open(page)
+    }
+
+    private func transcribeFile() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio, .movie, .mpeg4Movie, .wav, .mp3, .aiff, UTType("com.apple.m4a-audio") ?? .audio]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose an audio or video file to transcribe"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let model = transcriptionModelManager.currentTranscriptionModel else {
+            NotificationManager.shared.showNotification(title: String(localized: "Pick a voice model in Models library first"), type: .error)
+            return
+        }
+        let service = AudioTranscriptionService(
+            modelContext: engine.modelContext,
+            serviceRegistry: engine.serviceRegistry,
+            enhancementService: engine.enhancementService
+        )
+        Task {
+            do {
+                _ = try await service.retranscribeAudio(from: url, using: model)
+                NotificationManager.shared.showNotification(title: String(localized: "Transcript saved to History"), type: .success)
+                openPage(.history)
+            } catch {
+                NotificationManager.shared.showNotification(title: error.localizedDescription, type: .error)
             }
         }
     }

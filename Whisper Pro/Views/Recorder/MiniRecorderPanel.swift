@@ -23,6 +23,7 @@ class MiniRecorderPanel: NSPanel {
     private func configurePanel() {
         isFloatingPanel = true
         level = .floating
+        acceptsMouseMovedEvents = true
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovable = true
@@ -50,16 +51,19 @@ class MiniRecorderPanel: NSPanel {
         let padding: CGFloat = 8
 
         let visibleFrame = screen.visibleFrame
-        let centerX = visibleFrame.midX
-        let xPosition = centerX - (width / 2)
-        let yPosition = visibleFrame.minY + padding
-
-        return NSRect(
-            x: xPosition,
-            y: yPosition,
-            width: width,
-            height: height
-        )
+        let edge: RecorderEdge? = MainActor.assumeIsolated {
+            SpeekSettings.shared.keepsRecorderVisibleWhenIdle ? SpeekSettings.shared.alwaysShowEdge : nil
+        }
+        switch edge {
+        case .top:
+            return NSRect(x: visibleFrame.midX - width / 2, y: visibleFrame.maxY - height, width: width, height: height)
+        case .left:
+            return NSRect(x: visibleFrame.minX, y: visibleFrame.midY - height / 2, width: width, height: height)
+        case .right:
+            return NSRect(x: visibleFrame.maxX - width, y: visibleFrame.midY - height / 2, width: width, height: height)
+        case nil:
+            return NSRect(x: visibleFrame.midX - width / 2, y: visibleFrame.minY + padding, width: width, height: height)
+        }
     }
 
     func show() {

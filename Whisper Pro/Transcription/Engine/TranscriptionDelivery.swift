@@ -20,7 +20,7 @@ final class TranscriptionDelivery {
         // Called instead of `dismiss` when the transcript went to the clipboard
         // because no editable field was focused — shows a brief in-panel hint
         // before dismissing rather than a toast that overlaps the panel.
-        let showPasteHint: () async -> Void
+        let showPasteHint: (String) async -> Void
         let sendFollowUp: (String, Transcription) async -> Void
         let showResponse: (String, String?) async -> Void
         let failResponse: (String) async -> Void
@@ -157,6 +157,20 @@ final class TranscriptionDelivery {
         let pastedText = textToPaste + (appendSpace ? " " : "")
         SoundManager.shared.playStopSound()
 
+        // An agent (Claude Code / Codex) is waiting: bring its terminal forward and
+        // send the dictation there, followed by Return.
+        if let agentTarget = AgentUpdateCenter.shared.consumeReplyTarget() {
+            AgentUpdateCenter.shared.activateTerminal(for: agentTarget)
+            await actions.dismiss()
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            let pasteResult = await CursorPaster.pasteAtCursorAndWaitUntilPosted(pastedText)
+            if pasteResult.didPostPasteCommand {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                CursorPaster.performAutoSend(.enter)
+            }
+            return
+        }
+
         // Check editability up front (not just inside CursorPaster) so we know
         // whether to dismiss now or leave the panel up to show the paste hint.
         guard CursorPaster.focusedElementLikelyEditable() else {
@@ -164,7 +178,7 @@ final class TranscriptionDelivery {
             // (org.nspasteboard) so clipboard managers like Maccy/Raycast don't
             // permanently store it — it stays pasteable via ⌘V either way.
             _ = ClipboardManager.setClipboard(pastedText, transient: true, sessionID: nil)
-            await actions.showPasteHint()
+            await actions.showPasteHint(pastedText)
             return
         }
 
@@ -188,15 +202,7 @@ final class TranscriptionDelivery {
     }
 
     private func deliverableText(from text: String) -> String {
-        var textToDeliver = normalizeSlashCommands(in: text)
-        if let restrictionMessage = LicenseViewModel().usageRestrictionMessage {
-            textToDeliver = """
-                \(restrictionMessage)
-                \n\(textToDeliver)
-                """
-        }
-
-        return textToDeliver
+        normalizeSlashCommands(in: text)
     }
 
     /// Final-stage cleanup for slash commands, applied right before the text is

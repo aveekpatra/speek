@@ -6,7 +6,7 @@ enum TranscriptionRealtimeSupport {
     }
 
     static func isRequired(for model: any TranscriptionModel) -> Bool {
-        CloudProviderRegistry.provider(for: model.provider)?.isStreamingOnly ?? false
+        false
     }
 
     static func isEnabled(for model: any TranscriptionModel, modeValue: Bool? = nil) -> Bool {

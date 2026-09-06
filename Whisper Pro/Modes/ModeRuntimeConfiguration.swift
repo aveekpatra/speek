@@ -169,7 +169,11 @@ enum ModeRuntimeResolver {
             return nil
         }
 
-        return enhancementService.allPrompts.first { $0.id == uuid }
+        if let prompt = enhancementService.allPrompts.first(where: { $0.id == uuid }) {
+            return prompt
+        }
+        // Built-in presets (Voice to text, Message, Email, Note) live in PromptTemplates.
+        return PromptTemplates.seedPrompts.first { $0.id == uuid }
     }
 
     private static func resolvedProvider(

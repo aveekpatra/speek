@@ -27,7 +27,7 @@ enum RecorderPanelStyle: String, CaseIterable, Identifiable {
 protocol RecorderPanelPresenting: AnyObject {
     var isRecorderPanelVisible: Bool { get }
     func dismissRecorderPanel() async
-    func dismissRecorderPanelWithPasteHint() async
+    func dismissRecorderPanelWithPasteHint(text: String) async
 }
 
 @MainActor
@@ -57,7 +57,6 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         }
     }
 
-    private var notchWindowManager: NotchWindowManager?
     private var miniWindowManager: MiniWindowManager?
     private var coachDismissTask: Task<Void, Never>?
     private var pasteHintDismissTask: Task<Void, Never>?
@@ -88,7 +87,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         // Let the widget play its chosen dismiss effect (sparkle / vanish / sequential
         // dissolve / content scatter — see Variant2View) before the window is actually
         // torn down.
-        let effectDuration = DismissEffectStyle.stored.duration
+        let effectDuration: TimeInterval = 0.3
         try? await Task.sleep(nanoseconds: UInt64(effectDuration * 1_000_000_000))
         // Keep isCanceling true through teardown so the pill stays collapsed/faded and
         // doesn't animate back up before the window is hidden. Reset only after the
@@ -115,14 +114,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         clearPasteHint()
         cancelCoachSuggestionDisplay()
 
-        switch recorderPanelStyle {
-        case .notch:
-            // Notch never uses DismissEffectStyle, so its own hide animation is still
-            // the only exit it plays — nothing to skip.
-            notchWindowManager?.hide()
-        case .mini:
-            miniWindowManager?.hide(skipAnimation: DismissEffectStyle.stored.skipsWindowFadeOnCancel)
-        }
+        miniWindowManager?.hide(skipAnimation: false)
         isRecorderPanelVisible = false
         engine.assistantSession.reset()
     }
@@ -142,92 +134,62 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
 
     private func showRecorderPanel() {
         guard let engine = engine, let recorder = recorder else { return }
+        guard SpeekSettings.shared.recordingWindowStyle != .none else { return }
 
-        switch recorderPanelStyle {
-        case .notch:
-            if notchWindowManager == nil {
-                notchWindowManager = NotchWindowManager(
-                    engine: engine,
-                    recorder: recorder,
-                    assistantSession: engine.assistantSession,
-                    onRecordButtonTapped: { [weak self] in
-                        Task { @MainActor in
-                            await self?.toggleRecorderPanel()
-                        }
-                    },
-                    onCloseTapped: { [weak self] in
-                        Task { @MainActor in
-                            await self?.dismissRecorderPanel()
-                        }
-                    },
-                    onAssistantFollowUp: { [weak engine] text in
-                        Task { @MainActor in
-                            await engine?.sendAssistantFollowUp(text)
-                        }
+        if miniWindowManager == nil {
+            miniWindowManager = MiniWindowManager(
+                engine: engine,
+                recorder: recorder,
+                assistantSession: engine.assistantSession,
+                onRecordButtonTapped: { [weak self] in
+                    Task { @MainActor in
+                        await self?.toggleRecorderPanel()
                     }
-                )
-            }
-            notchWindowManager?.show()
-        case .mini:
-            if miniWindowManager == nil {
-                miniWindowManager = MiniWindowManager(
-                    engine: engine,
-                    recorder: recorder,
-                    assistantSession: engine.assistantSession,
-                    onRecordButtonTapped: { [weak self] in
-                        Task { @MainActor in
-                            await self?.toggleRecorderPanel()
-                        }
-                    },
-                    onCloseTapped: { [weak self] in
-                        Task { @MainActor in
-                            await self?.dismissRecorderPanel()
-                        }
-                    },
-                    onAssistantFollowUp: { [weak engine] text in
-                        Task { @MainActor in
-                            await engine?.sendAssistantFollowUp(text)
-                        }
-                    },
-                    onCoachDismiss: { [weak self] in
-                        Task { @MainActor in
-                            self?.dismissCoachSuggestionPanel()
-                        }
-                    },
-                    onCoachHover: { [weak self] hovering in
-                        Task { @MainActor in
-                            self?.setCoachSuggestionHovered(hovering)
-                        }
+                },
+                onCloseTapped: { [weak self] in
+                    Task { @MainActor in
+                        await self?.cancelRecording()
                     }
-                )
-            }
-            miniWindowManager?.show()
+                },
+                onAssistantFollowUp: { [weak engine] text in
+                    Task { @MainActor in
+                        await engine?.sendAssistantFollowUp(text)
+                    }
+                },
+                onCoachDismiss: {},
+                onCoachHover: { _ in }
+            )
         }
+        miniWindowManager?.show()
     }
 
     private func hideRecorderPanel() {
-        switch recorderPanelStyle {
-        case .notch:
-            notchWindowManager?.hide()
-        case .mini:
-            miniWindowManager?.hide()
-        }
+        miniWindowManager?.hide()
     }
 
     private func rebuildVisiblePanel(previousStyle: RecorderPanelStyle) {
         guard isRecorderPanelVisible else { return }
-
-        switch previousStyle {
-        case .notch:
-            notchWindowManager?.destroyWindow()
-            notchWindowManager = nil
-        case .mini:
-            miniWindowManager?.destroyWindow()
-            miniWindowManager = nil
-        }
-
+        miniWindowManager?.destroyWindow()
+        miniWindowManager = nil
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 50_000_000)
+            showRecorderPanel()
+        }
+    }
+
+    /// Called when the user switches Classic / Mini / None in Configuration.
+    @objc private func handleRecordingWindowStyleChange() {
+        if SpeekSettings.shared.keepsRecorderVisibleWhenIdle {
+            showIdlePillIfNeeded()
+            return
+        }
+        guard isRecorderPanelVisible else { return }
+        if SpeekSettings.shared.recordingWindowStyle == .none {
+            hideRecorderPanel()
+        } else if engine?.recordingState == .idle {
+            hideRecorderPanel()
+            isRecorderPanelVisible = false
+        } else {
             showRecorderPanel()
         }
     }
@@ -251,6 +213,10 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                         modeId: modeId,
                         isAssistantFollowUp: true
                     )
+                } else if SpeekSettings.shared.keepsRecorderVisibleWhenIdle {
+                    // The idle pill is on screen: a toggle starts a new recording.
+                    SoundManager.shared.playStartSound()
+                    await engine.toggleRecord(modeId: modeId)
                 } else {
                     await dismissRecorderPanel()
                 }
@@ -270,16 +236,32 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         clearPasteHint()
 
         cancelCoachSuggestionDisplay()
+        engine.assistantSession.reset()
+        if SpeekSettings.shared.keepsRecorderVisibleWhenIdle {
+            // Always-show mini window: stay on screen as the idle pill.
+            if !isRecorderPanelVisible { isRecorderPanelVisible = true }
+            return
+        }
         hideRecorderPanel()
         isRecorderPanelVisible = false
-        engine.assistantSession.reset()
+    }
+
+    /// Shows the idle pill when "Always show" is on (called at launch and when the
+    /// setting changes).
+    func showIdlePillIfNeeded() {
+        guard SpeekSettings.shared.keepsRecorderVisibleWhenIdle else { return }
+        if isRecorderPanelVisible {
+            showRecorderPanel()   // re-place on the (possibly new) edge
+        } else {
+            isRecorderPanelVisible = true
+        }
     }
 
     /// Called instead of `dismissRecorderPanel()` when the transcript couldn't be
     /// auto-pasted (no editable field focused). Shows a brief "⌘V to paste" hint
     /// in the panel instead of a toast that would overlap it, then dismisses as
     /// normal. Falls back to the toast if the panel isn't on screen at all.
-    func dismissRecorderPanelWithPasteHint() async {
+    func dismissRecorderPanelWithPasteHint(text: String) async {
         guard isRecorderPanelVisible, let engine = engine else {
             NotificationManager.shared.showNotification(
                 title: String(localized: "Copied to clipboard — paste anywhere with ⌘V"),
@@ -289,11 +271,12 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         }
 
         cancelCoachSuggestionDisplay()
-        engine.pasteHintText = String(localized: "⌘V to paste")
+        engine.resultPreview = text
+        engine.pasteHintText = String(localized: "Copied. Click a text field and press ⌘V to paste.")
 
         pasteHintDismissTask?.cancel()
         pasteHintDismissTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
             guard let self, !Task.isCancelled else { return }
             self.pasteHintDismissTask = nil
             await self.dismissRecorderPanel()
@@ -309,6 +292,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         hideRecorderPanel()
         isRecorderPanelVisible = false
         engine.assistantSession.reset()
+        showIdlePillIfNeeded()
     }
 
     func cancelRecording() async {
@@ -334,10 +318,11 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleEnglishCoachCorrectionReady(_:)),
-            name: .englishCoachCorrectionReady,
+            selector: #selector(handleRecordingWindowStyleChange),
+            name: .speekRecordingWindowStyleDidChange,
             object: nil
         )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.showIdlePillIfNeeded() }
     }
 
     @objc public func handleToggleRecorderPanelNotification() {
@@ -357,59 +342,15 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         }
     }
 
-    @objc public func handleEnglishCoachCorrectionReady(_ notification: Notification) {
-        guard let suggestion = notification.object as? CoachSuggestion else { return }
-        showCoachSuggestionPanel(suggestion)
-    }
-
-    private func showCoachSuggestionPanel(_ suggestion: CoachSuggestion) {
-        guard recorderPanelStyle == .mini else { return }
-        guard engine?.recordingState == .idle else { return }
-        guard engine?.assistantSession.isVisible != true else { return }
-
-        showRecorderPanel()
-        scheduleCoachSuggestionDismissal(for: suggestion)
-    }
-
-    /// While the mouse is over the coach card, pause the auto-dismiss so the user
-    /// can read it; restart the timer once the mouse leaves.
-    func setCoachSuggestionHovered(_ hovering: Bool) {
-        if hovering {
-            coachDismissTask?.cancel()
-            coachDismissTask = nil
-        } else if let suggestion = EnglishCoachService.shared.latestSuggestion {
-            scheduleCoachSuggestionDismissal(for: suggestion)
-        }
-    }
-
-    private func scheduleCoachSuggestionDismissal(for suggestion: CoachSuggestion) {
-        coachDismissTask?.cancel()
-        coachDismissTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 10_000_000_000)
-            guard !Task.isCancelled else { return }
-            guard let self else { return }
-            guard EnglishCoachService.shared.latestSuggestion?.id == suggestion.id else { return }
-            guard self.engine?.recordingState == .idle,
-                  self.engine?.assistantSession.isVisible != true else { return }
-            self.dismissCoachSuggestionPanel()
-        }
-    }
-
-    private func dismissCoachSuggestionPanel() {
-        cancelCoachSuggestionDisplay()
-        hideRecorderPanel()
-        isRecorderPanelVisible = false
-    }
-
     private func cancelCoachSuggestionDisplay() {
         coachDismissTask?.cancel()
         coachDismissTask = nil
-        EnglishCoachService.shared.clearSuggestion()
     }
 
     private func clearPasteHint() {
         pasteHintDismissTask?.cancel()
         pasteHintDismissTask = nil
         engine?.pasteHintText = nil
+        engine?.resultPreview = nil
     }
 }

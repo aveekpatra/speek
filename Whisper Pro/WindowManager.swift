@@ -21,7 +21,7 @@ class WindowManager: NSObject {
     }
     
     func configureWindow(_ window: NSWindow) {
-        if let existingWindow = NSApplication.shared.windows.first(where: { $0.identifier == Self.mainWindowIdentifier && $0 != window }) {
+        if let existingWindow = mainWindow, existingWindow != window, existingWindow.isVisible {
             logger.notice("configureWindow: duplicate detected, reusing existing window")
             window.close()
             existingWindow.makeKeyAndOrderFront(nil)
@@ -33,12 +33,11 @@ class WindowManager: NSObject {
         window.styleMask.formUnion(requiredStyleMask)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
-        window.title = "Whisper Pro"
+        window.title = "Speek"
         window.collectionBehavior = [.fullScreenPrimary]
         window.level = .normal
-        window.isOpaque = false
+        window.isOpaque = true
         window.isMovableByWindowBackground = false
         window.minSize = NSSize(width: 0, height: 0)
         window.setFrameAutosaveName(Self.mainWindowAutosaveName)
@@ -49,7 +48,8 @@ class WindowManager: NSObject {
     
     func registerMainWindow(_ window: NSWindow) {
         mainWindow = window
-        window.identifier = Self.mainWindowIdentifier
+        // Do not overwrite window.identifier: SwiftUI uses it for state restoration and
+        // will refuse to open the window on the next launch if it is unknown.
         window.delegate = self
         NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeOcclusionStateNotification, object: window)
         NotificationCenter.default.addObserver(self, selector: #selector(mainWindowOcclusionStateChanged(_:)), name: NSWindow.didChangeOcclusionStateNotification, object: window)
@@ -85,10 +85,18 @@ class WindowManager: NSObject {
     }
     
     private func registerMainWindowIfNeeded(_ window: NSWindow) {
-        // Only register the primary content window, identified by the hidden title bar style
-        if window.identifier == nil || window.identifier != Self.mainWindowIdentifier {
+        if mainWindow !== window {
             registerMainWindow(window)
         }
+    }
+
+    /// The SwiftUI-created main content window: titled, resizable, not a floating panel.
+    private static func isMainCandidate(_ window: NSWindow) -> Bool {
+        window.styleMask.contains(.titled)
+            && window.styleMask.contains(.resizable)
+            && !window.styleMask.contains(.nonactivatingPanel)
+            && !(window is NSPanel)
+            && window.level == .normal
     }
     
     private func applyInitialPlacementIfNeeded(to window: NSWindow) {
@@ -107,8 +115,8 @@ class WindowManager: NSObject {
 
         logger.notice("resolveMainWindow: weak ref is nil, searching \(NSApplication.shared.windows.count, privacy: .public) windows by identifier")
 
-        if let window = NSApplication.shared.windows.first(where: { $0.identifier == Self.mainWindowIdentifier }) {
-            logger.notice("resolveMainWindow: recovered window via identifier fallback")
+        if let window = NSApplication.shared.windows.first(where: { Self.isMainCandidate($0) }) {
+            logger.notice("resolveMainWindow: recovered window via style fallback")
             mainWindow = window
             window.delegate = self
             return window
@@ -123,7 +131,7 @@ class WindowManager: NSObject {
 extension WindowManager: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
-        if window.identifier == Self.mainWindowIdentifier {
+        if window === mainWindow {
             logger.notice("windowWillClose: main window closing, clearing weak reference")
             window.orderOut(nil)
             NotificationCenter.default.post(name: .mainWindowVisibilityChanged, object: nil, userInfo: ["visible": false])
@@ -134,7 +142,7 @@ extension WindowManager: NSWindowDelegate {
     
     func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow,
-              window.identifier == Self.mainWindowIdentifier else { return }
+              window === mainWindow else { return }
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 } 

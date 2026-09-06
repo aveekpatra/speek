@@ -52,18 +52,18 @@ class MiniWindowManager {
     ) {
         self.makeView = {
             AnyView(
-                MiniRecorderView(
+                SpeekRecorderView(
                     stateProvider: engine,
                     recorder: recorder,
-                    assistantSession: assistantSession,
-                    onRecordButtonTapped: onRecordButtonTapped,
-                    onCloseTapped: onCloseTapped,
-                    onAssistantFollowUp: onAssistantFollowUp,
-                    onCoachDismiss: onCoachDismiss,
-                    onCoachHover: onCoachHover
+                    onStopTapped: onRecordButtonTapped,
+                    onCancelTapped: onCloseTapped
                 )
             )
         }
+        _ = assistantSession
+        _ = onAssistantFollowUp
+        _ = onCoachDismiss
+        _ = onCoachHover
     }
 
     func show() {

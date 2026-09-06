@@ -92,6 +92,11 @@ final class ModelPrewarmService: ObservableObject {
 
             logger.notice("Prewarm completed in \(String(format: "%.2f", duration), privacy: .public)s")
 
+            // Keep the language model hot too, so the first rewrite does not pay the load.
+            if FileManager.default.fileExists(atPath: S1MiniModelManager.modelFileURL.path) {
+                await S1MiniService.shared.preload()
+            }
+
         } catch {
             logger.error("❌ Prewarm failed: \(error, privacy: .public)")
         }
@@ -115,7 +120,7 @@ final class ModelPrewarmService: ObservableObject {
         }
 
         switch model.provider {
-        case .whisper, .fluidAudio:
+        case .whisper, .fluidAudio, .cohere, .canary:
             return true
         default:
             logger.notice("Skipping prewarm - cloud models don't need it")

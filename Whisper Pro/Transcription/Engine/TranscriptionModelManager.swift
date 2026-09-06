@@ -42,14 +42,13 @@ class TranscriptionModelManager: ObservableObject {
                 return whisperModelManager?.availableModels.contains { $0.name == model.name } ?? false
             case .fluidAudio:
                 return fluidAudioModelManager?.isFluidAudioModelDownloaded(named: model.name) ?? false
+            case .cohere:
+                return CohereModelManager.shared.isDownloaded
+            case .canary:
+                return CanaryModelManager.shared.isDownloaded
             case .nativeApple:
                 if #available(macOS 26, *) { return true } else { return false }
-            case .custom:
-                return true
             default:
-                if let cloudProvider = CloudProviderRegistry.provider(for: model.provider) {
-                    return APIKeyManager.shared.hasAPIKey(forProvider: cloudProvider.providerKey)
-                }
                 return false
             }
         }

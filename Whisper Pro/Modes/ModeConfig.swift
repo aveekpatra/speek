@@ -88,9 +88,12 @@ struct ModeConfig: Codable, Identifiable, Equatable {
     var customCommand: ModeCustomCommand?
     var isEnabled: Bool = true
     var isDefault: Bool = false
+    /// S1-mini control line: styling (casual...formal) and structure (prose/lists).
+    var s1Styling: String?
+    var s1Structure: String?
         
     enum CodingKeys: String, CodingKey {
-        case id, name, icon, appConfigs, urlConfigs, triggerGroups, isAIEnhancementEnabled, selectedPrompt, isRealtimeTranscriptionEnabled, selectedLanguage, isTextFormattingEnabled, punctuationCleanupMode, removePunctuation, lowercaseTranscription, useClipboardContext, useSelectedTextContext, useScreenCapture, selectedAIProvider, selectedAIModel, outputMode, isAutoSendEnabled, autoSendKey, customCommand, isEnabled, isDefault
+        case id, name, icon, appConfigs, urlConfigs, triggerGroups, isAIEnhancementEnabled, selectedPrompt, isRealtimeTranscriptionEnabled, selectedLanguage, isTextFormattingEnabled, punctuationCleanupMode, removePunctuation, lowercaseTranscription, useClipboardContext, useSelectedTextContext, useScreenCapture, selectedAIProvider, selectedAIModel, outputMode, isAutoSendEnabled, autoSendKey, customCommand, isEnabled, isDefault, s1Styling, s1Structure
         case legacyEmoji = "emoji"
         case selectedWhisperModel
         case selectedTranscriptionModelName
@@ -178,6 +181,8 @@ struct ModeConfig: Codable, Identifiable, Equatable {
         }
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         isDefault = try container.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
+        s1Styling = try container.decodeIfPresent(String.self, forKey: .s1Styling)
+        s1Structure = try container.decodeIfPresent(String.self, forKey: .s1Structure)
 
         if let newModelName = try container.decodeIfPresent(String.self, forKey: .selectedTranscriptionModelName) {
             selectedTranscriptionModelName = newModelName
@@ -201,6 +206,8 @@ struct ModeConfig: Codable, Identifiable, Equatable {
         try container.encode(isRealtimeTranscriptionEnabled, forKey: .isRealtimeTranscriptionEnabled)
         try container.encodeIfPresent(selectedLanguage, forKey: .selectedLanguage)
         try container.encode(isTextFormattingEnabled, forKey: .isTextFormattingEnabled)
+        try container.encodeIfPresent(s1Styling, forKey: .s1Styling)
+        try container.encodeIfPresent(s1Structure, forKey: .s1Structure)
         try container.encode(punctuationCleanupMode, forKey: .punctuationCleanupMode)
         try container.encode(punctuationCleanupMode == .removeAll, forKey: .removePunctuation)
         try container.encode(lowercaseTranscription, forKey: .lowercaseTranscription)

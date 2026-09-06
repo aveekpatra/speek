@@ -17,11 +17,7 @@ enum TranscriptionLanguageSupport {
     ]
 
     static func languages(for model: any TranscriptionModel, realtimeEnabled: Bool? = nil) -> [String: String] {
-        if model.provider == .assemblyAI {
-            return assemblyAILanguages(usesRealtime: assemblyAIUsesRealtime(for: model, realtimeEnabled: realtimeEnabled))
-        }
-
-        return model.supportedLanguages
+        model.supportedLanguages
     }
 
     static func validLanguageOrFallback(_ language: String?, for model: any TranscriptionModel, realtimeEnabled: Bool? = nil) -> String {
@@ -50,20 +46,6 @@ enum TranscriptionLanguageSupport {
         }.first ?? "en"
     }
 
-    private static func assemblyAILanguages(usesRealtime: Bool) -> [String: String] {
-        let codes = usesRealtime ? assemblyAIRealtimeLanguageCodes : assemblyAIBatchLanguageCodes
-        var filtered = LanguageDictionary.all.filter { codes.contains($0.key) }
-        filtered["auto"] = "Auto-detect"
-        return filtered
-    }
-
-    private static func assemblyAIUsesRealtime(for model: any TranscriptionModel, realtimeEnabled: Bool?) -> Bool {
-        guard model.provider == .assemblyAI, model.supportsStreaming else {
-            return false
-        }
-
-        return TranscriptionRealtimeSupport.isEnabled(for: model, modeValue: realtimeEnabled)
-    }
 }
 
 enum LanguageDictionary {
@@ -86,21 +68,24 @@ enum LanguageDictionary {
             return ["en": "English"]
         }
 
-        if let cloudProvider = CloudProviderRegistry.provider(for: provider) {
-            guard let codes = cloudProvider.languageCodes else {
-                return all
-            }
-            var filtered = all.filter { codes.contains($0.key) }
-            if cloudProvider.includesAutoDetect { filtered["auto"] = "Auto-detect" }
-            return filtered
-        }
-
         switch provider {
         case .whisper:
             return languages(matching: whisperLanguageCodes)
 
         case .nativeApple:
             return appleNative
+
+        case .cohere:
+            let codes = ["en", "fr", "de", "es", "it", "pt", "nl", "pl", "el", "ar", "ja", "zh", "ko", "vi"]
+            return all.filter { codes.contains($0.key) }
+
+        case .canary:
+            let codes = [
+                "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr",
+                "hr", "hu", "it", "lt", "lv", "mt", "nl", "pl", "pt", "ro",
+                "ru", "sk", "sl", "sv", "uk"
+            ]
+            return all.filter { codes.contains($0.key) }
 
         case .fluidAudio:
             let codes = [

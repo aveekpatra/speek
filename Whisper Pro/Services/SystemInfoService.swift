@@ -203,18 +203,7 @@ class SystemInfoService {
         }
     }
 
-    private func getLicenseStatus() -> String {
-        let licenseManager = LicenseManager.shared
-
-        // Check for existing license key and activation
-        if licenseManager.licenseKey != nil {
-            if licenseManager.activationId != nil || !UserDefaults.standard.bool(forKey: "WhisperProLicenseRequiresActivation") {
-                return "Licensed (Pro)"
-            }
-        }
-
-        return "Not Licensed"
-    }
+    private func getLicenseStatus() -> String { "Free" }
 
     private func getCurrentLanguage() -> String {
         return UserDefaults.standard.string(forKey: "SelectedLanguage") ?? "en"

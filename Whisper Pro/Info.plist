@@ -2,10 +2,23 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.aveekpatra.speek</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>speek</string>
+			</array>
+		</dict>
+	</array>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/ZdenekCulik/whisper-pro/main/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/aveekpatra/speek/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>gnXep9+mzNXFSbX0jU7CpLtubcQ5WVfVGe0BxsSdS40=</string>
 	<key>LSUIElement</key>
@@ -15,10 +28,10 @@
 	<key>SUScheduledCheckInterval</key>
 	<integer>14400</integer>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Whisper Pro needs access to your microphone to record audio for transcription.</string>
+	<string>Speek needs access to your microphone to record audio for transcription.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Whisper Pro needs to interact with your browser to detect the current website for applying website-specific configurations.</string>
+	<string>Speek needs to interact with your browser to detect the current website so Modes can activate for specific sites.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Whisper Pro needs screen recording access to understand context from your screen for improved transcription accuracy.</string>
+	<string>Speek uses screen recording only to read on-screen context for AI modes when you enable it.</string>
 </dict>
 </plist>

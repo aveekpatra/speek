@@ -14,6 +14,7 @@ enum AIProvider: String, CaseIterable {
     case soniox = "Soniox"
     case speechmatics = "Speechmatics"
     case assemblyAI = "AssemblyAI"
+    case s1Mini = "S1-mini"
     case ollama = "Ollama"
     case localCLI = "Local CLI"
     case custom = "Custom"
@@ -47,7 +48,7 @@ enum AIProvider: String, CaseIterable {
             return "https://api.assemblyai.com/v2/transcript"
         case .ollama:
             return UserDefaults.standard.string(forKey: "ollamaBaseURL") ?? "http://localhost:11434"
-        case .localCLI:
+        case .s1Mini, .localCLI:
             return ""
         case .custom:
             return UserDefaults.standard.string(forKey: "customProviderBaseURL") ?? ""
@@ -56,6 +57,8 @@ enum AIProvider: String, CaseIterable {
     
     var defaultModel: String {
         switch self {
+        case .s1Mini:
+            return "S1-mini"
         case .cerebras:
             return "gpt-oss-120b"
         case .groq:
@@ -91,6 +94,8 @@ enum AIProvider: String, CaseIterable {
     
     var availableModels: [String] {
         switch self {
+        case .s1Mini:
+            return ["S1-mini"]
         case .cerebras:
             return [
                 "gpt-oss-120b",
@@ -163,7 +168,7 @@ enum AIProvider: String, CaseIterable {
     
     var requiresAPIKey: Bool {
         switch self {
-        case .ollama, .localCLI:
+        case .ollama, .localCLI, .s1Mini:
             return false
         default:
             return true
@@ -241,6 +246,8 @@ class AIService: ObservableObject {
                 return CustomAIProviderManager.shared.hasConfiguredModels
             } else if provider == .ollama {
                 return ollamaService.isConnected
+            } else if provider == .s1Mini {
+                return FileManager.default.fileExists(atPath: S1MiniModelManager.modelFileURL.path)
             } else if provider == .localCLI {
                 return localCLIService.isConfigured
             } else if provider.requiresAPIKey {

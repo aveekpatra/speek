@@ -205,20 +205,34 @@ class CursorPaster {
         var roleRef: CFTypeRef?
         AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
         let role = (roleRef as? String) ?? ""
-        let editableRoles: Set<String> = [
-            kAXTextFieldRole as String,
-            kAXTextAreaRole as String,
-            kAXComboBoxRole as String,
-        ]
-        if editableRoles.contains(role) { return true }
 
-        // Editable web / rich-text areas typically expose a settable AXValue.
-        var settable: DarwinBoolean = false
-        if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success,
-           settable.boolValue {
-            return true
+        // Only refuse when the focus is clearly not a text target (a button, a list row,
+        // a window with nothing focused inside). Everything else (web areas, editors,
+        // terminals, custom views) gets the paste: a ⌘V that lands nowhere is harmless,
+        // a transcript that silently stays on the clipboard is not.
+        let nonEditableRoles: Set<String> = [
+            kAXButtonRole as String, kAXCheckBoxRole as String, kAXRadioButtonRole as String,
+            kAXPopUpButtonRole as String, kAXMenuButtonRole as String, kAXMenuItemRole as String,
+            kAXSliderRole as String, kAXImageRole as String, kAXRowRole as String, kAXCellRole as String,
+            kAXTableRole as String, kAXOutlineRole as String, kAXListRole as String,
+            kAXWindowRole as String, kAXApplicationRole as String, kAXToolbarRole as String,
+            kAXTabGroupRole as String, kAXDisclosureTriangleRole as String, kAXIncrementorRole as String,
+        ]
+        if nonEditableRoles.contains(role) {
+            // A focused window or app with a text field inside still counts.
+            if role == kAXWindowRole as String || role == kAXApplicationRole as String {
+                var inner: CFTypeRef?
+                if AXUIElementCopyAttributeValue(element, kAXFocusedUIElementAttribute as CFString, &inner) == .success,
+                   let innerElement = inner {
+                    var innerRoleRef: CFTypeRef?
+                    AXUIElementCopyAttributeValue(innerElement as! AXUIElement, kAXRoleAttribute as CFString, &innerRoleRef)
+                    let innerRole = (innerRoleRef as? String) ?? ""
+                    return !nonEditableRoles.contains(innerRole)
+                }
+            }
+            return false
         }
-        return false
+        return true
     }
 
     private static func wait(_ seconds: TimeInterval) async {

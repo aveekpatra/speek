@@ -31,6 +31,7 @@ class WhisperProEngine: NSObject, ObservableObject {
     // "⌘V to paste" hint shown in the panel when the transcript couldn't be
     // auto-inserted (no editable field focused). See RecorderUIManager.
     @Published var pasteHintText: String? = nil
+    @Published var resultPreview: String? = nil
     private static let liveTranscriptPublishInterval: TimeInterval = 1.0 / 20.0
     private var lastLiveTranscriptPublishAt = Date.distantPast
     private var pendingLiveTranscriptUpdate: (committed: String, partial: String)?
@@ -567,9 +568,9 @@ class WhisperProEngine: NSObject, ObservableObject {
                 guard let self, self.activePipelineTranscriptionID == transcriptionID else { return }
                 await self.recorderUIManager?.dismissRecorderPanel()
             },
-            onPasteHint: { [weak self] in
+            onPasteHint: { [weak self] text in
                 guard let self, self.activePipelineTranscriptionID == transcriptionID else { return }
-                await self.recorderUIManager?.dismissRecorderPanelWithPasteHint()
+                await self.recorderUIManager?.dismissRecorderPanelWithPasteHint(text: text)
             },
             assistant: TranscriptionPipeline.AssistantHooks(
                 isFollowUp: activePipelineUseCase.isAssistantFollowUp,

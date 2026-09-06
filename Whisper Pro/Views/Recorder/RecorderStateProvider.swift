@@ -14,4 +14,6 @@ protocol RecorderStateProvider: AnyObject {
     // Set when the transcript couldn't be auto-pasted (no editable field focused);
     // the panel shows this text briefly instead of the toast notification.
     var pasteHintText: String? { get }
+    /// Final transcript shown alongside the paste hint when it could not be pasted.
+    var resultPreview: String? { get }
 }

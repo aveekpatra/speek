@@ -84,6 +84,10 @@ class AIEnhancementService: ObservableObject {
             return true
         }
 
+        if provider == .s1Mini {
+            return FileManager.default.fileExists(atPath: S1MiniModelManager.modelFileURL.path)
+        }
+
         if provider == .custom {
             guard let modelName = configuration.modelName else { return false }
             return CustomAIProviderManager.shared.requestConfiguration(forModel: modelName) != nil
@@ -193,6 +197,20 @@ class AIEnhancementService: ObservableObject {
         await MainActor.run {
             self.lastSystemMessageSent = systemMessage
             self.lastUserMessageSent = formattedText
+        }
+
+        if provider == .s1Mini {
+            let mode = configuration.mode
+            let styling = S1MiniService.Styling(rawValue: mode?.s1Styling ?? "") ?? .semiCasual
+            let structure = S1MiniService.Structure(rawValue: mode?.s1Structure ?? "") ?? .prose
+            let promptID = mode?.selectedPrompt.flatMap { UUID(uuidString: $0) }
+            let context: S1MiniService.Context = promptID == PromptTemplates.emailPromptId ? .email : .general
+            do {
+                let result = try await S1MiniService.shared.normalize(text, styling: styling, structure: structure, context: context)
+                return result.isEmpty ? text : result
+            } catch {
+                throw EnhancementError.customError(error.localizedDescription)
+            }
         }
 
         if provider == .ollama {

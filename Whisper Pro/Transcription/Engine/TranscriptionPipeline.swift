@@ -63,7 +63,7 @@ class TranscriptionPipeline {
         shouldCancel: () -> Bool,
         onCancel: @escaping () async -> Void,
         onDismiss: @escaping () async -> Void,
-        onPasteHint: @escaping () async -> Void = {},
+        onPasteHint: @escaping (String) async -> Void = { _ in },
         assistant: AssistantHooks = .inactive
     ) async {
         let model = transcriptionConfiguration.model

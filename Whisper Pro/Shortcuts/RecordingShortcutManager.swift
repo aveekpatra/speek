@@ -122,7 +122,10 @@ class RecordingShortcutManager: ObservableObject {
                 Self.canHandleShortcutAction(for: engine.recordingState)
             },
             isRecorderVisible: {
+                // The always-shown idle strip is on screen without a session; treat
+                // it as "not visible" so key-down starts and key-up stops as usual.
                 recorderUIManager.isRecorderPanelVisible
+                    && !(engine.recordingState == .idle && SpeekSettings.shared.keepsRecorderVisibleWhenIdle)
             },
             recordingState: {
                 engine.recordingState
@@ -304,12 +307,13 @@ class RecordingShortcutManager: ObservableObject {
                 enhancementService: engine.enhancementService
             )
         case .openHistoryWindow:
-            HistoryWindowController.shared.showHistoryWindow(
-                modelContainer: engine.modelContext.container,
-                engine: engine
-            )
+            NotificationCenter.default.post(name: .speekNavigate, object: nil, userInfo: ["page": SpeekPage.history.rawValue])
+            NSApplication.shared.setActivationPolicy(.regular)
+            _ = WindowManager.shared.showMainWindow()
         case .quickAddToDictionary:
             DictionaryQuickAddManager.shared.toggle(modelContainer: engine.modelContext.container)
+        case .changeMode:
+            NotificationCenter.default.post(name: .speekShowModeSwitcher, object: nil)
         default:
             break
         }

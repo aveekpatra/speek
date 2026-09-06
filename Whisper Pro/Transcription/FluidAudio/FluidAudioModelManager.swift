@@ -23,6 +23,8 @@ class FluidAudioModelManager: ObservableObject {
     private static let modelVersionMap: [String: AsrModelVersion] = [
         "parakeet-tdt-0.6b-v2": .v2,
         "parakeet-tdt-0.6b-v3": .v3,
+        "parakeet-tdt-ctc-110m": .tdtCtc110m,
+        "parakeet-tdt-0.6b-ja": .tdtJa,
     ]
 
     nonisolated static func asrVersion(for modelName: String) -> AsrModelVersion {
@@ -79,7 +81,7 @@ class FluidAudioModelManager: ObservableObject {
         }
 
         let version = FluidAudioModelManager.asrVersion(for: modelName)
-        let progressHandler: DownloadUtils.ProgressHandler = { [weak self] progress in
+        let progressHandler: ProgressHandler = { [weak self] progress in
             Task { @MainActor [weak self] in
                 self?.updateDownloadProgress(progress, for: modelName, downloadID: downloadID)
             }
@@ -140,7 +142,7 @@ class FluidAudioModelManager: ObservableObject {
         downloadStatuses[modelName] = nil
     }
 
-    private func updateDownloadProgress(_ progress: DownloadUtils.DownloadProgress, for modelName: String, downloadID: UUID) {
+    private func updateDownloadProgress(_ progress: DownloadProgress, for modelName: String, downloadID: UUID) {
         guard activeDownloadIDs[modelName] == downloadID else { return }
 
         downloadStatuses[modelName] = FluidAudioDownloadStatus(
@@ -149,7 +151,7 @@ class FluidAudioModelManager: ObservableObject {
         )
     }
 
-    private static func statusMessage(for progress: DownloadUtils.DownloadProgress) -> String {
+    private static func statusMessage(for progress: DownloadProgress) -> String {
         switch progress.phase {
         case .listing:
             return String(localized: "Listing files from repository...")

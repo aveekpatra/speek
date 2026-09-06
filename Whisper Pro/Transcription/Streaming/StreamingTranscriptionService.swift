@@ -339,11 +339,7 @@ class StreamingTranscriptionService {
             }
             return FluidAudioStreamingProvider(fluidAudioService: fluidAudioService)
         }
-        guard let cloudProvider = CloudProviderRegistry.provider(for: model.provider),
-              let streamingProvider = cloudProvider.makeStreamingProvider(modelContext: modelContext) else {
-            fatalError("Unsupported streaming provider: \(model.provider). Check shouldUseRealtimeTranscription() before calling startStreaming().")
-        }
-        return streamingProvider
+        fatalError("Unsupported streaming provider: \(model.provider). Check shouldUseRealtimeTranscription() before calling startStreaming().")
     }
 
     /// Consumes audio chunks from the AsyncStream and sends them to the provider.

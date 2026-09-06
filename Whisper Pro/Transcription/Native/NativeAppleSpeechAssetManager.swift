@@ -19,6 +19,15 @@ enum NativeAppleSpeechAssetState: Equatable {
 enum NativeAppleSpeechAssetManager {
     private static let logger = Logger(subsystem: "com.prakashjoshipax.whisperpro", category: "NativeAppleSpeechAssetManager")
 
+    /// Maps the mode's language setting to a locale Apple Speech can resolve.
+    static func normalizedLocaleIdentifier(_ language: String?) -> String {
+        let trimmed = (language ?? "").trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty || trimmed.lowercased() == "auto" {
+            return Locale.current.identifier(.bcp47)
+        }
+        return trimmed
+    }
+
     static func assetState(for localeIdentifier: String) async -> NativeAppleSpeechAssetState {
         guard #available(macOS 26, *) else {
             return .assetManagementUnavailable

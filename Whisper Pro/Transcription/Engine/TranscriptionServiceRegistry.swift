@@ -14,9 +14,10 @@ class TranscriptionServiceRegistry {
         modelsDirectory: modelsDirectory,
         modelProvider: modelProvider
     )
-    private(set) lazy var cloudTranscriptionService = CloudTranscriptionService(modelContext: modelContext)
     private(set) lazy var nativeAppleTranscriptionService = NativeAppleTranscriptionService()
     private(set) lazy var fluidAudioTranscriptionService = FluidAudioTranscriptionService()
+    private(set) lazy var cohereTranscriptionService = CohereTranscriptionService()
+    private(set) lazy var canaryTranscriptionService = CanaryTranscriptionService()
 
     init(modelProvider: any WhisperModelProvider, modelsDirectory: URL, modelContext: ModelContext) {
         self.modelProvider = modelProvider
@@ -30,10 +31,14 @@ class TranscriptionServiceRegistry {
             return localTranscriptionService
         case .fluidAudio:
             return fluidAudioTranscriptionService
+        case .cohere:
+            return cohereTranscriptionService
+        case .canary:
+            return canaryTranscriptionService
         case .nativeApple:
             return nativeAppleTranscriptionService
         default:
-            return cloudTranscriptionService
+            return localTranscriptionService
         }
     }
 

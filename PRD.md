@@ -1,209 +1,76 @@
-# Whisper Pro: Product Requirements Document
+# Speek: Product Requirements Document
 
 ## 1. Product vision
 
-Whisper Pro turns speech into text anywhere on macOS, fast enough that dictation replaces
-typing rather than feeling like a workaround. Press a hotkey, speak, and the transcribed
-text lands in whatever app has focus, cleaned up and formatted, with no extra steps.
+Speek is a free, open-source macOS dictation app that matches the Superwhisper workflow
+and look (see `reference/screenshots/`) while running every model locally. Press a
+shortcut, speak, and clean text lands in the focused app.
 
 ## 2. Target user
 
-A single user: the author, dictating daily into chat apps, editors, and browsers. The
-product is not built for a general audience, a team, or a paying customer base. Every
-decision optimizes for that one workflow: reliability, speed, and low friction on a
-personal Mac, not configurability for strangers.
+Mac users who want Superwhisper-class dictation without a subscription or cloud
+processing, including developers who drive coding agents (Claude Code, Codex) by voice.
 
-## 3. Problem statement
+## 3. Scope
 
-Typing is slower than speaking, and switching between "hands on keyboard" and "voice
-memo app, transcribe later, copy-paste" breaks flow entirely. Existing dictation tools
-(macOS built-in dictation, cloud note-taking apps) are either too inaccurate, too slow to
-start, tied to a single provider, or don't format/clean the output enough to paste
-directly into a message or document. Whisper Pro exists to close that gap: one hotkey,
-provider-agnostic transcription, and an output pipeline that produces text ready to send.
+- macOS 26.0 or later only. Liquid Glass design, Apple Human Interface Guidelines.
+- Local models only. No cloud speech or cloud LLM providers in the UI or registry.
+- No licensing, trials, or accounts.
 
-## 4. Core user flows
+## 4. Core flows
 
-### 4.1 Dictate and send
-1. User presses the configured global hotkey (primary or secondary shortcut, or a
-   middle-click hold).
-2. A floating recorder widget appears (mini panel or notch-style panel) and starts
-   capturing audio; system audio playback is muted for the duration if enabled.
-3. Speech streams to the configured transcription provider. With a streaming provider,
-   partial text appears live in the widget as the user talks.
-4. On stop, the transcript passes through processing (filler word removal, paragraph
-   formatting, personal dictionary replacements) and optional AI enhancement, then is
-   typed into the focused app via simulated keystrokes.
-5. If configured, an Enter key press is simulated afterward, so a chat message dictated
-   into Slack or iMessage is sent without the user touching the keyboard.
+### 4.1 Dictate
+1. Press the Toggle Recording shortcut (default: right Command, modifier only) or the Push to Talk key.
+2. The recording window appears at the bottom of the screen (Classic panel, Mini pill, or None).
+3. Press the shortcut again (or Escape to cancel). Speek transcribes with the active mode's voice model, applies vocabulary replacements and formatting, optionally rewrites with a local text model, then pastes into the focused app. Holding Shift while stopping presses Return after pasting.
 
-### 4.2 Switch transcription engine or model
-1. User opens Settings, AI Models.
-2. Picks a cloud provider (Soniox, AssemblyAI, Deepgram, ElevenLabs, Groq, Mistral,
-   Cartesia, Speechmatics, xAI, Gemini) and enters an API key, or picks a local model
-   (a whisper.cpp GGML model, or a FluidAudio Parakeet model) and downloads it on-device.
-3. The new engine is used on the next dictation, no restart required.
+### 4.2 Modes
+A mode combines a preset (Voice to text, Message, Email, Note, Custom prompt), a language, a voice model, a text model (S1-mini with tone and structure controls, or an Ollama model), app and website triggers, a shortcut, and advanced options (autocapitalize, auto paste, auto send). Modes switch automatically by front app or site, by shortcut, or through the mode switcher (default ⌥⇧K).
 
-### 4.3 Context-aware Modes
-1. User defines or picks a starter Mode (Dictation, Enhancement, Email, Rewrite,
-   Assistant) tied to a trigger: the frontmost app, or a browser URL pattern.
-2. When that app or site is focused, the matching Mode's prompt, AI enhancement
-   settings, and (optionally) a custom shell command run on the transcript instead of
-   the default pipeline.
-3. Settings, AI Enhancement exposes a toggle and prompt picker for whichever Mode is
-   currently active or default, plus a read-only line showing which provider/model will
-   run and a warning if that provider has no API key yet.
-4. This lets the same hotkey behave differently in, say, an email client versus a code
-   editor versus a chat app, without the user manually switching settings each time.
+### 4.3 Models library
+Table of voice models (Cohere Transcribe, Canary 1B v2, Parakeet V2/V3/110M/Japanese, Whisper Large v3 Turbo, Apple Speech, imported GGML files) and text models (S1-mini, Ollama models) with type, speed and accuracy meters, size, download progress and the active model. Provider filter, search, import.
 
-### 4.4 First run / onboarding
-1. Trust screen introduces the app.
-2. Permissions screen requests Microphone and Accessibility, with a one-click repair
-   path if Accessibility shows granted but doesn't work (a stale TCC entry from a
-   previous build).
-3. User picks and downloads a transcription model, or sets up a cloud provider
-   (Soniox is the guided default) and enters an API key.
-4. The dictation hotkey is confirmed/configured on the final onboarding screen so the
-   user leaves onboarding able to dictate immediately.
+### 4.4 Agent plugins
+Installing the Claude Code or Codex plugin writes a hook script and registers it. When an agent finishes, needs permission, or asks a question, Speek shows a glass overlay (top right). Recording while the overlay is visible sends the transcript to the agent's terminal followed by Return. A user prompt submitted in the terminal dismisses the overlay.
 
-### 4.5 Review history and progress
-1. User opens the Dashboard to see stats: time saved, words dictated today/this
-   month/all-time, active days, and, once a Soniox balance is set in Settings, the
-   remaining balance — all in one stats strip. Below that, an activity chart
-   (heatmap, bar, or line) spans the user's full dictation history, plus recent
-   transcripts. The bar/line styles' height scale (linear vs. logarithmic) is
-   adjustable via a slider in Settings → Interface. The header shows an editable
-   name and initials avatar (tap to cycle
-   its color, gently rotating on its own) and a rotating fun-fact/motivational line
-   (click it for another one).
-2. User opens History to browse, search, or recover past transcriptions (a recovery
-   store protects against losing a transcript if the app crashes mid-session).
-3. The English Coach surfaces observations and phrasing suggestions derived from the
-   user's own dictation history.
+### 4.5 First run
+Welcome, permissions (Microphone, Accessibility), voice model download, shortcut.
 
-## 5. Feature list and rationale
+## 5. UI map
 
-| Feature | Rationale |
+| Sidebar item | Content |
 |---|---|
-| Global hotkey dictation (primary + secondary shortcut, middle-click toggle) | Core interaction: dictation must start with zero clicks through menus. |
-| Floating recorder widget (mini panel, notch-style panel, multiple visual variants) | Visual confirmation that recording is live, without stealing window focus from the app being dictated into. |
-| Multi-provider transcription (cloud and local) | No single provider is reliably fastest, cheapest, or most accurate for every language and network condition; provider choice is the user's, not locked in. |
-| Streaming (realtime) transcription with word-agreement merging | Live partial text reduces perceived latency and lets the user see mistakes as they happen instead of after a long pause. |
-| Local model support (whisper.cpp, FluidAudio Parakeet, native Apple Speech) | Works offline, avoids per-minute API cost, and keeps audio on-device when privacy matters more than raw accuracy. |
-| AI enhancement / post-processing (configurable AI provider, including local Ollama) | Raw ASR output has filler words, run-on sentences, and no punctuation cleanup; enhancement makes the text closer to what a person would type. |
-| Personal dictionary (vocabulary words, word replacements) | ASR engines mis-transcribe names, jargon, and abbreviations consistently; a per-user dictionary fixes the same mistake permanently instead of every time. |
-| Filler word removal, paragraph formatting | Small, cheap cleanup steps that make dictated text readable without invoking a full AI pass every time. |
-| Modes (app/URL-triggered behavior, custom shell commands) | Different destinations need different formatting and tone; the app should adapt automatically to where the text is going. |
-| Auto-pause system audio during recording | Prevents music or a video call from bleeding into the microphone and corrupting the transcript. |
-| Send-on-Enter | Removes the last manual step for chat-style destinations, so dictation is a complete send action, not just text insertion. |
-| Dashboard stats, streaks, insights | Personal motivation and a sanity check that the tool is actually being used and saving time. |
-| Dashboard personalization (editable name, cycling avatar color, rotating fun-fact subtitle) | Makes a daily-use screen feel personal instead of static, without adding any real configuration burden. |
-| Soniox balance stat (balance minus tracked spend since the balance was entered, shown in the main stats strip) | Soniox has no balance API, only usage logs; letting the user enter their balance once and tracking spend since then gives a running "money left" estimate instead of surprise depletion. |
-| Transcript history + crash recovery store | Losing a long dictation to a crash is worse than typing it in the first place; recovery removes that risk. |
-| English Coach | Turns the by-product of daily dictation (a large corpus of the user's own speech) into passive language-learning feedback. |
-| Onboarding with permission repair | Accessibility grants silently go stale after every ad-hoc rebuild during development; the repair flow turns a recurring dev annoyance into a one-click fix instead of a support dead end. |
-| Homebrew cask + notarized DMG distribution | Lets the app be installed and updated like any other Mac app, without requiring Xcode or a build step for casual reinstalls. |
-| iOS dictation keyboard (custom keyboard extension, no letter keys, live Soniox transcription) | Extends the same hotkey-free, speak-and-it-appears workflow to iOS, where there is no equivalent of a global hotkey and system dictation is slower and less accurate. Status: builds and passes unit tests on the iOS simulator; not yet verified on a physical device or published to TestFlight. |
+| Home | Range picker, stats (WPM, words, apps used, time saved), Get started, What's new |
+| Modes | Mode list, Create mode, mode detail |
+| Vocabulary | Add word / Replace with, list, replacement editor, import/export |
+| Configuration | Appearance (theme, recording window), Keyboard Shortcuts, Application, Advanced settings (Dock, menubar click, always close, model active duration, app folder, text input, Agent Plugins, experimental models) |
+| Sound | Recording toggles, playback behavior, sound effects style and volume |
+| Models library | Model table |
+| History | Search, date groups, detail with audio player and metadata |
+| Speek (footer) | Version, updates, credits, links |
 
-## 6. Non-goals
+Menu bar: Toggle Recording, Transcribe File..., History..., Settings..., microphone and mode submenus, version, Check for Updates..., Quit.
 
-- **Not a commercial product.** No pricing, no support SLA, no roadmap commitments. The
-  inherited VoiceInk licensing/trial gate (Polar-based license keys, trial countdown)
-  is present in the code but deliberately disabled; the app always runs fully unlocked
-  (see `LicenseViewModel.init`).
-- **Not App Store distributed.** The app needs Accessibility automation and disables
-  the App Sandbox entirely, which the Mac App Store does not allow.
-- **Not multi-user or team-oriented.** No shared configuration, no admin controls, no
-  usage analytics sent anywhere.
-- **Not aiming for maximum configurability for other users.** Features are added when
-  the author needs them for personal dictation, not to serve a broad settings surface.
-- **Not currently self-updating.** Sparkle auto-update is wired into the app but is a
-  no-op today: the appcast has no published releases, so installed copies do not
-  update themselves yet.
+## 6. Technical overview
 
-## 7. Technical overview
+- SwiftUI app (`WhisperProApp` in `Whisper Pro/WhisperPro.swift`), `NavigationSplitView` shell in `Whisper Pro/Speek/Shell/`, pages in `Whisper Pro/Speek/Pages/`, design tokens and components in `Whisper Pro/Speek/Design/`.
+- Settings store: `SpeekSettings` (UserDefaults-backed, `speek.*` keys, mirrors legacy keys the engine reads).
+- Transcription: `TranscriptionServiceRegistry` dispatches to `WhisperTranscriptionService` (whisper.cpp), `FluidAudioTranscriptionService` (Parakeet), `CohereTranscriptionService` (FluidAudio `CoherePipeline`), `CanaryTranscriptionService` (FluidAudio `CanaryManager`), `NativeAppleTranscriptionService`.
+- Text normalization: `S1MiniService` runs the S1-mini GGUF through `LlamaRunner` (llama.cpp XCFramework); `AIProvider.s1Mini`.
+- Model downloads: `WhisperModelManager`, `FluidAudioModelManager`, `CohereModelManager` (ModelHub download of `FluidInference/cohere-transcribe-03-2026-coreml/q8`).
+- Recording window: `MiniWindowManager` hosts `SpeekRecorderView` (Classic / Mini) in a non-activating floating panel; `RecorderUIManager` drives it.
+- Agent plugins: `AgentHookInstaller`, bundled `speek-agent-hook.sh`, `AgentUpdateCenter` (URL scheme `speek://agent-update`, overlay, reply routing in `TranscriptionDelivery`).
+- Persistence: SwiftData stores (transcripts, vocabulary, session metrics) under Application Support.
+- Permissions: Microphone, Accessibility; Apple Events for browser URL detection (Modes). App Sandbox disabled.
+- Updates: Sparkle, feed at `appcast.xml` in this repository.
 
-- **Shape:** SwiftUI macOS app, `MenuBarExtra`-based menu bar app that can also show a
-  regular window and Dock icon (user-toggleable "menu bar only" mode).
-- **Entry point:** `WhisperProApp` (`Whisper Pro/WhisperPro.swift`) wires up all core
-  services at launch: the transcription engine, model managers, shortcut manager, menu
-  bar manager, AI service, and enhancement service.
-- **Transcription engine:** `WhisperProEngine` orchestrates recording (`Recorder`,
-  `CoreAudioRecorder`) through a pipeline (`TranscriptionPipeline`) that dispatches to
-  whichever provider is active: local Whisper models, local FluidAudio (Parakeet)
-  models, native Apple Speech, or one of the cloud providers under
-  `Transcription/Cloud` and `Transcription/Streaming` (Soniox, AssemblyAI, Deepgram,
-  ElevenLabs, Groq, Mistral, Cartesia, Speechmatics, xAI, Gemini).
-- **Processing layer:** `Transcription/Processing` handles filler-word removal,
-  paragraph formatting, and dictionary word replacement before AI enhancement
-  (`Services/AIEnhancement`) optionally rewrites the text further.
-- **Delivery:** `TranscriptionDelivery` and `CustomCommandDeliveryRunner` type the final
-  text into the focused app via Accessibility APIs and optionally simulate an Enter
-  key press or run a custom shell command on the output.
-- **Modes:** `Modes/` tracks the frontmost app (`ActiveWindowService`) and, for
-  supported browsers, the current URL (`BrowserURLService`) to select which Mode's
-  configuration and prompt apply.
-- **Persistence:** SwiftData, split across several local, non-CloudKit stores
-  (transcripts, dictionary, stats, coach notes, typed chat-log metrics), stored under
-  the legacy `com.prakashjoshipax.VoiceInk` Application Support path so the app's
-  history survived the VoiceInk-to-Whisper Pro rename.
-- **Permissions:** Microphone (`NSMicrophoneUsageDescription`), Accessibility (typing
-  and Enter simulation, requested via `AXIsProcessTrustedWithOptions`), Screen
-  Recording and Apple Events (context detection for Modes). The App Sandbox is
-  disabled (`com.apple.security.app-sandbox = false`) because Accessibility automation
-  and the entitlements it needs are incompatible with sandboxing.
-- **Signing model:** three entitlement/build variants exist: a full signed build with
-  iCloud/keychain entitlements (`WhisperPro.entitlements`), a local ad-hoc build with
-  stripped entitlements for building without a paid developer account
-  (`WhisperPro.local.entitlements`), and a distribution build for sharing a DMG with
-  someone else (`WhisperPro.dist.entitlements`).
-- **Auto-update:** Sparkle is integrated (`SUFeedURL` pointing at the repo's
-  `appcast.xml`) but currently inert, as noted in section 6.
-- **iOS:** two additional Xcode targets in the same project, "Whisper Pro iOS" (a
-  container app with a single setup screen for the Soniox API key, microphone access,
-  and enable-the-keyboard instructions) and "Whisper Pro Keyboard" (a custom keyboard
-  extension that is dictation-only, no letter keys; live partial transcript is
-  inserted and rewritten in place as Soniox refines it). They share code via `Shared
-  iOS/` (session, audio recording, PCM16 conversion, transcript editing, keychain) and
-  a Keychain access group for the API key; `SonioxRealtimeClient.swift` is shared with
-  the macOS app by target membership rather than duplicated. Builds and passes unit
-  tests on the simulator; not yet run on a physical device or shipped via TestFlight.
+## 7. Non-goals
 
-## 8. Distribution model
+- Cloud transcription or cloud LLM providers.
+- iOS, Windows, Linux.
+- Paid features, licensing, telemetry.
+- Superwhisper's proprietary S1 models (not redistributable).
 
-- **Primary path:** Homebrew cask, `brew install --cask zdenekculik/tap/whisper-pro`,
-  pointing at the `ZdenekCulik/homebrew-tap` repository. Bumped on every release
-  (version + sha256).
-- **Secondary path:** a notarized `.dmg` built with `make dmg` (Developer ID signing
-  plus Apple notarization, or an ad-hoc-signed DMG if no paid developer account is
-  configured), published to GitHub Releases.
-- **Source:** the repository itself is public and buildable via `make local` (no paid
-  developer account needed) or `make signed` (stable signature, permissions survive
-  rebuilds). See `README.md` and `BUILDING.md`.
-- **License:** GNU GPL-3.0, inherited from and required by the upstream VoiceInk fork.
+## 8. Status
 
-## 9. Success criteria
-
-Since this is a single-user personal tool, success is defined against the author's own
-daily use rather than growth or revenue metrics:
-
-- Dictation is fast and accurate enough to be the default input method for chat
-  messages, not an occasional novelty.
-- A rebuild during development never requires re-granting Accessibility manually
-  (the repair flow catches it).
-- Switching transcription provider or model is a settings change, never a code change.
-- No dictation session is lost to a crash (recovery store holds up).
-- The Dashboard's stats (hours saved, streak) reflect real, sustained daily use over
-  time.
-
-## 10. Future ideas
-
-Speculative only, not committed:
-
-- Publish an actual Sparkle appcast so installed copies self-update.
-- Expand Modes with more starter templates beyond the current five (Dictation,
-  Enhancement, Email, Rewrite, Assistant).
-- Broader language support/testing beyond the current Czech-first fix and English
-  defaults.
-- Investigate a lightweight way to accept external contributions given the "no
-  support" stance, if community interest appears.
+All phases of `PLAN.md` are implemented. Remaining: prune the cloud LLM providers left inside `AIService`, remove the iOS targets from the project, notarized release builds, Sparkle signing key and appcast publishing.
