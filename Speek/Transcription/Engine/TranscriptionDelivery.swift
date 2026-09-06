@@ -157,17 +157,12 @@ final class TranscriptionDelivery {
         let pastedText = textToPaste + (appendSpace ? " " : "")
         SoundManager.shared.playStopSound()
 
-        // An agent (Claude Code / Codex) is waiting: bring its terminal forward and
-        // send the dictation there, followed by Return.
-        if let agentTarget = AgentUpdateCenter.shared.consumeReplyTarget() {
-            AgentUpdateCenter.shared.activateTerminal(for: agentTarget)
+        // An agent panel is up (Claude Code / Codex): the dictation goes into its reply
+        // box, and Return there sends it to the agent's terminal.
+        let agentPanelIsUp = await MainActor.run { AgentUpdateCenter.shared.isShowingPanel }
+        if agentPanelIsUp {
             await actions.dismiss()
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            let pasteResult = await CursorPaster.pasteAtCursorAndWaitUntilPosted(pastedText)
-            if pasteResult.didPostPasteCommand {
-                try? await Task.sleep(nanoseconds: 300_000_000)
-                CursorPaster.performAutoSend(.enter)
-            }
+            await MainActor.run { AgentUpdateCenter.shared.insertTranscript(textToPaste) }
             return
         }
 

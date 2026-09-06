@@ -11,8 +11,20 @@ enum SnapshotTool {
     /// Set by the app at launch so dev options can drive the engine.
     static weak var engine: SpeekEngine?
 
+    /// `-speekInstallAgent claude|codex|all`: install agent hooks without the UI, then exit.
+    static func runAgentInstallIfRequested(_ defaults: UserDefaults) {
+        guard let which = defaults.string(forKey: "speekInstallAgent"), !which.isEmpty else { return }
+        let plugins: [AgentPlugin] = which == "all" ? AgentPlugin.allCases : (which == "codex" ? [.codex] : [.claudeCode])
+        for plugin in plugins {
+            do { try AgentHookInstaller.install(plugin); print("installed \(plugin.displayName)") }
+            catch { print("install \(plugin.displayName) failed: \(error.localizedDescription)") }
+        }
+        exit(0)
+    }
+
     static func runIfRequested() {
         let defaults = UserDefaults.standard
+        runAgentInstallIfRequested(defaults)
         applyDevLaunchOptions(defaults)
         runTranscriptionTestIfRequested(defaults)
         runS1TestIfRequested(defaults)

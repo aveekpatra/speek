@@ -30,6 +30,12 @@ else
       --entitlements "$PWD/Speek/Speek.local.entitlements" "$APP" >> "$LOG" 2>&1 \
       && echo "Re-signed with: $IDENTITY" || echo "Re-sign failed (see $LOG), app stays ad-hoc"
   fi
+  # One canonical copy: if Speek lives in /Applications, refresh it in place so the
+  # speek:// scheme, TCC grants and the Dock all point at the same bundle.
+  if [ -d /Applications/Speek.app ]; then
+    pkill -x Speek 2>/dev/null; sleep 0.3
+    ditto --norsrc "$APP" /Applications/Speek.app && APP=/Applications/Speek.app && echo "Installed to /Applications/Speek.app"
+  fi
   echo "BUILD OK: $APP"
 fi
 exit $STATUS

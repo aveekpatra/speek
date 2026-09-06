@@ -135,6 +135,8 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
     private func showRecorderPanel() {
         guard let engine = engine, let recorder = recorder else { return }
         guard SpeekSettings.shared.recordingWindowStyle != .none else { return }
+        // The agent reply panel shows recording state itself; keep the pill out of the way.
+        guard !AgentUpdateCenter.shared.isShowingPanel else { return }
 
         if miniWindowManager == nil {
             miniWindowManager = MiniWindowManager(

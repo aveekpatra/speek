@@ -2,19 +2,28 @@
 # Speek agent hook. Installed by Speek (Configuration > Advanced > Agent Plugins) to
 #   ~/Library/Application Support/Speek/hooks/speek-agent-hook
 # Usage:
-#   speek-agent-hook claude        (Claude Code hook: JSON payload on stdin)
-#   speek-agent-hook codex <json>  (Codex notify: JSON payload as the first argument)
+#   speek-agent-hook claude        Claude Code hook (~/.claude/settings.json), JSON on stdin
+#   speek-agent-hook codex         Codex hook (~/.codex/hooks.json), JSON on stdin
+#   speek-agent-hook codex <json>  legacy Codex `notify`, JSON as the first argument
 # It never blocks the agent: it forwards the event to Speek through the speek:// URL
 # scheme and exits 0 immediately.
+#
+# Mute per project with the /speek skill (or SPEEK_AGENT=0): it creates
+#   /tmp/speek-agent/disabled-<md5 of cwd>
 
 AGENT="${1:-claude}"
-if [ "$AGENT" = "codex" ]; then
-  PAYLOAD="${2:-}"
+if [ "$AGENT" = "codex" ] && [ -n "${2:-}" ]; then
+  PAYLOAD="$2"
 else
   PAYLOAD="$(cat 2>/dev/null)"
 fi
 
-export SPEEK_AGENT="$AGENT"
+[ "${SPEEK_AGENT:-1}" = "0" ] && exit 0
+STATE_DIR="${SPEEK_AGENT_STATE_DIR:-/tmp/speek-agent}"
+CWD_HASH=$(printf '%s' "$PWD" | /sbin/md5 -q 2>/dev/null || printf '%s' "$PWD" | md5sum | cut -d' ' -f1)
+[ -f "$STATE_DIR/disabled-$CWD_HASH" ] && exit 0
+
+export SPEEK_AGENT_NAME="$AGENT"
 export SPEEK_PAYLOAD="$PAYLOAD"
 export SPEEK_TERM_APP="${__CFBundleIdentifier:-}"
 export SPEEK_TERM_PROGRAM="${TERM_PROGRAM:-}"
@@ -25,12 +34,17 @@ ObjC.import("stdlib");
 function env(k) { var v = $.getenv(k); return v ? ObjC.unwrap(v) : ""; }
 var p = {};
 try { p = JSON.parse(env("SPEEK_PAYLOAD") || "{}"); } catch (e) { p = {}; }
-var agent = env("SPEEK_AGENT");
+var agent = env("SPEEK_AGENT_NAME");
 var event = p.hook_event_name || p.type || "";
 var message = p.message || p["last-assistant-message"] || p.last_assistant_message || "";
+var options = "";
 if (event === "PreToolUse" && p.tool_input) {
   if (p.tool_input.questions && p.tool_input.questions.length) {
     message = p.tool_input.questions.map(function (q) { return q.question; }).join("\n");
+    var first = p.tool_input.questions[0];
+    if (first && first.options && first.options.length) {
+      options = first.options.map(function (o) { return (o && o.label) ? o.label : String(o); }).join("\n");
+    }
   } else if (p.tool_input.question) {
     message = p.tool_input.question;
   }
@@ -51,7 +65,8 @@ var params = {
   app: env("SPEEK_TERM_APP"),
   term: env("SPEEK_TERM_PROGRAM"),
   notification: p.notification_type || "",
-  permission: p.permission_mode || ""
+  permission: p.permission_mode || "",
+  options: options
 };
 var parts = [];
 for (var k in params) { parts.push(k + "=" + enc(params[k])); }
@@ -62,9 +77,9 @@ if [ -n "$URL" ]; then
   /usr/bin/open -g "$URL" >/dev/null 2>&1 &
 fi
 
-# Keep a previously configured Codex notify command working.
+# Keep a previously configured Codex notify command working (legacy notify mode only).
 PREV_FILE="$HOME/Library/Application Support/Speek/hooks/codex-notify-previous"
-if [ "$AGENT" = "codex" ] && [ -s "$PREV_FILE" ]; then
+if [ "$AGENT" = "codex" ] && [ -n "${2:-}" ] && [ -s "$PREV_FILE" ]; then
   PREV_CMD="$(cat "$PREV_FILE")"
   if [ -n "$PREV_CMD" ]; then
     (eval "$PREV_CMD" "\"\$PAYLOAD\"" >/dev/null 2>&1 &)
