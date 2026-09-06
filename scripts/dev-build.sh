@@ -7,7 +7,8 @@ LOG=${LOG:-/tmp/speek-build.log}
 # rebuilds. Import ~/Speek-Dependencies/speek-dev-signing/speek-dev.p12 into the
 # login keychain (password: speek) and the build picks it up automatically.
 IDENTITY="-"
-if security find-identity -v -p codesigning 2>/dev/null | grep -q "Speek Dev Signing"; then
+# (no -v: the self-signed cert is untrusted by the system, codesign still accepts it)
+if security find-identity -p codesigning 2>/dev/null | grep -q "Speek Dev Signing"; then
   IDENTITY="Speek Dev Signing"
 fi
 echo "Signing with: $IDENTITY"
@@ -21,6 +22,14 @@ if [ $STATUS -ne 0 ]; then
   grep -E "error:|error :" "$LOG" | grep -v "^\s*$" | sort -u | head -${MAXERR:-40}
   echo "BUILD FAILED ($STATUS). Full log: $LOG"
 else
-  echo "BUILD OK: .local-build/Build/Products/Debug/Speek.app"
+  APP=.local-build/Build/Products/Debug/Speek.app
+  if [ "$IDENTITY" != "-" ]; then
+    # xcodebuild silently falls back to ad-hoc for an untrusted self-signed cert;
+    # re-sign the finished bundle so the TCC grant survives rebuilds.
+    codesign --force --deep --sign "$IDENTITY" \
+      --entitlements "$PWD/Speek/Speek.local.entitlements" "$APP" >> "$LOG" 2>&1 \
+      && echo "Re-signed with: $IDENTITY" || echo "Re-sign failed (see $LOG), app stays ad-hoc"
+  fi
+  echo "BUILD OK: $APP"
 fi
 exit $STATUS

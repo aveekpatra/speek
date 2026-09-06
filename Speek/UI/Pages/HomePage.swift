@@ -41,24 +41,40 @@ struct HomePage: View {
     /// rebuild of an ad-hoc signed app). Without Accessibility the global shortcut and
     /// pasting cannot work.
     private var accessibilityBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Accessibility permission is missing")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("Shortcuts and pasting need it. Repair re-registers this copy of Speek and asks again.")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Accessibility permission is missing")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Shortcuts and pasting need it. Repair re-registers this copy of Speek and asks again.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Repair") {
+                    AccessibilityRepair.resetAndReprompt {
+                        AccessibilityRepair.prompt()
+                        AccessibilityRepair.openSettings()
+                    }
+                }
+                .buttonStyle(.glassProminent)
+            }
+            HStack(spacing: 8) {
+                Text("Still not listed?")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Repair") {
-                AccessibilityRepair.resetAndReprompt {
-                    AccessibilityRepair.prompt()
-                    AccessibilityRepair.openSettings()
+                Button("Show Speek in Finder") { AccessibilityRepair.revealInFinder() }
+                    .help("Drag Speek from Finder into the Accessibility list in System Settings.")
+                if !AccessibilityRepair.isInstalledInApplications {
+                    Button("Move to Applications") { _ = AccessibilityRepair.moveToApplicationsAndRelaunch() }
+                        .help("macOS only remembers permissions reliably for apps in the Applications folder.")
                 }
+                Button("Open System Settings") { AccessibilityRepair.openSettings() }
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.glass)
+            .controlSize(.small)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.orange.opacity(0.12)))

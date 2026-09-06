@@ -29,6 +29,49 @@ enum AccessibilityRepair {
         AXIsProcessTrustedWithOptions(options)
     }
 
+    /// Selects the running app bundle in Finder so it can be dragged into the
+    /// Accessibility list by hand (the reliable fallback when the entry is missing).
+    @MainActor
+    static func revealInFinder() {
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+    }
+
+    /// True when the app runs from /Applications (or the user's Applications folder).
+    static var isInstalledInApplications: Bool {
+        let path = Bundle.main.bundleURL.standardizedFileURL.path
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return path.hasPrefix("/Applications/") || path.hasPrefix("\(home)/Applications/")
+    }
+
+    /// Copies this bundle to /Applications, strips quarantine, relaunches from there and quits.
+    /// A stable, non-translocated location is what makes the TCC entry stick.
+    @MainActor
+    static func moveToApplicationsAndRelaunch() -> Bool {
+        let source = Bundle.main.bundleURL
+        let destination = URL(fileURLWithPath: "/Applications").appendingPathComponent(source.lastPathComponent)
+        let fm = FileManager.default
+        do {
+            if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
+            try fm.copyItem(at: source, to: destination)
+        } catch {
+            // /Applications not writable for this user: open it so they can drag the app in.
+            NSWorkspace.shared.activateFileViewerSelecting([source])
+            NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
+            return false
+        }
+        let strip = Process()
+        strip.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        strip.arguments = ["-dr", "com.apple.quarantine", destination.path]
+        try? strip.run(); strip.waitUntilExit()
+
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: destination, configuration: config) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+        return true
+    }
+
     /// Opens the Accessibility pane in System Settings.
     @MainActor
     static func openSettings() {
