@@ -18,7 +18,7 @@ Liquid Glass interface and only ever uses local models: nothing you say leaves y
 - **Agent plugins**: Claude Code and Codex notify Speek when they finish, need permission, or ask a question; answer by voice (or type) in a reply panel and the answer goes straight back to the agent.
 - **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the screen edge and expands on hover into change-mode, record, and open-app controls. Its edge (Bottom, Top, Left, Right) is set next to it under Configuration > Appearance.
 - **Vocabulary and replacements**, searchable history with audio playback and a clear-all button, and a menu bar app with Transcribe File.
-- **Sound effects** (Simple / Classic / Off), silence removal, dynamic normalization, playback pause while recording.
+- **Sound collections** (Off, Simple, Classic, Ticks, Bells, Soft, plus macOS pairs like Glass, Ping, Hero, or two files of your own), silence removal, dynamic normalization, playback pause while recording.
 
 ## Install
 

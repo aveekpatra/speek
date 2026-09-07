@@ -2,362 +2,176 @@ import Foundation
 import AVFoundation
 import SwiftUI
 
+/// The recording sounds. One setting: a collection, which is a start/stop pair (or
+/// Off). Simple and Classic are collections like any other; Custom is two files of the
+/// user's own. Nothing else to toggle.
 class CustomSoundManager: ObservableObject {
     static let shared = CustomSoundManager()
 
-    enum BuiltInSound: String, CaseIterable, Identifiable {
-        case sound1
-        case sound2
-        case sound3
-        case sound4
-        case sound5
-        case sound6
-        case sound7
+    enum Collection: String, CaseIterable, Identifiable {
+        case off
+        case simple
+        case classic
+        case ticks
+        case bells
+        case soft
+        case glass
+        case ping
+        case hero
+        case blow
+        case morse
+        case frog
+        case custom
 
         var id: String { rawValue }
 
         var displayName: String {
-            "Sound \(number)"
-        }
-
-        var fileExtension: String {
             switch self {
-            case .sound1, .sound2, .sound3, .sound4, .sound7:
-                return "wav"
-            case .sound5, .sound6:
-                return "mp3"
+            case .off: return "Off"
+            case .simple: return "Simple"
+            case .classic: return "Classic"
+            case .ticks: return "Ticks"
+            case .bells: return "Bells"
+            case .soft: return "Soft"
+            case .glass: return "Glass"
+            case .ping: return "Ping"
+            case .hero: return "Hero"
+            case .blow: return "Blow"
+            case .morse: return "Morse"
+            case .frog: return "Frog"
+            case .custom: return "Custom..."
             }
         }
 
-        var bundleURL: URL? {
-            Bundle.main.url(forResource: rawValue, withExtension: fileExtension) ??
-                Bundle.main.url(forResource: rawValue, withExtension: fileExtension, subdirectory: "Sounds")
+        /// Start and stop files. macOS system sounds by name, Speek's own by resource.
+        var pair: (start: URL?, stop: URL?) {
+            switch self {
+            case .off: return (nil, nil)
+            case .simple: return (system("Tink"), system("Pop"))
+            case .classic: return (bundled("sound5", "mp3"), bundled("sound6", "mp3"))
+            case .ticks: return (bundled("sound8", "wav"), bundled("sound9", "wav"))
+            case .bells: return (bundled("sound1", "wav"), bundled("sound2", "wav"))
+            case .soft: return (bundled("sound3", "wav"), bundled("sound4", "wav"))
+            case .glass: return (system("Glass"), system("Purr"))
+            case .ping: return (system("Ping"), system("Bottle"))
+            case .hero: return (system("Hero"), system("Submarine"))
+            case .blow: return (system("Blow"), system("Funk"))
+            case .morse: return (system("Morse"), system("Basso"))
+            case .frog: return (system("Frog"), system("Sosumi"))
+            case .custom: return (nil, nil)   // resolved from the imported files
+            }
         }
 
-        private var number: Int {
-            Int(rawValue.replacingOccurrences(of: "sound", with: "")) ?? 0
+        private func system(_ name: String) -> URL {
+            URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
+        }
+
+        private func bundled(_ name: String, _ ext: String) -> URL? {
+            Bundle.main.url(forResource: name, withExtension: ext) ??
+                Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Sounds")
         }
     }
 
-    enum SoundType: String {
+    enum SoundType: String, CaseIterable {
         case start
         case stop
-
-        var selectionKey: String { "selected\(rawValue.capitalized)SoundSelection" }
-        var filenameKey: String { "custom\(rawValue.capitalized)SoundFilename" }
-        var builtInSoundKey: String { "selected\(rawValue.capitalized)BuiltInSound" }
         var standardName: String { "Custom\(rawValue.capitalized)Sound" }
-        var defaultBuiltInSound: BuiltInSound {
-            switch self {
-            case .start:
-                return .sound5
-            case .stop:
-                return .sound6
-            }
-        }
+        var fileKey: String { "speek.sound.custom.\(rawValue)" }
     }
 
-    enum SoundSelection: Equatable {
-        case none
-        case builtIn(BuiltInSound)
-        case custom(String)
+    static let escapeSoundURL: URL? = Bundle.main.url(forResource: "sound7", withExtension: "wav") ??
+        Bundle.main.url(forResource: "sound7", withExtension: "wav", subdirectory: "Sounds")
 
-        var isEnabled: Bool {
-            self != .none
-        }
-
-        var isCustom: Bool {
-            if case .custom = self {
-                return true
-            }
-            return false
-        }
-
-        fileprivate var storageValue: String {
-            switch self {
-            case .none:
-                return "none"
-            case .builtIn:
-                return "builtIn"
-            case .custom:
-                return "custom"
-            }
-        }
-    }
-
+    private static let collectionKey = "speek.sound.collection"
     private let maxSoundDuration: TimeInterval = 3.0
 
-    @Published private var startSoundSelection: SoundSelection {
+    @Published var collection: Collection {
         didSet {
-            saveSoundSelection(startSoundSelection, for: .start)
+            UserDefaults.standard.set(collection.rawValue, forKey: Self.collectionKey)
+            UserDefaults.standard.set(collection != .off, forKey: "isSoundFeedbackEnabled")
+            notifyChanged()
         }
     }
 
-    @Published private var stopSoundSelection: SoundSelection {
-        didSet {
-            saveSoundSelection(stopSoundSelection, for: .stop)
-        }
-    }
-
-    private var startBuiltInSound: BuiltInSound {
-        didSet { UserDefaults.standard.set(startBuiltInSound.rawValue, forKey: SoundType.start.builtInSoundKey) }
-    }
-
-    private var stopBuiltInSound: BuiltInSound {
-        didSet { UserDefaults.standard.set(stopBuiltInSound.rawValue, forKey: SoundType.stop.builtInSoundKey) }
-    }
-
-    private var customStartSoundFilename: String? {
-        didSet { updateFilenameInUserDefaults(filename: customStartSoundFilename, for: .start) }
-    }
-
-    private var customStopSoundFilename: String? {
-        didSet { updateFilenameInUserDefaults(filename: customStopSoundFilename, for: .stop) }
-    }
-
-    private func updateFilenameInUserDefaults(filename: String?, for type: SoundType) {
-        if let filename = filename {
-            UserDefaults.standard.set(filename, forKey: type.filenameKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: type.filenameKey)
-        }
-    }
+    /// Imported file names for the Custom collection (under Application Support).
+    @Published private(set) var customStartFile: String?
+    @Published private(set) var customStopFile: String?
 
     private init() {
-        let savedStartBuiltInSound = Self.savedBuiltInSound(for: .start)
-        let savedStopBuiltInSound = Self.savedBuiltInSound(for: .stop)
-        let savedStartFilename = UserDefaults.standard.string(forKey: SoundType.start.filenameKey)
-        let savedStopFilename = UserDefaults.standard.string(forKey: SoundType.stop.filenameKey)
-        let legacySoundFeedbackEnabled = UserDefaults.standard.object(forKey: "isSoundFeedbackEnabled")
-            .map { _ in UserDefaults.standard.bool(forKey: "isSoundFeedbackEnabled") }
-
-        self.startBuiltInSound = savedStartBuiltInSound
-        self.stopBuiltInSound = savedStopBuiltInSound
-        self.customStartSoundFilename = savedStartFilename
-        self.customStopSoundFilename = savedStopFilename
-        self.startSoundSelection = Self.savedSoundSelection(
-            for: .start,
-            builtInSound: savedStartBuiltInSound,
-            customFilename: savedStartFilename,
-            legacySoundFeedbackEnabled: legacySoundFeedbackEnabled
-        )
-        self.stopSoundSelection = Self.savedSoundSelection(
-            for: .stop,
-            builtInSound: savedStopBuiltInSound,
-            customFilename: savedStopFilename,
-            legacySoundFeedbackEnabled: legacySoundFeedbackEnabled
-        )
-
-        createCustomSoundsDirectoryIfNeeded()
-        saveSoundSelection(startSoundSelection, for: .start)
-        saveSoundSelection(stopSoundSelection, for: .stop)
-    }
-
-    private static func savedSoundSelection(
-        for type: SoundType,
-        builtInSound: BuiltInSound,
-        customFilename: String?,
-        legacySoundFeedbackEnabled: Bool?
-    ) -> SoundSelection {
-        switch UserDefaults.standard.string(forKey: type.selectionKey) {
-        case "none":
-            return .none
-        case "custom":
-            return customFilename.map(SoundSelection.custom) ?? .builtIn(builtInSound)
-        case nil:
-            guard let legacySoundFeedbackEnabled else {
-                return .builtIn(builtInSound)
+        let defaults = UserDefaults.standard
+        if let stored = defaults.string(forKey: Self.collectionKey), let saved = Collection(rawValue: stored) {
+            collection = saved
+        } else {
+            // One-time carry-over from the old Simple / Classic / Off style setting.
+            switch defaults.string(forKey: "speek.soundEffects") {
+            case "off": collection = .off
+            case "simple": collection = .simple
+            default: collection = .classic
             }
-            return legacySoundFeedbackEnabled ? .builtIn(builtInSound) : .none
-        default:
-            return .builtIn(builtInSound)
         }
+        customStartFile = defaults.string(forKey: SoundType.start.fileKey)
+        customStopFile = defaults.string(forKey: SoundType.stop.fileKey)
+        createCustomSoundsDirectoryIfNeeded()
     }
 
-    private static func savedBuiltInSound(for type: SoundType) -> BuiltInSound {
-        if let rawValue = UserDefaults.standard.string(forKey: type.builtInSoundKey),
-           let sound = BuiltInSound(rawValue: rawValue) {
-            return sound
+    var isEnabled: Bool { collection != .off }
+
+    var hasAnyRecordingSoundEnabled: Bool { isEnabled }
+
+    /// The file that plays for this slot with the current collection; nil is silence.
+    func resolvedURL(for type: SoundType) -> URL? {
+        if collection == .custom {
+            let file = type == .start ? customStartFile : customStopFile
+            return file.flatMap { customSoundsDirectory()?.appendingPathComponent($0) }
         }
-
-        return type.defaultBuiltInSound
+        let pair = collection.pair
+        return type == .start ? pair.start : pair.stop
     }
 
-    private func customSoundsDirectory() -> URL? {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        return appSupport.appendingPathComponent("Speek/CustomSounds")
+    func customFileName(for type: SoundType) -> String? {
+        let file = type == .start ? customStartFile : customStopFile
+        return file.map { ($0 as NSString).deletingPathExtension }
     }
 
-    private func createCustomSoundsDirectoryIfNeeded() {
-        guard let directory = customSoundsDirectory() else { return }
-
-        if !FileManager.default.fileExists(atPath: directory.path) {
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-    }
-
-    func getCustomSoundURL(for type: SoundType) -> URL? {
-        guard case .custom(let filename) = soundSelection(for: type),
-              let directory = customSoundsDirectory() else {
-            return nil
-        }
-        return directory.appendingPathComponent(filename)
-    }
-
-    func builtInSoundURL(for type: SoundType) -> URL? {
-        switch soundSelection(for: type) {
-        case .none:
-            return nil
-        case .builtIn(let sound):
-            return sound.bundleURL
-        case .custom:
-            return storedBuiltInSound(for: type).bundleURL
-        }
-    }
-
-    var hasAnyRecordingSoundEnabled: Bool {
-        startSoundSelection.isEnabled || stopSoundSelection.isEnabled
-    }
-
-    func isSoundEnabled(for type: SoundType) -> Bool {
-        soundSelection(for: type).isEnabled
-    }
-
-    func soundSelection(for type: SoundType) -> SoundSelection {
-        switch type {
-        case .start:
-            return startSoundSelection
-        case .stop:
-            return stopSoundSelection
-        }
-    }
-
-    private func storedBuiltInSound(for type: SoundType) -> BuiltInSound {
-        switch type {
-        case .start:
-            return startBuiltInSound
-        case .stop:
-            return stopBuiltInSound
-        }
-    }
-
-    private func setSoundSelection(_ selection: SoundSelection, for type: SoundType) {
-        switch type {
-        case .start:
-            startSoundSelection = selection
-        case .stop:
-            stopSoundSelection = selection
-        }
-    }
-
-    private func saveSoundSelection(_ selection: SoundSelection, for type: SoundType) {
-        UserDefaults.standard.set(selection.storageValue, forKey: type.selectionKey)
-    }
-
-    func selectNoSound(for type: SoundType) {
-        switch type {
-        case .start:
-            startSoundSelection = .none
-        case .stop:
-            stopSoundSelection = .none
-        }
-        notifyCustomSoundsChanged()
-    }
-
-    func selectBuiltInSound(_ sound: BuiltInSound, for type: SoundType) {
-        switch type {
-        case .start:
-            startBuiltInSound = sound
-            startSoundSelection = .builtIn(sound)
-        case .stop:
-            stopBuiltInSound = sound
-            stopSoundSelection = .builtIn(sound)
-        }
-
-        notifyCustomSoundsChanged()
-    }
-
-    func useCustomSound(for type: SoundType) {
-        guard let filename = getSoundDisplayName(for: type) else { return }
-        setSoundSelection(.custom(filename), for: type)
-
-        notifyCustomSoundsChanged()
-    }
+    // MARK: Imported files
 
     func setCustomSound(url: URL, for type: SoundType) -> Result<Void, CustomSoundError> {
-        let result = validateAudioFile(url: url)
-        switch result {
-        case .success:
-            let copyResult = copySoundFile(from: url, standardName: type.standardName)
-            switch copyResult {
-            case .success(let filename):
-                if type == .start {
-                    customStartSoundFilename = filename
-                } else {
-                    customStopSoundFilename = filename
-                }
-                setSoundSelection(.custom(filename), for: type)
-                notifyCustomSoundsChanged()
-                return .success(())
-            case .failure(let error):
-                return .failure(error)
-            }
+        if case .failure(let error) = validateAudioFile(url: url) { return .failure(error) }
+        switch copySoundFile(from: url, standardName: type.standardName) {
+        case .success(let filename):
+            if type == .start { customStartFile = filename } else { customStopFile = filename }
+            UserDefaults.standard.set(filename, forKey: type.fileKey)
+            if collection != .custom { collection = .custom } else { notifyChanged() }
+            return .success(())
         case .failure(let error):
             return .failure(error)
         }
     }
 
-    func resetSoundToDefault(for type: SoundType) {
-        let filename = (type == .start) ? customStartSoundFilename : customStopSoundFilename
-
-        if let filename = filename, let directory = customSoundsDirectory() {
-            let fileURL = directory.appendingPathComponent(filename)
-            try? FileManager.default.removeItem(at: fileURL)
-        }
-
-        if type == .start {
-            startBuiltInSound = type.defaultBuiltInSound
-            customStartSoundFilename = nil
-            startSoundSelection = .builtIn(type.defaultBuiltInSound)
-        } else {
-            stopBuiltInSound = type.defaultBuiltInSound
-            customStopSoundFilename = nil
-            stopSoundSelection = .builtIn(type.defaultBuiltInSound)
-        }
-        notifyCustomSoundsChanged()
-    }
-
-    private func notifyCustomSoundsChanged() {
+    private func notifyChanged() {
         NotificationCenter.default.post(name: NSNotification.Name("CustomSoundsChanged"), object: nil)
     }
 
-    func getSoundDisplayName(for type: SoundType) -> String? {
-        return (type == .start) ? customStartSoundFilename : customStopSoundFilename
+    private func customSoundsDirectory() -> URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Speek/CustomSounds")
     }
 
-    func isDefaultSelection(for type: SoundType) -> Bool {
-        soundSelection(for: type) == .builtIn(type.defaultBuiltInSound)
+    private func createCustomSoundsDirectoryIfNeeded() {
+        guard let directory = customSoundsDirectory() else { return }
+        if !FileManager.default.fileExists(atPath: directory.path) {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
     }
 
     private func copySoundFile(from sourceURL: URL, standardName: String) -> Result<String, CustomSoundError> {
-        guard let directory = customSoundsDirectory() else {
-            return .failure(.directoryCreationFailed)
-        }
-
-        let fileExtension = sourceURL.pathExtension
-        let newFilename = "\(standardName).\(fileExtension)"
+        guard let directory = customSoundsDirectory() else { return .failure(.directoryCreationFailed) }
+        let newFilename = "\(standardName).\(sourceURL.pathExtension)"
         let destinationURL = directory.appendingPathComponent(newFilename)
-
-        if sourceURL.resolvingSymlinksInPath() == destinationURL.resolvingSymlinksInPath() {
-            return .success(newFilename)
-        }
-
+        if sourceURL.resolvingSymlinksInPath() == destinationURL.resolvingSymlinksInPath() { return .success(newFilename) }
         if FileManager.default.fileExists(atPath: destinationURL.path) {
             try? FileManager.default.removeItem(at: destinationURL)
         }
-
         do {
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
             return .success(newFilename)
@@ -367,27 +181,13 @@ class CustomSoundManager: ObservableObject {
     }
 
     private func validateAudioFile(url: URL) -> Result<Void, CustomSoundError> {
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            return .failure(.fileNotFound)
-        }
-
-        let asset = AVAsset(url: url)
-        let duration = asset.duration.seconds
-
-        guard duration.isFinite && duration > 0 else {
-            return .failure(.invalidAudioFile)
-        }
-
+        guard FileManager.default.fileExists(atPath: url.path) else { return .failure(.fileNotFound) }
+        let duration = AVAsset(url: url).duration.seconds
+        guard duration.isFinite && duration > 0 else { return .failure(.invalidAudioFile) }
         if duration > maxSoundDuration {
             return .failure(.durationTooLong(duration: duration, maxDuration: maxSoundDuration))
         }
-
-        do {
-            _ = try AVAudioPlayer(contentsOf: url)
-        } catch {
-            return .failure(.invalidAudioFile)
-        }
-
+        do { _ = try AVAudioPlayer(contentsOf: url) } catch { return .failure(.invalidAudioFile) }
         return .success(())
     }
 }

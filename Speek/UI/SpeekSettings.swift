@@ -81,22 +81,6 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
     }
 }
 
-enum SoundEffectsStyle: String, CaseIterable, Identifiable {
-    case simple
-    case classic
-    case off
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .simple: return "Simple"
-        case .classic: return "Classic"
-        case .off: return "Off"
-        }
-    }
-}
-
 enum PlaybackWhenRecording: String, CaseIterable, Identifiable {
     case pause
     case mute
@@ -311,12 +295,6 @@ final class SpeekSettings: ObservableObject {
             MediaController.shared.isSystemMuteEnabled = (policy == .mute)
         }
     }
-    @Published var soundEffects: SoundEffectsStyle {
-        didSet {
-            defaults.set(soundEffects.rawValue, forKey: Keys.soundEffects)
-            defaults.set(soundEffects != .off, forKey: "isSoundFeedbackEnabled")
-        }
-    }
     @Published var soundVolume: Double { didSet { defaults.set(soundVolume, forKey: Keys.soundVolume) } }
 
     // Home
@@ -366,7 +344,6 @@ final class SpeekSettings: ObservableObject {
         playbackWhenRecording = playback
         d.set(playback == .pause, forKey: "isPauseMediaEnabled")
         d.set(playback == .mute, forKey: "isSystemMuteEnabled")
-        soundEffects = SoundEffectsStyle(rawValue: d.string(forKey: Keys.soundEffects) ?? "") ?? .classic
         soundVolume = d.object(forKey: Keys.soundVolume) as? Double ?? 1.0
         statsRange = StatsRange(rawValue: d.string(forKey: Keys.statsRange) ?? "") ?? .allTime
         typingWordsPerMinute = d.object(forKey: Keys.typingWPM) as? Int ?? 40
@@ -420,7 +397,6 @@ final class SpeekSettings: ObservableObject {
         static let silenceRemoval = "speek.silenceRemoval"
         static let dynamicNormalization = "speek.dynamicNormalization"
         static let playbackWhenRecording = "speek.playbackWhenRecording"
-        static let soundEffects = "speek.soundEffects"
         static let soundVolume = "speek.soundVolume"
         static let statsRange = "speek.statsRange"
         static let typingWPM = "speek.typingWPM"

@@ -44,7 +44,7 @@ Welcome, permissions (Microphone, Accessibility), voice model download, shortcut
 | Vocabulary | Add word / Replace with, list, replacement editor, import/export |
 | Agent Panel | Connect Claude Code and Codex; panel position (Bottom, Center, Top; always horizontally centred), sound, auto-send, hide duration, preview; per-project mute |
 | Configuration | Appearance (theme, recording window, always show, pill position), Keyboard Shortcuts, Application, Advanced settings (Dock, voice model active duration, app folder, clipboard and paste) |
-| Sound | Recording toggles, playback behavior, sound effects style and volume |
+| Sound | Recording toggles, playback behavior, sound collection (start/stop pair) and volume |
 | Models library | Model table |
 | History | Search, date groups, detail with audio player and metadata, clear all |
 | Speek (footer) | Version, updates, credits, links |

@@ -20,12 +20,14 @@ class SoundManager: ObservableObject {
 
     private func setupSounds() {
         let customSoundManager = CustomSoundManager.shared
+        // Each slot resolves to exactly one file (style default, bundled, macOS system
+        // sound, or an imported file); nil means that slot is silent.
         playbackEngine.setup(
-            defaultStartURL: customSoundManager.builtInSoundURL(for: .start),
-            defaultStopURL: customSoundManager.builtInSoundURL(for: .stop),
-            defaultEscURL: CustomSoundManager.BuiltInSound.sound7.bundleURL,
-            customStartURL: customSoundManager.getCustomSoundURL(for: .start),
-            customStopURL: customSoundManager.getCustomSoundURL(for: .stop)
+            defaultStartURL: customSoundManager.resolvedURL(for: .start),
+            defaultStopURL: customSoundManager.resolvedURL(for: .stop),
+            defaultEscURL: CustomSoundManager.escapeSoundURL,
+            customStartURL: nil,
+            customStopURL: nil
         )
     }
 
@@ -34,7 +36,7 @@ class SoundManager: ObservableObject {
     }
 
     private var isEnabled: Bool {
-        SpeekSettings.shared.soundEffects != .off
+        CustomSoundManager.shared.isEnabled
     }
 
     private func applyVolume() {

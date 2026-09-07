@@ -223,7 +223,7 @@ final class AgentUpdateCenter: ObservableObject {
         if !isSnoozed || isNewSession || update.kind == .permission || update.kind == .question {
             showPanel()
         }
-        if SpeekSettings.shared.agentSound && SpeekSettings.shared.soundEffects != .off {
+        if SpeekSettings.shared.agentSound && CustomSoundManager.shared.isEnabled {
             NSSound(named: "Tink")?.play()
         }
     }
