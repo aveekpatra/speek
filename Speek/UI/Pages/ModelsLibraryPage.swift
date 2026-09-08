@@ -105,7 +105,6 @@ struct ModelsLibraryPage: View {
             ForEach(filteredModels) { model in
                 LibraryModelRow(
                     model: model,
-                    isActive: isActive(model),
                     onPrimary: { primaryAction(for: model) },
                     onDelete: { pendingDelete = model },
                     onReveal: { reveal(model) }
@@ -305,11 +304,6 @@ struct ModelsLibraryPage: View {
         }
     }
 
-    private func isActive(_ model: LibraryModel) -> Bool {
-        guard let current = transcriptionModelManager.currentTranscriptionModel else { return false }
-        return model.transcriptionModel?.name == current.name
-    }
-
     // MARK: Actions
 
     private func primaryAction(for model: LibraryModel) {
@@ -317,9 +311,8 @@ struct ModelsLibraryPage: View {
         case .notDownloaded:
             download(model)
         case .downloaded, .builtIn:
-            if let transcriptionModel = model.transcriptionModel {
-                transcriptionModelManager.setDefaultTranscriptionModel(transcriptionModel)
-            }
+            // Which model a dictation uses is decided per mode, under Modes.
+            break
         case .downloading:
             if model.provider == .cohere { cohereModelManager.cancelDownload() }
             if model.id == CanaryModelManager.modelName { canaryModelManager.cancelDownload() }
@@ -421,7 +414,6 @@ private enum LibraryColumns {
 private struct LibraryModelRow: View {
     @Environment(\.colorScheme) private var scheme
     let model: LibraryModel
-    let isActive: Bool
     let onPrimary: () -> Void
     let onDelete: () -> Void
     let onReveal: () -> Void
@@ -478,10 +470,9 @@ private struct LibraryModelRow: View {
         )
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .onTapGesture { onPrimary() }
+        .onTapGesture { if case .notDownloaded = model.availability { onPrimary() } }
         .contextMenu {
             if case .downloaded = model.availability {
-                if model.transcriptionModel != nil { Button("Use this model") { onPrimary() } }
                 if canDelete {
                     Button("Show in Finder") { onReveal() }
                     Divider()
@@ -529,12 +520,7 @@ private struct LibraryModelRow: View {
                     .help("Delete downloaded files")
                     .transition(.opacity)
                 }
-                statusLabel(isActive ? "Active" : "Installed", color: isActive ? .green : .secondary)
-                if model.transcriptionModel != nil || model.kind == .text {
-                    Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 15))
-                        .foregroundStyle(isActive ? Color.green : Color.secondary)
-                }
+                statusLabel("Installed")
             }
             .animation(.easeOut(duration: 0.15), value: hovering)
         case .downloading(let fraction, _):

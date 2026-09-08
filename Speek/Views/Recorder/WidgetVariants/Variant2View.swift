@@ -596,7 +596,7 @@ private struct ShimmerTranscriptText: View {
     var body: some View {
         if committed.isEmpty && partial.isEmpty {
             // Empty default state: a faint prompt so the panel isn't blank on spawn.
-            Text("Start speaking...")
+            Text("Start speaking")
                 .foregroundColor(.white.opacity(0.3))
         } else if isEnhancing {
             // While the text is being polished, sweep a bright highlight across the

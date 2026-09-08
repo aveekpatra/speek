@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import os
 
 @MainActor
@@ -20,7 +21,10 @@ final class TranscriptionDelivery {
         // Called instead of `dismiss` when the transcript went to the clipboard
         // because no editable field was focused — shows a brief in-panel hint
         // before dismissing rather than a toast that overlaps the panel.
-        let showPasteHint: (String) async -> Void
+        // `alreadyCopied` true: the text is on the clipboard (paste switched off).
+        // false: the paste was attempted but the target could not be confirmed; the
+        // clipboard is untouched and the panel offers a Copy button.
+        let showPasteHint: (String, _ alreadyCopied: Bool) async -> Void
         let sendFollowUp: (String, Transcription) async -> Void
         let showResponse: (String, String?) async -> Void
         let failResponse: (String) async -> Void
@@ -153,13 +157,20 @@ final class TranscriptionDelivery {
 
     private func paste(_ text: String, output: OutputRuntimeConfiguration, actions: Actions) async {
         let textToPaste = deliverableText(from: text)
+        // Filler-only dictation cleaned down to nothing: close quietly, paste nothing.
+        if textToPaste.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            await actions.dismiss()
+            return
+        }
         let appendSpace = UserDefaults.standard.bool(forKey: "AppendTrailingSpace")
         let pastedText = textToPaste + (appendSpace ? " " : "")
         SoundManager.shared.playStopSound()
 
-        // An agent panel is up (Claude Code / Codex): the dictation goes into its reply
-        // box, and Return there sends it to the agent's terminal.
-        let agentPanelIsUp = await MainActor.run { AgentUpdateCenter.shared.isShowingPanel }
+        // The agent reply box (Claude Code / Codex) has keyboard focus: the dictation
+        // goes there, and Return sends it. Any other focus, including the agent's own
+        // composer, gets a normal paste even while a session is waiting.
+        let agentPanelIsUp = await MainActor.run { AgentUpdateCenter.shared.isCapturingDictation }
+        logger.notice("Deliver: agentReplyBoxFocused=\(agentPanelIsUp, privacy: .public) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?", privacy: .public)")
         if agentPanelIsUp {
             await actions.dismiss()
             await MainActor.run { AgentUpdateCenter.shared.insertTranscript(textToPaste) }
@@ -170,24 +181,24 @@ final class TranscriptionDelivery {
         let pasteEnabled = UserDefaults.standard.object(forKey: "speek.pasteResultText") as? Bool ?? true
         if !pasteEnabled {
             _ = ClipboardManager.setClipboard(pastedText, transient: true, sessionID: nil)
-            await actions.showPasteHint(pastedText)
+            await actions.showPasteHint(pastedText, true)
             return
         }
 
-        // Check editability up front (not just inside CursorPaster) so we know
-        // whether to dismiss now or leave the panel up to show the paste hint.
-        guard CursorPaster.focusedElementLikelyEditable() else {
-            // transient: true tags the dictated text as auto-generated/transient
-            // (org.nspasteboard) so clipboard managers like Maccy/Raycast don't
-            // permanently store it — it stays pasteable via ⌘V either way.
-            _ = ClipboardManager.setClipboard(pastedText, transient: true, sessionID: nil)
-            await actions.showPasteHint(pastedText)
+        // Probe while the user's focus is untouched (the pill never takes key status).
+        // The paste goes ahead either way; the answer only decides whether to walk away
+        // quietly or to stay up and offer a Copy button.
+        let targetConfirmed = CursorPaster.focusedElementLikelyEditable()
+        if !targetConfirmed {
+            let attempt = CursorPaster.startPasteAtCursor(pastedText, targetConfirmed: false)
+            _ = await attempt.value
+            await actions.showPasteHint(pastedText, false)
             return
         }
 
         await actions.dismiss()
 
-        let pasteTask = CursorPaster.startPasteAtCursor(pastedText)
+        let pasteTask = CursorPaster.startPasteAtCursor(pastedText, targetConfirmed: true)
 
         let autoSendKey = output.outputMode == .paste ? output.autoSendKey : .none
         Task { @MainActor in

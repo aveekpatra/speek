@@ -30,11 +30,15 @@ class CursorPaster {
         }
     }
 
+    /// - Parameter targetConfirmed: result of `focusedElementLikelyEditable()` if the
+    ///   caller already probed; nil probes here. When the target is not confirmed the
+    ///   previous clipboard is always put back afterwards, so the user's clipboard is
+    ///   not silently replaced by a transcript that may not have landed anywhere.
     @MainActor
     @discardableResult
-    static func startPasteAtCursor(_ text: String) -> Task<PasteResult, Never> {
+    static func startPasteAtCursor(_ text: String, targetConfirmed: Bool? = nil) -> Task<PasteResult, Never> {
         Task { @MainActor in
-            await performPasteSession(text)
+            await performPasteSession(text, targetConfirmed: targetConfirmed)
         }
     }
 
@@ -43,33 +47,35 @@ class CursorPaster {
         await startPasteAtCursor(text).value
     }
 
-    /// Pastes without the editability check. For targets we already know accept text
-    /// (an agent's terminal we just activated), where the AX probe is unreliable.
+    /// Same as `pasteAtCursorAndWaitUntilPosted`; kept for callers that already know
+    /// their target (an agent's terminal we just activated).
     @MainActor
     static func forcePasteAtCursor(_ text: String) async -> PasteResult {
-        await performPasteSession(text, requireEditableTarget: false)
+        await performPasteSession(text)
     }
 
     @MainActor
-    private static func performPasteSession(_ text: String, requireEditableTarget: Bool = true) async -> PasteResult {
+    private static func performPasteSession(_ text: String, targetConfirmed: Bool? = nil) async -> PasteResult {
         let pasteboard = NSPasteboard.general
 
-        // No editable target to paste into: don't fire ⌘V (which makes macOS beep
-        // and, with clipboard-restore on, would also drop the text). Instead just
-        // leave the transcript on the clipboard so it can be pasted later with ⌘V.
-        if requireEditableTarget && !focusedElementLikelyEditable() {
-            // transient: true tags the dictated text as auto-generated/transient
-            // (org.nspasteboard) so clipboard managers like Maccy/Raycast don't
-            // permanently store it — it stays pasteable via ⌘V either way.
-            _ = ClipboardManager.setClipboard(text, transient: true, sessionID: nil)
-            NotificationManager.shared.showNotification(
-                title: String(localized: "Copied to clipboard — paste anywhere with ⌘V"),
-                type: .success
-            )
-            return .commandNotPosted
+        // Always paste. The accessibility probe is advisory only: Firefox-based browsers
+        // (Zen, Firefox) answer "the window is focused" while the caret sits in a text
+        // box, and Electron apps answer nothing at all until their tree is switched on.
+        // Gating Cmd+V on that answer is what made dictation land on the clipboard
+        // instead of in Discord, Slack and the like. A Cmd+V that lands nowhere is
+        // harmless; a transcript stranded on the clipboard is not.
+        //
+        // What the probe still decides: what happens to the clipboard afterwards. A
+        // confirmed text target follows the "restore clipboard" setting. An unconfirmed
+        // one always gets the previous clipboard back, and the recorder offers a Copy
+        // button instead of replacing the clipboard behind the user's back.
+        let targetIsKnownEditable = targetConfirmed ?? focusedElementLikelyEditable()
+        let shouldRestoreClipboard = targetIsKnownEditable
+            ? UserDefaults.standard.bool(forKey: "restoreClipboardAfterPaste")
+            : true
+        if !targetIsKnownEditable {
+            logger.notice("Focused element not confirmed editable; pasting anyway and restoring the clipboard")
         }
-
-        let shouldRestoreClipboard = UserDefaults.standard.bool(forKey: "restoreClipboardAfterPaste")
         let savedContents = shouldRestoreClipboard ? snapshotClipboard(from: pasteboard) : []
         let sessionID = UUID().uuidString
 
@@ -187,14 +193,13 @@ class CursorPaster {
 
     // MARK: - Paste target detection
 
-    /// True when the system-wide focused element can accept pasted text (a text
-    /// field/area, combo box, or anything with a settable value — covers most web
-    /// editors). When nothing is focused or the focus is non-editable, returns
-    /// false so the caller copies to the clipboard instead of pasting.
-    ///
-    /// Exposed (not `private`) so callers can decide up front whether a paste will
-    /// land in an editable field — e.g. the recorder panel uses this to know
-    /// whether to dismiss immediately or show a "⌘V to paste" hint first.
+    /// Advisory: true when the focused element is confirmed as a text target (a text
+    /// field or area, a settable value, or a readable selected-text range, which is
+    /// how Slack, Discord and Gecko composers expose themselves). Never gates the
+    /// paste itself; it only decides whether the previous clipboard is restored and
+    /// whether the recorder offers a Copy button. Gecko browsers report the window as
+    /// focused until their tree is up and Electron apps report nothing, so "unknown"
+    /// is common and must not be treated as "nowhere to paste".
     @MainActor
     static func focusedElementLikelyEditable() -> Bool {
         guard AXIsProcessTrusted() else { return true } // can't detect → behave as before
@@ -221,50 +226,70 @@ class CursorPaster {
             status = AXUIElementCopyAttributeValue(frontApp, kAXFocusedUIElementAttribute as CFString, &focusedRef)
         }
         guard status == .success, let focused = focusedRef else {
-            // Unknown is not "nowhere". Native apps with custom composers (the Codex
-            // desktop app among them) answer "no focused element" even while the user
-            // is typing in them. If the frontmost app has a focused window, the paste
-            // goes ahead; only an app with no window at all (the desktop) refuses.
-            // A stray ⌘V is harmless, a transcript stranded on the clipboard is not.
-            guard let frontApp else { return true }
-            var windowRef: CFTypeRef?
-            let hasWindow = AXUIElementCopyAttributeValue(frontApp, kAXFocusedWindowAttribute as CFString, &windowRef) == .success
-            logger.notice("Focused element unknown (\(status.rawValue)); frontmost has focused window: \(hasWindow)")
-            return hasWindow
-        }
-        let element = focused as! AXUIElement
-
-        var roleRef: CFTypeRef?
-        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
-        let role = (roleRef as? String) ?? ""
-
-        // Only refuse when the focus is clearly not a text target (a button, a list row,
-        // a window with nothing focused inside). Everything else (web areas, editors,
-        // terminals, custom views) gets the paste: a ⌘V that lands nowhere is harmless,
-        // a transcript that silently stays on the clipboard is not.
-        let nonEditableRoles: Set<String> = [
-            kAXButtonRole as String, kAXCheckBoxRole as String, kAXRadioButtonRole as String,
-            kAXPopUpButtonRole as String, kAXMenuButtonRole as String, kAXMenuItemRole as String,
-            kAXSliderRole as String, kAXImageRole as String, kAXRowRole as String, kAXCellRole as String,
-            kAXTableRole as String, kAXOutlineRole as String, kAXListRole as String,
-            kAXWindowRole as String, kAXApplicationRole as String, kAXToolbarRole as String,
-            kAXTabGroupRole as String, kAXDisclosureTriangleRole as String, kAXIncrementorRole as String,
-        ]
-        if nonEditableRoles.contains(role) {
-            // A focused window or app with a text field inside still counts.
-            if role == kAXWindowRole as String || role == kAXApplicationRole as String {
-                var inner: CFTypeRef?
-                if AXUIElementCopyAttributeValue(element, kAXFocusedUIElementAttribute as CFString, &inner) == .success,
-                   let innerElement = inner {
-                    var innerRoleRef: CFTypeRef?
-                    AXUIElementCopyAttributeValue(innerElement as! AXUIElement, kAXRoleAttribute as CFString, &innerRoleRef)
-                    let innerRole = (innerRoleRef as? String) ?? ""
-                    return !nonEditableRoles.contains(innerRole)
-                }
-            }
+            // Nothing readable in focus. That is not "nowhere": Electron apps with their
+            // tree still off answer this way. The paste is attempted regardless; only
+            // the clipboard restore and the Copy offer key off this answer.
+            logger.notice("Focused element unknown (\(status.rawValue)); target unconfirmed")
             return false
         }
-        return true
+        var element = focused as! AXUIElement
+        var role = axRole(of: element)
+
+        // The window or application as "focus" means the app has not told us what is
+        // inside. Look one level in; if nothing is there the target is unconfirmed.
+        if role == kAXWindowRole as String || role == kAXApplicationRole as String {
+            var inner: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, kAXFocusedUIElementAttribute as CFString, &inner) == .success,
+                  let innerElement = inner else {
+                logger.notice("Focused element is the \(role, privacy: .public) with nothing inside; target unconfirmed")
+                return false
+            }
+            element = innerElement as! AXUIElement
+            role = axRole(of: element)
+        }
+
+        let confirmed = isTextTarget(element, role: role)
+        if !confirmed {
+            logger.notice("Focused element role \(role, privacy: .public) not confirmed as a text target")
+        }
+        return confirmed
+    }
+
+    private static func axRole(of element: AXUIElement) -> String {
+        var roleRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
+        return (roleRef as? String) ?? ""
+    }
+
+    /// Confirmed text targets only: text fields and areas by role, anything whose
+    /// value can be set (native editors), anything whose selected-text range can be
+    /// set, or anything inside an editable ancestor (WebKit, Chromium and Gecko
+    /// editors, which show up as AXTextArea or AXGroup once their tree is up). A
+    /// merely readable selected-text range is not enough: the Finder desktop answers
+    /// that with an empty range.
+    private static func isTextTarget(_ element: AXUIElement, role: String) -> Bool {
+        let textRoles: Set<String> = [
+            kAXTextFieldRole as String, kAXTextAreaRole as String, kAXComboBoxRole as String,
+        ]
+        if textRoles.contains(role) { return true }
+
+        var settable: DarwinBoolean = false
+        if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success,
+           settable.boolValue {
+            return true
+        }
+        settable = false
+        if AXUIElementIsAttributeSettable(element, kAXSelectedTextRangeAttribute as CFString, &settable) == .success,
+           settable.boolValue {
+            return true
+        }
+
+        var namesRef: CFArray?
+        if AXUIElementCopyAttributeNames(element, &namesRef) == .success,
+           let names = namesRef as? [String], names.contains("AXEditableAncestor") {
+            return true
+        }
+        return false
     }
 
     private static func wait(_ seconds: TimeInterval) async {

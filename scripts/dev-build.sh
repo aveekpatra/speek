@@ -34,7 +34,13 @@ else
   # speek:// scheme, TCC grants and the Dock all point at the same bundle.
   if [ -d /Applications/Speek.app ]; then
     pkill -x Speek 2>/dev/null; sleep 0.3
-    ditto --norsrc "$APP" /Applications/Speek.app && APP=/Applications/Speek.app && echo "Installed to /Applications/Speek.app"
+    # Stage next to the old copy, then swap: ditto over an existing bundle keeps files
+    # the new build no longer has, which breaks the code signature seal.
+    rm -rf /Applications/Speek.app.staging
+    if ditto --norsrc "$APP" /Applications/Speek.app.staging \
+       && rm -rf /Applications/Speek.app && mv /Applications/Speek.app.staging /Applications/Speek.app; then
+      APP=/Applications/Speek.app && echo "Installed to /Applications/Speek.app"
+    fi
   fi
   echo "BUILD OK: $APP"
 fi

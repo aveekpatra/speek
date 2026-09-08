@@ -1,11 +1,17 @@
 import Foundation
 import CoreAudio
+import AudioToolbox
+import os
 
 final class MediaController: ObservableObject {
 
     static let shared = MediaController()
 
     private var didMuteAudio = false
+    /// Output volume before we silenced a device that has no mute control (many
+    /// Bluetooth headphones); restored on unmute.
+    private var savedVolume: Float32?
+    private let logger = Logger(subsystem: "com.aveekpatra.speek", category: "MediaController")
     private var unmuteTask: Task<Void, Never>?
     private var muteGeneration: Int = 0
 
@@ -81,9 +87,51 @@ final class MediaController: ObservableObject {
         return status == noErr ? deviceID : nil
     }
 
+    /// Mutes or unmutes the default output device. Prefers the device's own mute
+    /// control; devices without one (common over Bluetooth) get their volume set
+    /// to zero and restored instead.
     private func setSystemMuted(_ muted: Bool) -> Bool {
-        guard let deviceID = getDefaultOutputDevice() else { return false }
+        guard let deviceID = getDefaultOutputDevice() else {
+            logger.error("No default output device")
+            return false
+        }
 
+        if setMuteProperty(on: deviceID, muted: muted) {
+            return true
+        }
+
+        var volumeAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var settable: DarwinBoolean = false
+        guard AudioObjectHasProperty(deviceID, &volumeAddress),
+              AudioObjectIsPropertySettable(deviceID, &volumeAddress, &settable) == noErr, settable.boolValue else {
+            logger.error("Output device \(deviceID) has neither a mute nor a volume control")
+            return false
+        }
+        let size = UInt32(MemoryLayout<Float32>.size)
+        if muted {
+            var current: Float32 = 0
+            var readSize = size
+            if AudioObjectGetPropertyData(deviceID, &volumeAddress, 0, nil, &readSize, &current) == noErr {
+                savedVolume = current
+            }
+            var zero: Float32 = 0
+            let status = AudioObjectSetPropertyData(deviceID, &volumeAddress, 0, nil, size, &zero)
+            if status != noErr { logger.error("Setting volume to zero failed: \(status)") }
+            return status == noErr
+        } else {
+            guard var restore = savedVolume else { return true }
+            savedVolume = nil
+            let status = AudioObjectSetPropertyData(deviceID, &volumeAddress, 0, nil, size, &restore)
+            if status != noErr { logger.error("Restoring volume failed: \(status)") }
+            return status == noErr
+        }
+    }
+
+    private func setMuteProperty(on deviceID: AudioDeviceID, muted: Bool) -> Bool {
         var muteValue: UInt32 = muted ? 1 : 0
         let propertySize = UInt32(MemoryLayout<UInt32>.size)
 
@@ -103,6 +151,7 @@ final class MediaController: ObservableObject {
         if status != noErr || !isSettable.boolValue { return false }
 
         status = AudioObjectSetPropertyData(deviceID, &address, 0, nil, propertySize, &muteValue)
+        if status != noErr { logger.error("Setting mute=\(muted) failed: \(status)") }
         return status == noErr
     }
 }

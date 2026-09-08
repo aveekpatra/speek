@@ -280,6 +280,7 @@ class ModeManager: ObservableObject {
 
         ensureDefaultConfigurationExists()
         migrateEnglishPinnedModesToAutoIfNeeded()
+        enableCleanupByDefaultIfNeeded()
         migrateToGlobalTranscriptionDefaultsIfNeeded()
     }
 

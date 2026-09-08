@@ -27,7 +27,8 @@ enum RecorderPanelStyle: String, CaseIterable, Identifiable {
 protocol RecorderPanelPresenting: AnyObject {
     var isRecorderPanelVisible: Bool { get }
     func dismissRecorderPanel() async
-    func dismissRecorderPanelWithPasteHint(text: String) async
+    func dismissRecorderPanelWithPasteHint(text: String, alreadyCopied: Bool) async
+    func confirmPasteHintCopied()
 }
 
 @MainActor
@@ -135,8 +136,9 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
     private func showRecorderPanel() {
         guard let engine = engine, let recorder = recorder else { return }
         guard SpeekSettings.shared.recordingWindowStyle != .none else { return }
-        // The agent reply panel shows recording state itself; keep the pill out of the way.
-        guard !AgentUpdateCenter.shared.isShowingPanel else { return }
+        // The agent reply box has focus and shows recording state itself; keep the pill
+        // out of the way. A waiting session with focus elsewhere still gets the pill.
+        guard !AgentUpdateCenter.shared.isCapturingDictation else { return }
 
         if miniWindowManager == nil {
             miniWindowManager = MiniWindowManager(
@@ -263,8 +265,9 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
     /// auto-pasted (no editable field focused). Shows a brief "⌘V to paste" hint
     /// in the panel instead of a toast that would overlap it, then dismisses as
     /// normal. Falls back to the toast if the panel isn't on screen at all.
-    func dismissRecorderPanelWithPasteHint(text: String) async {
+    func dismissRecorderPanelWithPasteHint(text: String, alreadyCopied: Bool) async {
         guard isRecorderPanelVisible, let engine = engine else {
+            if !alreadyCopied { _ = ClipboardManager.setClipboard(text, transient: false, sessionID: nil) }
             NotificationManager.shared.showNotification(
                 title: String(localized: "Copied to clipboard — paste anywhere with ⌘V"),
                 type: .success
@@ -274,11 +277,28 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
 
         cancelCoachSuggestionDisplay()
         engine.resultPreview = text
-        engine.pasteHintText = String(localized: "Copied. Click a text field and press ⌘V to paste.")
+        if alreadyCopied {
+            engine.pasteHintCopyText = nil
+            engine.pasteHintText = String(localized: "Copied. Click a text field and press ⌘V to paste.")
+        } else {
+            engine.pasteHintCopyText = text
+            engine.pasteHintText = String(localized: "Couldn't confirm the paste landed.")
+        }
+        scheduleHintDismiss(after: alreadyCopied ? 8 : 12)
+    }
 
+    /// The Copy button was clicked: acknowledge, then close shortly after.
+    func confirmPasteHintCopied() {
+        guard let engine, engine.pasteHintText != nil else { return }
+        engine.pasteHintCopyText = nil
+        engine.pasteHintText = String(localized: "Copied. Press ⌘V to paste.")
+        scheduleHintDismiss(after: 2.5)
+    }
+
+    private func scheduleHintDismiss(after seconds: Double) {
         pasteHintDismissTask?.cancel()
         pasteHintDismissTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard let self, !Task.isCancelled else { return }
             self.pasteHintDismissTask = nil
             await self.dismissRecorderPanel()
@@ -353,6 +373,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         pasteHintDismissTask?.cancel()
         pasteHintDismissTask = nil
         engine?.pasteHintText = nil
+        engine?.pasteHintCopyText = nil
         engine?.resultPreview = nil
     }
 }

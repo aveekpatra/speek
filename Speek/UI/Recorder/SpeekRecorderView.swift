@@ -25,6 +25,7 @@ struct SpeekRecorderView<S: RecorderStateProvider & ObservableObject>: View {
                     isCancelConfirming: stateProvider.isCancelConfirming,
                     isCanceling: stateProvider.isCanceling,
                     pasteHint: stateProvider.pasteHintText,
+                    onCopy: stateProvider.pasteHintCopyText == nil ? nil : { stateProvider.copyPasteHintText() },
                     resultPreview: stateProvider.resultPreview,
                     loadingModelName: loadState.loadingModelName,
                     onStop: onStopTapped,
@@ -41,7 +42,8 @@ struct SpeekRecorderView<S: RecorderStateProvider & ObservableObject>: View {
                         audioMeter: recorder.audioMeter,
                         isCancelConfirming: stateProvider.isCancelConfirming,
                         isCanceling: stateProvider.isCanceling,
-                        pasteHint: stateProvider.pasteHintText
+                        pasteHint: stateProvider.pasteHintText,
+                        onCopy: stateProvider.pasteHintCopyText == nil ? nil : { stateProvider.copyPasteHintText() }
                     )
                     .onTapGesture {
                         if stateProvider.recordingState == .recording { onStopTapped() }
@@ -99,6 +101,7 @@ struct ClassicRecorderPanel: View {
     let isCancelConfirming: Bool
     let isCanceling: Bool
     let pasteHint: String?
+    var onCopy: (() -> Void)? = nil
     var resultPreview: String? = nil
     var loadingModelName: String? = nil
     let onStop: () -> Void
@@ -130,8 +133,13 @@ struct ClassicRecorderPanel: View {
                                 .multilineTextAlignment(.center)
                                 .textSelection(.enabled)
                         }
-                        statusLabel(pasteHint, symbol: "doc.on.clipboard")
-                            .font(.system(size: 12, weight: .medium))
+                        HStack(spacing: 10) {
+                            statusLabel(pasteHint, symbol: onCopy == nil ? "doc.on.clipboard" : "exclamationmark.triangle")
+                                .font(.system(size: 12, weight: .medium))
+                            if let onCopy {
+                                CopyHintButton(action: onCopy)
+                            }
+                        }
                     }
                     .padding(.horizontal, 22)
                 } else if isProcessing {
@@ -234,9 +242,9 @@ struct ClassicRecorderPanel: View {
     }
 
     private var processingTitle: String {
-        if state == .enhancing { return "Rewriting..." }
-        if let loadingModelName { return "Loading \(loadingModelName)..." }
-        return "Transcribing..."
+        if state == .enhancing { return "Rewriting" }
+        if let loadingModelName { return "Loading \(loadingModelName)" }
+        return "Transcribing"
     }
 }
 
@@ -248,6 +256,7 @@ struct MiniRecorderPill: View {
     let isCancelConfirming: Bool
     let isCanceling: Bool
     let pasteHint: String?
+    var onCopy: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 8) {
@@ -256,9 +265,17 @@ struct MiniRecorderPill: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
             } else if let pasteHint {
+                if onCopy != nil {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                }
                 Text(pasteHint)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
+                if let onCopy {
+                    CopyHintButton(action: onCopy)
+                }
             } else if state == .transcribing || state == .enhancing {
                 ProgressView().controlSize(.mini).tint(.white)
                 Text(state == .enhancing ? "Rewriting" : "Transcribing")
@@ -268,8 +285,12 @@ struct MiniRecorderPill: View {
                 LiveBarsView(audioMeter: audioMeter, isActive: state == .recording, barCount: 11, maxHeight: 18)
             }
         }
-        .padding(.horizontal, 12)
-        .frame(minWidth: 96, minHeight: 36)
+        // With the Copy button the pill is a capsule holding a smaller capsule: the
+        // button sits at the same inset from the top, bottom and trailing edge, so the
+        // two curves are concentric.
+        .padding(.leading, 12)
+        .padding(.trailing, onCopy == nil ? 12 : CopyHintButton.inset)
+        .frame(minWidth: 96, minHeight: 36, maxHeight: 36)
         // Clear, interactive glass: the pill reads as a water droplet that bends what is
         // behind it instead of a dark capsule. A faint tint and the white content keep the
         // bars legible over light windows.
@@ -487,5 +508,34 @@ struct LiveBarsView: View {
         let wave = sin(t * 9 + phase) * 0.5 + 0.5
         let centerBoost = 1 - abs(Double(index) - Double(barCount) / 2) / Double(barCount) * 0.8
         return max(3, CGFloat(level * (0.4 + 0.6 * wave) * centerBoost) * maxHeight)
+    }
+}
+
+/// Small glass "Copy" button shown in the recorder when a paste could not be confirmed.
+/// Sized explicitly (no system button padding) so it nests concentrically in the pill.
+/// Clicks work without the panel taking key status, so the user's focus stays put.
+private struct CopyHintButton: View {
+    /// Gap between this capsule and the pill's edge on the top, bottom and trailing side.
+    static let inset: CGFloat = 5
+    static let height: CGFloat = 36 - inset * 2
+
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "doc.on.clipboard")
+                Text("Copy")
+            }
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 11)
+            .frame(height: Self.height)
+            .glassEffect(.regular.tint(Color.white.opacity(0.14)).interactive(), in: Capsule(style: .continuous))
+            .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.6))
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help("Put the transcript on the clipboard")
     }
 }

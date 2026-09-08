@@ -153,6 +153,19 @@ final class AgentUpdateCenter: ObservableObject {
     var recorder: Recorder? { engine?.recorder }
 
     var isShowingPanel: Bool { !pending.isEmpty }
+    /// Mirrors the panel's key status for the view: recording state is shown in the
+    /// panel only while the reply box actually receives the dictation.
+    @Published fileprivate(set) var panelIsKey = false
+
+    /// True only while the reply box has keyboard focus: the panel is on screen and is
+    /// the key window. Dictation goes into the reply box then, and only then. A waiting
+    /// session by itself is not enough: after every Stop hook one is waiting, and the
+    /// user is usually typing in the agent's own composer (or any other app) and
+    /// expects the text to land there, not in this panel.
+    var isCapturingDictation: Bool {
+        guard let panel, panel.isVisible, panel.isKeyWindow else { return false }
+        return true
+    }
 
     private var panel: AgentReplyPanel?
     private var keyMonitor: Any?
@@ -490,8 +503,16 @@ final class AgentUpdateCenter: ObservableObject {
             }
         }
         snoozedUntil = nil
-        panel.makeKeyAndOrderFront(nil)
-        focusTick += 1
+        if recordingState == .idle {
+            panel.makeKeyAndOrderFront(nil)
+            focusTick += 1
+        } else {
+            // The user is mid-dictation into some other app. Show the panel, but do not
+            // take keyboard focus: that would pull the caret out of their text box and
+            // capture the transcript they were already speaking. The reply box only
+            // takes over when it is clicked or when the panel appears while idle.
+            panel.orderFrontRegardless()
+        }
         startVisibilityWatchdog()
     }
 
@@ -594,6 +615,16 @@ final class AgentReplyPanel: NSPanel {
         // Always centred on its anchor; a drag inside the reply box selects text.
         isMovable = false
         isMovableByWindowBackground = false
+    }
+
+    override func becomeKey() {
+        super.becomeKey()
+        AgentUpdateCenter.shared.panelIsKey = true
+    }
+
+    override func resignKey() {
+        super.resignKey()
+        AgentUpdateCenter.shared.panelIsKey = false
     }
 
     override func cancelOperation(_ sender: Any?) {
@@ -911,16 +942,18 @@ private struct AgentReplyView: View {
 
     @ViewBuilder
     private var voiceStatus: some View {
-        switch center.recordingState {
+        // A dictation that is going into some other app is not this panel's business:
+        // it shows the idle mic, not "Listening".
+        switch center.panelIsKey ? center.recordingState : .idle {
         case .recording:
             HStack(spacing: 10) {
                 if let recorder = center.recorder { AgentListeningBars(recorder: recorder) }
-                Text("Listening...")
+                Text("Listening")
             }
         case .transcribing, .enhancing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small).tint(.white)
-                Text(center.recordingState == .enhancing ? "Rewriting..." : "Transcribing...")
+                Text(center.recordingState == .enhancing ? "Rewriting" : "Transcribing")
             }
         default:
             Button { center.replyByVoice() } label: {

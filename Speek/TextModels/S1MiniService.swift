@@ -48,11 +48,17 @@ final class S1MiniService {
 
     private init() {}
 
+    /// Longest piece handed to the model in one go, in UTF-8 bytes (about 600 tokens).
+    /// The model card wants inputs under roughly 1,000 tokens; beyond that quality drops.
+    static let chunkLimit = 2400
+
     func normalize(_ transcript: String, styling: Styling, structure: Structure, context: Context) async throws -> String {
         let path = S1MiniModelManager.modelFileURL.path
         guard FileManager.default.fileExists(atPath: path) else { throw ServiceError.notDownloaded }
-        let prompt = Self.prompt(transcript: transcript, styling: styling, structure: structure, context: context)
-        let maxTokens = Int(Double(transcript.utf8.count / 3) * 1.3) + 48
+        // Paragraphs are normalized separately and kept; long paragraphs are cut at
+        // sentence ends. A single short dictation is one chunk, as before.
+        let paragraphs = transcript.components(separatedBy: "\n\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let work: [[String]] = paragraphs.map { Self.chunks(of: $0) }
         return try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 do {
@@ -62,14 +68,51 @@ final class S1MiniService {
                         self.logger.info("S1-mini loaded in \(String(format: "%.2f", Date().timeIntervalSince(start)))s")
                     }
                     let start = Date()
-                    let output = try self.runner!.complete(prompt: prompt, maxTokens: max(maxTokens, 32))
-                    self.logger.info("S1-mini normalized \(transcript.count) chars in \(String(format: "%.2f", Date().timeIntervalSince(start)))s")
-                    continuation.resume(returning: Self.cleanOutput(output))
+                    var outputs: [String] = []
+                    for chunks in work {
+                        var pieces: [String] = []
+                        for chunk in chunks {
+                            let prompt = Self.prompt(transcript: chunk, styling: styling, structure: structure, context: context)
+                            let maxTokens = Int(Double(chunk.utf8.count / 3) * 1.3) + 48
+                            let output = try self.runner!.complete(prompt: prompt, maxTokens: max(maxTokens, 32))
+                            let cleaned = Self.cleanOutput(output)
+                            if !cleaned.isEmpty { pieces.append(cleaned) }
+                        }
+                        if !pieces.isEmpty { outputs.append(pieces.joined(separator: " ")) }
+                    }
+                    let chunkCount = work.reduce(0) { $0 + $1.count }
+                    self.logger.info("S1-mini normalized \(transcript.count) chars in \(chunkCount) chunk(s) in \(String(format: "%.2f", Date().timeIntervalSince(start)))s")
+                    continuation.resume(returning: outputs.joined(separator: "\n\n"))
                 } catch {
                     continuation.resume(throwing: error)
                 }
             }
         }
+    }
+
+    /// Splits at whitespace so no chunk exceeds `limit` bytes, preferring to cut right
+    /// after a sentence end when one falls in the second half of the chunk.
+    static func chunks(of text: String, limit: Int = chunkLimit) -> [String] {
+        guard text.utf8.count > limit else { return [text] }
+        var chunks: [String] = []
+        var current: [Substring] = []
+        var currentBytes = 0
+        var lastSentenceEnd = -1
+        for word in text.split(whereSeparator: { $0.isWhitespace }) {
+            let bytes = word.utf8.count + 1
+            if currentBytes + bytes > limit, !current.isEmpty {
+                let cut = lastSentenceEnd >= current.count / 2 ? lastSentenceEnd + 1 : current.count
+                chunks.append(current[..<cut].joined(separator: " "))
+                current = Array(current[cut...])
+                currentBytes = current.reduce(0) { $0 + $1.utf8.count + 1 }
+                lastSentenceEnd = -1
+            }
+            current.append(word)
+            currentBytes += bytes
+            if let last = word.last, ".?!".contains(last) { lastSentenceEnd = current.count - 1 }
+        }
+        if !current.isEmpty { chunks.append(current.joined(separator: " ")) }
+        return chunks
     }
 
     func unload() {

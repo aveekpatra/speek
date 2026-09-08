@@ -47,15 +47,6 @@
       }
     },
     {
-      "identity" : "mediaremote-adapter",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Beingpax/mediaremote-adapter",
-      "state" : {
-        "branch" : "master",
-        "revision" : "b97fa53f0654c8e33519e8a601b0bead3abd310a"
-      }
-    },
-    {
       "identity" : "networkimage",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/gonzalezreal/NetworkImage",

@@ -13,12 +13,12 @@ Liquid Glass interface and only ever uses local models: nothing you say leaves y
 ## Features
 
 - **Local voice models**: Cohere Transcribe (open 2B model, 14 languages), NVIDIA Canary 1B v2 (25 European languages), NVIDIA Parakeet V2/V3/110M/Japanese, Whisper Large v3 Turbo (whisper.cpp), and Apple Speech.
-- **Modes**: presets (Voice to text, Message, Email, Note, Custom) with per-mode language, voice model, text model, app and website triggers, and shortcuts.
-- **Local text models**: S1-mini by Superwhisper (open-weights transcript normalizer, runs through llama.cpp, with tone and structure controls) or any Ollama model.
+- **Modes**: presets (Voice to text, Message, Email, Note, Custom) with per-mode language, voice model, cleanup level, tone, app and website triggers, and shortcuts. The default mode is the source of truth for the app-wide voice model.
+- **Cleanup, on by default**: S1-mini by Superwhisper (open-weights, 462 MB, runs on device through llama.cpp) removes fillers and false starts, resolves spoken corrections, writes out numbers and punctuation, and keeps your wording. Three levels per mode: Off, Clean up (S1-mini), Rewrite (any Ollama model, rephrases for intent). Tone from casual to formal applies to both.
 - **Agent plugins**: Claude Code and Codex notify Speek when they finish, need permission, or ask a question; answer by voice (or type) in a reply panel and the answer goes straight back to the agent.
 - **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the screen edge and expands on hover into change-mode, record, and open-app controls. Its edge (Bottom, Top, Left, Right) is set next to it under Configuration > Appearance.
 - **Vocabulary and replacements**, searchable history with audio playback and a clear-all button, and a menu bar app with Transcribe File.
-- **Sound collections** (Off, Simple, Classic, Ticks, Bells, Soft, plus macOS pairs like Glass, Ping, Hero, or two files of your own), silence removal, dynamic normalization, playback pause while recording.
+- **Sound collections** (Off, Simple, Classic, Ticks, Bells, Soft, plus macOS pairs like Glass, Ping, Hero, or two files of your own), silence removal, dynamic normalization, and playback pause or mute while recording (pauses whatever the system shows as Now Playing, including videos in a browser, and resumes it afterwards).
 
 ## Install
 
@@ -39,6 +39,10 @@ make local
 `make local` builds `whisper.cpp` as an XCFramework the first time (a few minutes); `llama.cpp` is built the same way (`~/Speek-Dependencies/llama.cpp`, `./build-xcframework.sh macos`), then
 produces an ad-hoc signed `Speek.app`. During development use `scripts/dev-build.sh` for
 incremental builds and `scripts/dev-show.sh <page>` to launch on a given page.
+
+`Vendor/MediaRemoteAdapter` holds a prebuilt [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter)
+framework and script (BSD-3), used to pause and resume playback while recording. It is embedded,
+never linked; `scripts/build-mediaremote-adapter.sh` rebuilds it from the upstream tag.
 
 ## Agent plugins
 
@@ -82,7 +86,7 @@ coach, and the iOS keyboard from that lineage are not part of Speek.
 [Cohere Transcribe](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026),
 [Sparkle](https://github.com/sparkle-project/Sparkle), [LaunchAtLogin](https://github.com/sindresorhus/LaunchAtLogin-Modern),
 [LLMkit](https://github.com/Beingpax/LLMkit), [SelectedTextKit](https://github.com/Beingpax/SelectedTextKit),
-[MediaRemoteAdapter](https://github.com/ejbills/mediaremote-adapter), [Zip](https://github.com/marmelroy/Zip).
+[mediaremote-adapter](https://github.com/ungive/mediaremote-adapter), [Zip](https://github.com/marmelroy/Zip).
 
 ## License
 

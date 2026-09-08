@@ -26,7 +26,8 @@ class AIEnhancementService: ObservableObject {
     private let customVocabularyService: CustomVocabularyService
     private var baseTimeout: TimeInterval {
         let stored = UserDefaults.standard.integer(forKey: "EnhancementTimeoutSeconds")
-        return stored > 0 ? TimeInterval(stored) : 7
+        // Local rewriting with a 7B-class model needs a few seconds on Apple silicon.
+        return stored > 0 ? TimeInterval(stored) : 20
     }
     private let rateLimitInterval: TimeInterval = 1.0
     private var lastRequestTime: Date?
@@ -201,23 +202,36 @@ class AIEnhancementService: ObservableObject {
 
         if provider == .s1Mini {
             let mode = configuration.mode
-            let styling = S1MiniService.Styling(rawValue: mode?.s1Styling ?? "") ?? .semiCasual
+            // S1-mini is English only. A mode pinned to another language pastes the raw
+            // transcript; auto-detect still runs it, since mixed text passes through intact.
+            if let language = mode?.selectedLanguage, language != "auto", language != "en" {
+                return text
+            }
+            let styling = S1MiniService.Styling(rawValue: mode?.s1Styling ?? "") ?? .semiFormal
             let structure = S1MiniService.Structure(rawValue: mode?.s1Structure ?? "") ?? .prose
             let promptID = mode?.selectedPrompt.flatMap { UUID(uuidString: $0) }
             let context: S1MiniService.Context = promptID == PromptTemplates.emailPromptId ? .email : .general
             do {
                 let result = try await S1MiniService.shared.normalize(text, styling: styling, structure: structure, context: context)
-                return result.isEmpty ? text : result
+                // An empty answer for a few words means filler only ("um, uh"): nothing
+                // to paste. For anything longer it is a failure, and the raw text is safer.
+                if result.isEmpty {
+                    return WordCounter.count(in: text) <= 4 ? "" : text
+                }
+                return result
             } catch {
                 throw EnhancementError.customError(error.localizedDescription)
             }
         }
 
         if provider == .ollama {
+            // The mode's tone applies to rewriting too.
+            let tone = S1MiniService.Styling(rawValue: configuration.mode?.s1Styling ?? "") ?? .semiFormal
+            let tonedSystemMessage = systemMessage + "\n\nWrite the result in a \(tone.displayName.lowercased()) register. Keep the speaker's meaning; never add information that was not said."
             do {
                 let result = try await aiService.enhanceWithOllama(
                     text: formattedText,
-                    systemPrompt: systemMessage,
+                    systemPrompt: tonedSystemMessage,
                     model: modelName,
                     timeout: baseTimeout
                 )

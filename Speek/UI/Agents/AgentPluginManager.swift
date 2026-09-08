@@ -74,7 +74,7 @@ final class AgentPluginManager: ObservableObject {
     func install(_ plugin: AgentPlugin) {
         guard busy == nil else { return }
         busy = plugin
-        lastMessage = "Connecting \(plugin.displayName)..."
+        lastMessage = "Connecting \(plugin.displayName)"
         Task {
             let outcome: Result<Void, Error> = await Task.detached(priority: .userInitiated) {
                 Result { try AgentHookInstaller.install(plugin) }

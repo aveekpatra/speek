@@ -31,6 +31,8 @@ class SpeekEngine: NSObject, ObservableObject {
     // "⌘V to paste" hint shown in the panel when the transcript couldn't be
     // auto-inserted (no editable field focused). See RecorderUIManager.
     @Published var pasteHintText: String? = nil
+    /// Set while the recorder offers a Copy button: the text the button copies.
+    @Published var pasteHintCopyText: String? = nil
     @Published var resultPreview: String? = nil
     private static let liveTranscriptPublishInterval: TimeInterval = 1.0 / 20.0
     private var lastLiveTranscriptPublishAt = Date.distantPast
@@ -568,9 +570,9 @@ class SpeekEngine: NSObject, ObservableObject {
                 guard let self, self.activePipelineTranscriptionID == transcriptionID else { return }
                 await self.recorderUIManager?.dismissRecorderPanel()
             },
-            onPasteHint: { [weak self] text in
+            onPasteHint: { [weak self] text, alreadyCopied in
                 guard let self, self.activePipelineTranscriptionID == transcriptionID else { return }
-                await self.recorderUIManager?.dismissRecorderPanelWithPasteHint(text: text)
+                await self.recorderUIManager?.dismissRecorderPanelWithPasteHint(text: text, alreadyCopied: alreadyCopied)
             },
             assistant: TranscriptionPipeline.AssistantHooks(
                 isFollowUp: activePipelineUseCase.isAssistantFollowUp,

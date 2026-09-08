@@ -176,7 +176,7 @@ struct WaveformView: View {
                     HStack {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Loading...")
+                        Text("Loading")
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
                     }

@@ -1,152 +1,93 @@
 import AppKit
 import Combine
 import Foundation
-import SwiftUI
-import MediaRemoteAdapter
 import os
+
+/// "Playback when recording: Pause". Pauses whatever holds the system Now Playing
+/// slot (Music, Spotify, a video in a browser) when a recording starts and resumes
+/// it when the recording stops, if it is still the same item and still paused.
 @MainActor
-class PlaybackController: ObservableObject {
+final class PlaybackController: ObservableObject {
     static let shared = PlaybackController()
-    private var mediaController: MediaRemoteAdapter.MediaController
-    private var wasPlayingWhenRecordingStarted = false
-    private var isMediaPlaying = false
-    private var lastKnownTrackInfo: TrackInfo?
-    private var originalMediaAppBundleId: String?
+
+    private struct PausedItem {
+        let bundleIdentifier: String
+        let title: String?
+    }
+
+    private let adapter = NowPlayingAdapter.shared
+    private var pausedItem: PausedItem?
     private var resumeTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.aveekpatra.speek", category: "PlaybackController")
 
     @Published var isPauseMediaEnabled: Bool = UserDefaults.standard.bool(forKey: "isPauseMediaEnabled") {
-        didSet {
-            UserDefaults.standard.set(isPauseMediaEnabled, forKey: "isPauseMediaEnabled")
+        didSet { UserDefaults.standard.set(isPauseMediaEnabled, forKey: "isPauseMediaEnabled") }
+    }
 
-            if isPauseMediaEnabled {
-                startMediaTracking()
-            } else {
-                stopMediaTracking()
-            }
-        }
-    }
-    
-    private init() {
-        mediaController = MediaRemoteAdapter.MediaController()
+    private init() {}
 
-        setupMediaControllerCallbacks()
-
-        if isPauseMediaEnabled {
-            startMediaTracking()
-        }
-    }
-    
-    private func setupMediaControllerCallbacks() {
-        mediaController.onTrackInfoReceived = { [weak self] trackInfo in
-            self?.isMediaPlaying = trackInfo?.payload.isPlaying ?? false
-            self?.lastKnownTrackInfo = trackInfo
-        }
-        
-        mediaController.onListenerTerminated = { }
-    }
-    
-    private func startMediaTracking() {
-        mediaController.startListening()
-    }
-    
-    private func stopMediaTracking() {
-        mediaController.stopListening()
-        isMediaPlaying = false
-        lastKnownTrackInfo = nil
-        wasPlayingWhenRecordingStarted = false
-        originalMediaAppBundleId = nil
-    }
-    
     func pauseMedia() async {
         resumeTask?.cancel()
         resumeTask = nil
-
-        wasPlayingWhenRecordingStarted = false
-        originalMediaAppBundleId = nil
+        pausedItem = nil
 
         guard isPauseMediaEnabled else { return }
-
-        // Read the live now-playing state instead of trusting the listener cache,
-        // which can be empty or stale at the moment recording starts (the loop
-        // listener mainly emits on changes). This is the authoritative check.
-        let trackInfo = await currentTrackInfo()
-        let payload = trackInfo?.payload
-        // Browsers sometimes report isPlaying=false with a non-zero playback rate.
-        let isPlaying = (payload?.isPlaying ?? false) || ((payload?.playbackRate ?? 0) > 0)
-        guard let payload, isPlaying, let bundleId = payload.bundleIdentifier else {
-            logger.notice("pauseMedia: nothing playing (app=\(payload?.bundleIdentifier ?? "none", privacy: .public), isPlaying=\(payload?.isPlaying ?? false), rate=\(payload?.playbackRate ?? 0))")
+        guard adapter.isAvailable else {
+            logger.error("pauseMedia: adapter unavailable")
             return
         }
 
-        wasPlayingWhenRecordingStarted = true
-        originalMediaAppBundleId = bundleId
-        lastKnownTrackInfo = trackInfo
-        logger.notice("pauseMedia: pausing \(bundleId, privacy: .public) (\(payload.title ?? "", privacy: .public))")
-
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        mediaController.pause()
-    }
-
-    /// One-shot, authoritative read of the current now-playing state.
-    /// Runs independently of the long-lived listener, so it works even when the
-    /// listener cache hasn't received a recent event.
-    private func currentTrackInfo() async -> TrackInfo? {
-        await withCheckedContinuation { continuation in
-            mediaController.getTrackInfo { info in
-                continuation.resume(returning: info)
-            }
+        guard let info = await adapter.current(), info.isEffectivelyPlaying, let bundleID = info.bundleIdentifier else {
+            logger.notice("pauseMedia: nothing playing")
+            return
         }
+        logger.notice("pauseMedia: pausing \(bundleID, privacy: .public) (\(info.title ?? "", privacy: .public))")
+
+        let accepted = await adapter.send(.pause)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        let after = await adapter.current()
+        let stillPlaying = after?.bundleIdentifier == bundleID && (after?.isEffectivelyPlaying ?? false)
+        if stillPlaying {
+            // Some apps ignore the MediaRemote command but honour the hardware key.
+            logger.notice("pauseMedia: pause command \(accepted ? "accepted" : "rejected") but still playing; sending the media key")
+            Self.sendMediaPlayPauseKey()
+        }
+        pausedItem = PausedItem(bundleIdentifier: bundleID, title: info.title)
     }
 
     func resumeMedia() async {
-        let shouldResume = wasPlayingWhenRecordingStarted
-        let originalBundleId = originalMediaAppBundleId
+        guard let paused = pausedItem else { return }
+        pausedItem = nil
+        guard isPauseMediaEnabled, isAppRunning(bundleID: paused.bundleIdentifier) else { return }
+
         let delay = MediaController.shared.audioResumptionDelay
+        let task = Task { [adapter, logger] in
+            if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+            guard !Task.isCancelled else { return }
 
-        defer {
-            wasPlayingWhenRecordingStarted = false
-            originalMediaAppBundleId = nil
-        }
-
-        guard isPauseMediaEnabled,
-              shouldResume,
-              let bundleId = originalBundleId else {
-            return
-        }
-
-        guard isAppStillRunning(bundleId: bundleId) else {
-            return
-        }
-
-        // Confirm against live state (not the listener cache) that the same app is
-        // still the now-playing app and is currently paused before resuming it.
-        let trackInfo = await currentTrackInfo()
-        guard let payload = trackInfo?.payload,
-              payload.bundleIdentifier == bundleId,
-              payload.isPlaying == false else {
-            return
-        }
-        lastKnownTrackInfo = trackInfo
-
-        let task = Task {
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-
-            if Task.isCancelled {
+            // Only resume what we paused: same app, still paused. If the user started
+            // something else meanwhile, or resumed it themselves, leave it alone.
+            let info = await adapter.current()
+            guard let info, info.bundleIdentifier == paused.bundleIdentifier, !info.isEffectivelyPlaying else {
+                logger.notice("resumeMedia: not resuming (now playing: \(info?.bundleIdentifier ?? "none", privacy: .public), playing=\(info?.isEffectivelyPlaying ?? false))")
                 return
             }
-
-            Self.sendMediaPlayPauseKey()
+            logger.notice("resumeMedia: resuming \(paused.bundleIdentifier, privacy: .public)")
+            let accepted = await adapter.send(.play)
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            let after = await adapter.current()
+            if after?.bundleIdentifier == paused.bundleIdentifier, !(after?.isEffectivelyPlaying ?? false) {
+                logger.notice("resumeMedia: play command \(accepted ? "accepted" : "rejected") but still paused; sending the media key")
+                Self.sendMediaPlayPauseKey()
+            }
         }
-
         resumeTask = task
         await task.value
     }
 
-    /// Simulate the hardware media Play/Pause key (NX_KEYTYPE_PLAY = 16).
-    /// Some apps (e.g. Plexamp) ignore the MediaRemote `play` command but
-    /// respond to the same HID key event the physical F8 key produces.
+    /// Simulate the hardware media Play/Pause key (NX_KEYTYPE_PLAY = 16). Some apps
+    /// (Plexamp among them) ignore MediaRemote commands but respond to the key the
+    /// physical F8 produces.
     private static func sendMediaPlayPauseKey() {
         func post(down: Bool) {
             let flags: UInt = down ? 0xa00 : 0xb00
@@ -168,10 +109,7 @@ class PlaybackController: ObservableObject {
         post(down: false)
     }
 
-    private func isAppStillRunning(bundleId: String) -> Bool {
-        let runningApps = NSWorkspace.shared.runningApplications
-        return runningApps.contains { $0.bundleIdentifier == bundleId }
+    private func isAppRunning(bundleID: String) -> Bool {
+        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
     }
 }
-
-

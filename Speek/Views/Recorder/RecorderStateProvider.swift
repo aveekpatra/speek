@@ -16,4 +16,7 @@ protocol RecorderStateProvider: AnyObject {
     var pasteHintText: String? { get }
     /// Final transcript shown alongside the paste hint when it could not be pasted.
     var resultPreview: String? { get }
+    /// Non-nil while the panel offers a Copy button for an unconfirmed paste.
+    var pasteHintCopyText: String? { get }
+    func copyPasteHintText()
 }

@@ -43,8 +43,8 @@ enum ModePreset: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The preset is the formatting recipe; whether a language model runs is decided by
-    /// the Language Model picker (None / S1-mini / Ollama), independently of the preset.
+    /// The preset is the formatting recipe; how much the text is changed is decided by
+    /// the Cleanup level (Off / Clean up / Rewrite), independently of the preset.
     static func preset(for config: ModeConfig) -> ModePreset {
         guard let raw = config.selectedPrompt, let id = UUID(uuidString: raw) else { return .voiceToText }
         return ModePreset.allCases.first { $0.promptId == id } ?? .custom
@@ -140,7 +140,7 @@ private struct ModeRowView: View {
                 HStack(spacing: 4) {
                     modelChip(symbol: "waveform", title: voiceModelName)
                     if config.isAIEnhancementEnabled {
-                        modelChip(symbol: "text.alignleft", title: config.selectedAIModel ?? config.selectedAIProvider ?? "Language model")
+                        modelChip(symbol: "text.alignleft", title: config.selectedAIProvider == AIProvider.ollama.rawValue ? (config.selectedAIModel ?? "Rewrite") : "Clean up")
                     }
                 }
             }
@@ -209,7 +209,7 @@ struct ModeDetailPage: View {
         let preset = ModePreset.preset(for: config)
         return SpeekPageScroll(spacing: 14) {
             SpeekGroup {
-                SpeekRow("Preset", help: "Presets decide how the transcript is formatted after the voice model and the language model have run. Voice to text skips the language model.") {
+                SpeekRow("Preset", help: "A starting point for tone and shape. With Clean up: Message sets a casual tone, Email adds a greeting and sign-off, Note prefers lists. With Rewrite, the preset also chooses the instructions the model follows; Custom lets you write your own.") {
                     Picker("", selection: Binding(get: { preset }, set: { apply(preset: $0) })) {
                         ForEach(ModePreset.allCases) { preset in
                             Label(preset.displayName, systemImage: preset.symbol).tag(preset)
@@ -219,7 +219,7 @@ struct ModeDetailPage: View {
                     .fixedSize()
                 }
                 if config.isAIEnhancementEnabled {
-                    SpeekRow("Tone", help: "How formal the cleaned-up text reads, from casual chat to formal writing.") {
+                    SpeekRow("Tone", help: "How formal the result reads. Casual keeps lowercase and your exact phrasing, semi-formal is standard written English with contractions, formal expands them. Applies to Clean up and Rewrite.") {
                         HStack(spacing: 12) {
                             Text("Casual").font(.system(size: 14))
                             Slider(
@@ -233,8 +233,35 @@ struct ModeDetailPage: View {
                             Text("Formal").font(.system(size: 14))
                         }
                     }
+                    if cleanupLevel(config) == .cleanup {
+                        SpeekRow("Structure", help: "Prose keeps sentences and paragraphs. Lists lets the model turn enumerations of three or more items into bullet points.") {
+                            Picker("", selection: Binding(
+                                get: { S1MiniService.Structure(rawValue: config.s1Structure ?? "") ?? .prose },
+                                set: { v in update { $0.s1Structure = v.rawValue } }
+                            )) {
+                                ForEach(S1MiniService.Structure.allCases) { Text($0.displayName).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                    }
                 }
-                if preset == .custom {
+                if preset == .custom, cleanupLevel(config) != .rewrite {
+                    // S1-mini normalizes; it cannot take instructions. Say so instead of
+                    // showing an editor whose text would be ignored.
+                    SpeekRow("Custom instructions", help: "Only Rewrite models follow written instructions.") {
+                        HStack(spacing: 10) {
+                            Text(cleanupLevel(config) == .off ? "Turn on Rewrite to use custom instructions." : "S1-mini cleans text but does not follow instructions.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                            Button("Switch to Rewrite") { apply(cleanup: .rewrite) }
+                                .buttonStyle(.glass)
+                                .buttonBorderShape(.capsule)
+                        }
+                    }
+                }
+                if preset == .custom, cleanupLevel(config) == .rewrite {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Instructions for the language model")
                             .font(.system(size: 15))
@@ -265,41 +292,71 @@ struct ModeDetailPage: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 220)
+                    .fixedSize()
                 }
-                SpeekRow("Voice Model", help: "The speech model that turns your audio into text. Download models in Models library.") {
+                SpeekRow("Voice Model", help: config.isDefault
+                    ? "The speech model that turns your audio into text. This is the default mode, so its choice is what every other mode inherits. Download models in Models library."
+                    : "The speech model that turns your audio into text. Same as Dictation follows the default mode. Download models in Models library.") {
+                    let inherited = SpeekModelPopup.Option(id: "", title: "Same as Dictation (\(transcriptionModelManager.currentTranscriptionModel?.displayName ?? "none"))", icon: AnyView(SpeekModelIcon.tile(for: transcriptionModelManager.currentTranscriptionModel?.provider)))
                     SpeekModelPopup(
-                        title: voiceModel(config)?.displayName ?? "Default",
+                        title: voiceModel(config)?.displayName ?? "None",
                         icon: AnyView(SpeekModelIcon.tile(for: voiceModel(config)?.provider)),
-                        options: [SpeekModelPopup.Option(id: "", title: "Default (\(transcriptionModelManager.currentTranscriptionModel?.displayName ?? "none"))", icon: AnyView(SpeekModelIcon.tile(for: transcriptionModelManager.currentTranscriptionModel?.provider)))]
+                        options: (config.isDefault ? [] : [inherited])
                             + transcriptionModelManager.usableModels.map { model in
                                 SpeekModelPopup.Option(id: model.name, title: model.displayName, icon: AnyView(SpeekModelIcon.tile(for: model.provider)))
                             },
-                        selectedID: config.selectedTranscriptionModelName ?? ""
+                        selectedID: config.selectedTranscriptionModelName ?? (config.isDefault ? (transcriptionModelManager.currentTranscriptionModel?.name ?? "") : "")
                     ) { id in
                         update { $0.selectedTranscriptionModelName = id.isEmpty ? nil : id }
+                        // The default mode is the source of truth for the app-wide default.
+                        if config.isDefault, let model = transcriptionModelManager.allAvailableModels.first(where: { $0.name == id }) {
+                            transcriptionModelManager.setDefaultTranscriptionModel(model)
+                        }
                     }
                 }
-                SpeekRow("Language Model", help: "Runs after the voice model and rewrites the transcript according to the preset and tone. None pastes the raw transcript. S1-mini is Superwhisper's open-weights normalizer; Ollama models work too.") {
-                    let selectedID = textModelSelection(config)
-                    let selected = textModelOptions.first { $0.id == selectedID }
-                    SpeekModelPopup(
-                        title: selected?.title ?? "None",
-                        icon: AnyView(selected == nil ? AnyView(SpeekModelIcon.neutralTile(symbol: "minus")) : AnyView(textModelIcon(selected?.provider))),
-                        options: [SpeekModelPopup.Option(id: "none", title: "None", icon: AnyView(SpeekModelIcon.neutralTile(symbol: "minus")))]
-                            + textModelOptions.map { option in
-                                SpeekModelPopup.Option(id: option.id, title: option.title, icon: AnyView(textModelIcon(option.provider)))
-                            },
-                        selectedID: selectedID
-                    ) { id in
-                        apply(textModel: id)
+                SpeekRow("Cleanup", help: "Off pastes the raw transcript. Clean up runs S1-mini on device: fillers, stutters and false starts go, a correction like \"Friday, no, Thursday\" becomes Thursday, numbers and punctuation are written out, and your wording stays yours. Rewrite hands the transcript to an Ollama model with the preset's instructions: it rephrases for clarity and intent, and can change meaning.") {
+                    Picker("", selection: Binding(get: { cleanupLevel(config) }, set: { apply(cleanup: $0) })) {
+                        ForEach(CleanupLevel.allCases) { level in
+                            Text(level.displayName).tag(level)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                if cleanupLevel(config) != .off {
+                    SpeekRow("Text model", help: cleanupLevel(config) == .rewrite
+                        ? "Any model installed in Ollama. 7B to 8B instruct models are a good fit on Apple silicon; expect a few seconds per dictation."
+                        : "The on-device model that cleans the transcript. S1-mini is Superwhisper's open-weights normalizer, 462 MB, English.") {
+                        let options = textModelOptions(for: cleanupLevel(config))
+                        if options.isEmpty {
+                            Text("No Ollama models found. Install Ollama and pull a model.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            let selectedID = options.first { $0.id == config.selectedAIModel }?.id ?? options[0].id
+                            let selected = options.first { $0.id == selectedID }!
+                            SpeekModelPopup(
+                                title: selected.title,
+                                icon: selected.icon,
+                                options: options,
+                                selectedID: selectedID
+                            ) { id in
+                                update { $0.selectedAIModel = id }
+                            }
+                        }
                     }
                 }
-                if config.isAIEnhancementEnabled {
-                    if config.selectedAIProvider != AIProvider.ollama.rawValue, !s1MiniModelManager.isDownloaded {
-                        SpeekRow("S1-mini is not downloaded", subtitle: "Download it in Models library to use this preset.") {
-                            Button("Open Models library") { navigation.open(.modelsLibrary) }
+                if cleanupLevel(config) == .cleanup, !s1MiniModelManager.isDownloaded {
+                    SpeekRow("S1-mini is not downloaded", subtitle: LocalizedStringKey(s1MiniModelManager.downloadStatus?.message ?? "One-time \(S1MiniModelManager.sizeText) download. Until then this mode pastes the raw transcript.")) {
+                        if let status = s1MiniModelManager.downloadStatus {
+                            ProgressView(value: status.fractionCompleted)
+                                .progressViewStyle(.circular)
+                                .controlSize(.small)
+                        } else {
+                            Button("Download") { s1MiniModelManager.download() }
                                 .buttonStyle(.glass)
+                                .buttonBorderShape(.capsule)
                         }
                     }
                 }
@@ -374,31 +431,44 @@ struct ModeDetailPage: View {
                                 get: { config.name },
                                 set: { name in update { $0.name = name } }
                             ))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 220)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 14))
+                            .multilineTextAlignment(.trailing)
+                            .padding(.horizontal, 12)
+                            .frame(width: 240, height: 30)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SpeekDesign.controlFill(scheme)))
                         }
                         SpeekRow("Icon") {
-                            Menu {
-                                ForEach(Self.iconChoices, id: \.self) { symbol in
-                                    Button {
-                                        update { $0.icon = .symbol(symbol) }
-                                    } label: {
-                                        Label(Self.iconTitle(symbol), systemImage: symbol)
-                                    }
-                                }
-                            } label: {
-                                ModeIconView(icon: config.icon, size: 14, color: .primary)
-                                    .frame(width: 22)
+                            let current = Self.currentSymbol(config.icon)
+                            SpeekModelPopup(
+                                title: Self.iconTitle(current),
+                                icon: AnyView(SpeekModelIcon.neutralTile(symbol: current)),
+                                options: Self.iconChoices.map { symbol in
+                                    SpeekModelPopup.Option(id: symbol, title: Self.iconTitle(symbol), icon: AnyView(SpeekModelIcon.neutralTile(symbol: symbol)))
+                                },
+                                selectedID: current
+                            ) { symbol in
+                                update { $0.icon = .symbol(symbol) }
                             }
-                            .menuStyle(.borderlessButton)
-                            .fixedSize()
                         }
-                        SpeekRow("Mode enabled") {
-                            Toggle("", isOn: Binding(get: { config.isEnabled }, set: { v in v ? modeManager.enableConfiguration(with: config.id) : modeManager.disableConfiguration(with: config.id) })).labelsHidden().toggleStyle(.switch)
+                        if !config.isDefault {
+                            SpeekRow("Mode enabled", help: "A disabled mode is skipped by its app triggers and shortcut.") {
+                                Toggle("", isOn: Binding(get: { config.isEnabled }, set: { v in v ? modeManager.enableConfiguration(with: config.id) : modeManager.disableConfiguration(with: config.id) })).labelsHidden().toggleStyle(.switch)
+                            }
                         }
-                        SpeekRow("Default mode", help: "Used when no app-specific mode matches.") {
-                            Toggle("", isOn: Binding(get: { config.isDefault }, set: { v in if v { modeManager.setAsDefault(configId: config.id) } })).labelsHidden().toggleStyle(.switch)
-                                .disabled(config.isDefault)
+                        SpeekRow("Default mode", help: "The default mode is used when no app or website trigger matches, and its voice model is what other modes inherit.") {
+                            if config.isDefault {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                                    Text("This is the default mode")
+                                }
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                            } else {
+                                Button("Make default") { modeManager.setAsDefault(configId: config.id) }
+                                    .buttonStyle(.glass)
+                                    .buttonBorderShape(.capsule)
+                            }
                         }
                     }
                     SpeekGroup {
@@ -456,8 +526,8 @@ struct ModeDetailPage: View {
     }
 
     private func toneIndex(_ config: ModeConfig) -> Int {
-        let styling = S1MiniService.Styling(rawValue: config.s1Styling ?? "") ?? .semiCasual
-        return S1MiniService.Styling.allCases.firstIndex(of: styling) ?? 1
+        let styling = S1MiniService.Styling(rawValue: config.s1Styling ?? "") ?? .semiFormal
+        return S1MiniService.Styling.allCases.firstIndex(of: styling) ?? 2
     }
 
     private func voiceModel(_ config: ModeConfig) -> (any TranscriptionModel)? {
@@ -467,13 +537,11 @@ struct ModeDetailPage: View {
         return transcriptionModelManager.currentTranscriptionModel
     }
 
-    private func textModelIcon(_ provider: AIProvider?) -> some View {
-        provider == .ollama
-            ? SpeekModelIcon.tile(brand: .ollama)
-            : SpeekModelIcon.tile(brand: .superwhisper)
-    }
-
     static let iconChoices = ["mic.fill", "bubble.left.fill", "envelope.fill", "note.text", "sparkles", "terminal.fill", "doc.text.fill", "list.bullet", "globe", "lightbulb.fill", "briefcase.fill", "heart.fill"]
+
+    static func currentSymbol(_ icon: ModeIcon) -> String {
+        icon.kind == .symbol ? icon.value : iconChoices[0]
+    }
 
     static func iconTitle(_ symbol: String) -> String {
         symbol.replacingOccurrences(of: ".fill", with: "").replacingOccurrences(of: ".", with: " ").capitalized
@@ -514,7 +582,7 @@ struct ModeDetailPage: View {
                 config.isAIEnhancementEnabled = true
                 config.selectedAIProvider = AIProvider.s1Mini.rawValue
                 config.selectedAIModel = "S1-mini"
-                if config.s1Styling == nil { config.s1Styling = S1MiniService.Styling.semiCasual.rawValue }
+                if config.s1Styling == nil { config.s1Styling = S1MiniService.Styling.semiFormal.rawValue }
             }
         }
     }
@@ -525,47 +593,57 @@ struct ModeDetailPage: View {
         enhancementService.updatePrompt(CustomPrompt(id: existing.id, title: existing.title, promptText: text, useSystemInstructions: existing.useSystemInstructions))
     }
 
-    private struct TextModelOption: Identifiable {
-        let id: String
-        let title: String
-        let provider: AIProvider
-        let model: String?
-    }
-
-    private var textModelOptions: [TextModelOption] {
-        var options: [TextModelOption] = []
-        options.append(TextModelOption(id: "s1mini", title: "S1-mini", provider: .s1Mini, model: "S1-mini"))
-        for model in aiService.availableModels(for: .ollama) {
-            options.append(TextModelOption(id: "ollama|\(model)", title: "\(model) (Ollama)", provider: .ollama, model: model))
-        }
-        return options
-    }
-
-    private func textModelSelection(_ config: ModeConfig) -> String {
-        guard config.isAIEnhancementEnabled else { return "none" }
-        if config.selectedAIProvider == AIProvider.ollama.rawValue, let model = config.selectedAIModel {
-            return "ollama|\(model)"
-        }
-        return "s1mini"
-    }
-
-    private func apply(textModel id: String) {
-        if id == "none" {
-            update { config in
-                config.isAIEnhancementEnabled = false
+    enum CleanupLevel: String, CaseIterable, Identifiable {
+        case off, cleanup, rewrite
+        var id: String { rawValue }
+        var displayName: String {
+            switch self {
+            case .off: return "Off"
+            case .cleanup: return "Clean up"
+            case .rewrite: return "Rewrite"
             }
-            return
         }
-        guard let option = textModelOptions.first(where: { $0.id == id }) else { return }
+    }
+
+    /// Models offered for a cleanup level. Clean up lists on-device normalizers (S1-mini
+    /// today; the list is the place to add another); Rewrite lists what Ollama has.
+    private func textModelOptions(for level: CleanupLevel) -> [SpeekModelPopup.Option] {
+        switch level {
+        case .off:
+            return []
+        case .cleanup:
+            return [SpeekModelPopup.Option(id: "S1-mini", title: "S1-mini", icon: AnyView(SpeekModelIcon.tile(brand: .superwhisper)))]
+        case .rewrite:
+            return aiService.availableModels(for: .ollama).map {
+                SpeekModelPopup.Option(id: $0, title: $0, icon: AnyView(SpeekModelIcon.tile(brand: .ollama)))
+            }
+        }
+    }
+
+    private func cleanupLevel(_ config: ModeConfig) -> CleanupLevel {
+        guard config.isAIEnhancementEnabled else { return .off }
+        return config.selectedAIProvider == AIProvider.ollama.rawValue ? .rewrite : .cleanup
+    }
+
+    private func apply(cleanup level: CleanupLevel) {
         update { config in
-            config.isAIEnhancementEnabled = true
-            config.selectedAIProvider = option.provider.rawValue
-            config.selectedAIModel = option.model
+            switch level {
+            case .off:
+                config.isAIEnhancementEnabled = false
+            case .cleanup:
+                config.isAIEnhancementEnabled = true
+                config.selectedAIProvider = AIProvider.s1Mini.rawValue
+                config.selectedAIModel = "S1-mini"
+            case .rewrite:
+                config.isAIEnhancementEnabled = true
+                config.selectedAIProvider = AIProvider.ollama.rawValue
+                config.selectedAIModel = aiService.availableModels(for: .ollama).first
+            }
             if config.selectedPrompt == nil {
                 config.selectedPrompt = PromptTemplates.cleanPromptId.uuidString
             }
             if config.s1Styling == nil {
-                config.s1Styling = S1MiniService.Styling.semiCasual.rawValue
+                config.s1Styling = S1MiniService.Styling.semiFormal.rawValue
             }
         }
     }
