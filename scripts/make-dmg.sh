@@ -51,7 +51,13 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 ditto "$BUILT_APP" "$WORK/Speek.app"
 xattr -cr "$WORK/Speek.app"
-codesign --force --deep --options runtime \
+# Hardened runtime enforces library validation: every loaded library must carry
+# the same Team ID as the app. Ad-hoc signatures have none, so an ad-hoc build with
+# "--options runtime" aborts at launch on whisper.framework ("different Team IDs").
+# Harden only when signing with a real identity; ad-hoc builds are not notarized anyway.
+HARDEN=""
+[ "$SIGN_IDENTITY" != "-" ] && HARDEN="yes"
+codesign --force --deep ${HARDEN:+--options runtime} \
   --entitlements "$ENTITLEMENTS" \
   --sign "$SIGN_IDENTITY" "$WORK/Speek.app"
 
