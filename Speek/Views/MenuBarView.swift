@@ -50,6 +50,7 @@ struct MenuBarView: View {
                 .keyboardShortcut("h", modifiers: [.command, .shift])
 
             Button("Settings...") { openPage(.configuration) }
+            PermissionsMenuItem()
                 .keyboardShortcut(",", modifiers: .command)
 
             Divider()

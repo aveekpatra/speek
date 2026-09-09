@@ -24,7 +24,11 @@ Liquid Glass interface and only ever uses local models: nothing you say leaves y
 
 Download the latest `.dmg` from [Releases](https://github.com/aveekpatra/speek/releases),
 open it, and drag Speek to Applications. On first launch Speek asks for Microphone and
-Accessibility access and lets you download a voice model.
+Accessibility access and lets you download a voice model. Whenever either permission is
+missing later (for example after an update), a small Permissions window opens with one
+button per permission that leads straight to the right dialog or Settings pane; it is
+also under the menu bar icon as Permissions.... Builds are signed with one stable local
+certificate so macOS keeps the grants across updates.
 
 ## Build from source
 

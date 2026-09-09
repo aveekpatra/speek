@@ -186,13 +186,30 @@ final class TranscriptionDelivery {
         }
 
         // Probe while the user's focus is untouched (the pill never takes key status).
-        // The paste goes ahead either way; the answer only decides whether to walk away
-        // quietly or to stay up and offer a Copy button.
-        let targetConfirmed = CursorPaster.focusedElementLikelyEditable()
-        if !targetConfirmed {
+        // The paste goes ahead either way. A confirmed text target walks away quietly.
+        // Anything else is checked after the paste: the pill with its Copy button only
+        // shows when the text demonstrably did not land (focus on a control that never
+        // takes text, or no focused window at all). Electron and Gecko apps often
+        // answer "unknown" before the paste and only expose the composer afterwards;
+        // that is not a failed paste and must not be reported as one.
+        let autoSendKey = output.outputMode == .paste ? output.autoSendKey : .none
+        let probe = CursorPaster.probeFocusedElement()
+        if probe != .editable {
+            let witness = await MainActor.run { CursorPaster.PasteWitness() }
             let attempt = CursorPaster.startPasteAtCursor(pastedText, targetConfirmed: false)
-            _ = await attempt.value
-            await actions.showPasteHint(pastedText, false)
+            let pasteResult = await attempt.value
+            let landed = await CursorPaster.verifyPasteLanded(pastedText, witness: witness)
+            await MainActor.run { witness.stop() }
+            let assumeLanded = pasteResult.didPostPasteCommand && landed
+            logger.notice("Deliver: probe=\(String(describing: probe), privacy: .public) landed=\(landed, privacy: .public) -> \(assumeLanded ? "done" : "copy hint", privacy: .public)")
+            if assumeLanded {
+                await actions.dismiss()
+                if autoSendKey.isEnabled {
+                    await MainActor.run { CursorPaster.performAutoSend(autoSendKey) }
+                }
+            } else {
+                await actions.showPasteHint(pastedText, false)
+            }
             return
         }
 
@@ -200,7 +217,6 @@ final class TranscriptionDelivery {
 
         let pasteTask = CursorPaster.startPasteAtCursor(pastedText, targetConfirmed: true)
 
-        let autoSendKey = output.outputMode == .paste ? output.autoSendKey : .none
         Task { @MainActor in
             let pasteResult = await pasteTask.value
 

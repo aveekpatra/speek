@@ -48,17 +48,12 @@ struct HomePage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Accessibility permission is missing")
                         .font(.system(size: 14, weight: .semibold))
-                    Text("Shortcuts and pasting need it. Repair re-registers this copy of Speek and asks again.")
+                    Text("Shortcuts and pasting need it. Repair drops the stale entry and opens the right pane.")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Repair") {
-                    AccessibilityRepair.resetAndReprompt {
-                        AccessibilityRepair.prompt()
-                        AccessibilityRepair.openSettings()
-                    }
-                }
+                Button("Repair") { PermissionsCenter.shared.showGuide() }
                 .buttonStyle(.glassProminent)
             }
             HStack(spacing: 8) {

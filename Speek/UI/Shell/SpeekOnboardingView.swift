@@ -12,8 +12,7 @@ struct SpeekOnboardingView: View {
 
     private enum Step: Int, CaseIterable { case welcome, permissions, model, shortcut }
     @State private var step: Step = .welcome
-    @State private var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-    @State private var accessibilityGranted = AXIsProcessTrusted()
+    @ObservedObject private var permissions = PermissionsCenter.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,8 +24,7 @@ struct SpeekOnboardingView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .task {
             while !Task.isCancelled {
-                microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-                accessibilityGranted = AXIsProcessTrusted()
+                permissions.refresh()
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -36,7 +34,7 @@ struct SpeekOnboardingView: View {
     private var content: some View {
         switch step {
         case .welcome: welcome
-        case .permissions: permissions
+        case .permissions: permissionsStep
         case .model: modelStep
         case .shortcut: shortcutStep
         }
@@ -59,27 +57,22 @@ struct SpeekOnboardingView: View {
         .padding(40)
     }
 
-    private var permissions: some View {
-        stepLayout(title: "Permissions", subtitle: "Speek needs two permissions to record and to type for you.") {
+    private var permissionsStep: some View {
+        stepLayout(title: "Permissions", subtitle: "Speek needs two permissions to record and to type for you. Each button opens exactly what macOS needs.") {
             SpeekGroup {
-                permissionRow(
+                PermissionRow(
                     title: "Microphone",
                     detail: "Records your voice for transcription.",
-                    granted: microphoneGranted,
-                    action: {
-                        AVCaptureDevice.requestAccess(for: .audio) { granted in
-                            Task { @MainActor in microphoneGranted = granted }
-                        }
-                    }
+                    granted: permissions.microphoneGranted,
+                    buttonTitle: permissions.microphoneStatus == .notDetermined ? "Allow" : "Open Settings",
+                    action: permissions.allowMicrophone
                 )
-                permissionRow(
+                PermissionRow(
                     title: "Accessibility",
-                    detail: "Pastes the text into the app you are using and presses Return when you ask for it.",
-                    granted: accessibilityGranted,
-                    action: {
-                        AccessibilityRepair.prompt()
-                        AccessibilityRepair.openSettings()
-                    }
+                    detail: "Pastes the text into the app you are using and presses Return when you ask for it. Turn on the switch next to Speek in the pane that opens.",
+                    granted: permissions.accessibilityTrusted,
+                    buttonTitle: "Open Settings",
+                    action: permissions.allowAccessibility
                 )
             }
         }
@@ -141,19 +134,6 @@ struct SpeekOnboardingView: View {
         }
         .padding(36)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func permissionRow(title: String, detail: String, granted: Bool, action: @escaping () -> Void) -> some View {
-        SpeekRow(LocalizedStringKey(title), subtitle: LocalizedStringKey(detail)) {
-            if granted {
-                Label("Granted", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.system(size: 13, weight: .medium))
-            } else {
-                Button("Allow", action: action)
-                    .buttonStyle(.glassProminent)
-            }
-        }
     }
 
     private enum Availability { case downloaded, downloading(Double), notDownloaded }

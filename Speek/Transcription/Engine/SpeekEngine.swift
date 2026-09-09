@@ -385,8 +385,23 @@ class SpeekEngine: NSObject, ObservableObject {
         }
     }
 
+    /// Microphone: ask the system the first time, and when access was turned off
+    /// show the permissions guide instead of recording silence.
     private func requestRecordPermission(response: @escaping (Bool) -> Void) {
-        response(true)
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            response(true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                Task { @MainActor in
+                    PermissionsCenter.shared.refresh()
+                    response(granted)
+                }
+            }
+        default:
+            PermissionsCenter.shared.showGuide()
+            response(false)
+        }
     }
 
     /// Creates + prepares a realtime session and installs it as the current one.

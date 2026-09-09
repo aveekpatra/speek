@@ -15,7 +15,18 @@ cd "$(dirname "$0")/.." || exit 1
 
 PROJECT="Speek.xcodeproj"
 SCHEME="Speek"
-SIGN_IDENTITY="${DIST_IDENTITY:--}"
+# Identity: a Developer ID via DIST_IDENTITY; otherwise the local "Speek Dev Signing"
+# certificate when the keychain has it, so release and dev builds carry the same
+# designated requirement and macOS keeps the Microphone and Accessibility grants
+# across updates (an ad-hoc signature is a new identity on every build).
+SIGN_IDENTITY="${DIST_IDENTITY:-}"
+if [ -z "$SIGN_IDENTITY" ]; then
+  if security find-identity -p codesigning 2>/dev/null | grep -q "Speek Dev Signing"; then
+    SIGN_IDENTITY="Speek Dev Signing"
+  else
+    SIGN_IDENTITY="-"
+  fi
+fi
 APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.aveekpatra.speek}"
 DERIVED_DATA="${DIST_DERIVED_DATA:-$PWD/.local-build-release}"
 ENTITLEMENTS="${DIST_ENTITLEMENTS:-$PWD/Speek/Speek.dist.entitlements}"
@@ -56,7 +67,7 @@ xattr -cr "$WORK/Speek.app"
 # "--options runtime" aborts at launch on whisper.framework ("different Team IDs").
 # Harden only when signing with a real identity; ad-hoc builds are not notarized anyway.
 HARDEN=""
-[ "$SIGN_IDENTITY" != "-" ] && HARDEN="yes"
+[ -n "${DIST_IDENTITY:-}" ] && HARDEN="yes"
 codesign --force --deep ${HARDEN:+--options runtime} \
   --entitlements "$ENTITLEMENTS" \
   --sign "$SIGN_IDENTITY" "$WORK/Speek.app"

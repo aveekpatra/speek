@@ -516,7 +516,7 @@ struct LiveBarsView: View {
 /// Clicks work without the panel taking key status, so the user's focus stays put.
 private struct CopyHintButton: View {
     /// Gap between this capsule and the pill's edge on the top, bottom and trailing side.
-    static let inset: CGFloat = 5
+    static let inset: CGFloat = 3.5
     static let height: CGFloat = 36 - inset * 2
 
     let action: () -> Void
@@ -529,10 +529,10 @@ private struct CopyHintButton: View {
             }
             .font(.system(size: 11.5, weight: .semibold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 11)
+            .padding(.horizontal, 12)
             .frame(height: Self.height)
-            .glassEffect(.regular.tint(Color.white.opacity(0.14)).interactive(), in: Capsule(style: .continuous))
-            .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.6))
+            .background(Color.black.opacity(0.78), in: Capsule(style: .continuous))
+            .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.6))
             .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)

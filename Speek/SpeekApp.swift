@@ -381,34 +381,13 @@ struct SpeekApp: App {
     }
 
 
+    /// Launch check: when Microphone or Accessibility is missing, show the guided
+    /// permissions window once. A rebuilt copy loses Accessibility (macOS ties the
+    /// grant to the code signature); the guide drops the stale entry and asks again.
     private func showAccessibilityReminderIfNeeded() {
-        #if LOCAL_BUILD
-        guard !AXIsProcessTrusted() else { return }
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
-        return
-        #else
         guard !didShowAccessibilityReminder else { return }
         didShowAccessibilityReminder = true
-
-        guard !AXIsProcessTrusted() else { return }
-
-        NotificationManager.shared.showNotification(
-            title: String(localized: "Accessibility permission is not provided"),
-            type: .warning,
-            duration: 7.0,
-            // Reset over "Open Settings": the usual stuck state is a stale TCC entry that
-            // opening Settings alone cannot fix. Reset drops it and re-prompts.
-            actionButton: (String(localized: "Reset permission"), {
-                Task { @MainActor in
-                    AccessibilityRepair.resetAndReprompt {
-                        AccessibilityRepair.prompt()
-                        AccessibilityRepair.openSettings()
-                    }
-                }
-            })
-        )
-        #endif
+        PermissionsCenter.shared.showGuideIfNeeded()
     }
 }
 
@@ -446,6 +425,17 @@ struct CheckForUpdatesView: View {
     var body: some View {
         Button("Check for Updates…", action: updaterViewModel.checkForUpdates)
             .disabled(!updaterViewModel.canCheckForUpdates)
+    }
+}
+
+/// Menu bar entry that opens the guided permissions window.
+struct PermissionsMenuItem: View {
+    @ObservedObject private var permissions = PermissionsCenter.shared
+
+    var body: some View {
+        Button(permissions.allGranted ? "Permissions..." : "Permissions (action needed)...") {
+            PermissionsCenter.shared.showGuide()
+        }
     }
 }
 
