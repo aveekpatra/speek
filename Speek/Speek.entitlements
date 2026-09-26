@@ -35,5 +35,7 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.aveekpatra.speek</string>
 	</array>
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
 </dict>
 </plist>

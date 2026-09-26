@@ -62,44 +62,29 @@ extension ModeManager {
         guard UserDefaults.standard.bool(forKey: "hasCompletedOnboardingV2") else { return }
         guard configurations.isEmpty else { return }
 
-        var dictationMode = ModeConfig(
+        let dictationMode = ModeConfig(
             name: "Dictation",
-            isAIEnhancementEnabled: true,
+            isAIEnhancementEnabled: false,
             selectedPrompt: PromptTemplates.cleanPromptId.uuidString,
             selectedTranscriptionModelName: "stt-async-v5",
             isRealtimeTranscriptionEnabled: true,
             useClipboardContext: false,
             useSelectedTextContext: true,
             useScreenCapture: false,
-            selectedAIProvider: AIProvider.s1Mini.rawValue,
-            selectedAIModel: "S1-mini",
+            selectedAIProvider: nil,
+            selectedAIModel: nil,
             outputMode: .paste,
             isEnabled: true,
             isDefault: true
         )
-        dictationMode.s1Styling = S1MiniService.Styling.semiFormal.rawValue
-        dictationMode.s1Structure = S1MiniService.Structure.prose.rawValue
-
         configurations = [dictationMode]
         saveConfigurations()
     }
 
-    /// One-time: cleanup with S1-mini becomes the default. Only the default mode is
-    /// touched, and only if it has no language model yet; modes the user configured
-    /// keep whatever they have. Runs again until a default mode exists.
+    /// One-time: leave legacy dictation cleanup off until a cloud provider is chosen.
     func enableCleanupByDefaultIfNeeded() {
         let key = "speek.cleanupDefaultApplied"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
-        guard let index = configurations.firstIndex(where: { $0.isDefault }) else { return }
-        if !configurations[index].isAIEnhancementEnabled {
-            configurations[index].isAIEnhancementEnabled = true
-            configurations[index].selectedAIProvider = AIProvider.s1Mini.rawValue
-            configurations[index].selectedAIModel = "S1-mini"
-            configurations[index].selectedPrompt = PromptTemplates.cleanPromptId.uuidString
-            configurations[index].s1Styling = S1MiniService.Styling.semiFormal.rawValue
-            configurations[index].s1Structure = S1MiniService.Structure.prose.rawValue
-            saveConfigurations()
-        }
         UserDefaults.standard.set(true, forKey: key)
     }
 

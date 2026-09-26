@@ -43,30 +43,27 @@ enum AccessibilityRepair {
         return path.hasPrefix("/Applications/") || path.hasPrefix("\(home)/Applications/")
     }
 
-    /// Copies this bundle to /Applications, strips quarantine, relaunches from there and quits.
-    /// A stable, non-translocated location is what makes the TCC entry stick.
+    /// Installs a first copy at a stable path. Existing installations are never overwritten.
     @MainActor
     static func moveToApplicationsAndRelaunch() -> Bool {
         let source = Bundle.main.bundleURL
-        let destination = URL(fileURLWithPath: "/Applications").appendingPathComponent(source.lastPathComponent)
+        let destination = URL(fileURLWithPath: "/Applications/Speek.app")
         let fm = FileManager.default
+        guard !fm.fileExists(atPath: destination.path) else {
+            NSWorkspace.shared.activateFileViewerSelecting([destination])
+            return false
+        }
         do {
-            if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
             try fm.copyItem(at: source, to: destination)
         } catch {
-            // /Applications not writable for this user: open it so they can drag the app in.
             NSWorkspace.shared.activateFileViewerSelecting([source])
             NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
             return false
         }
-        let strip = Process()
-        strip.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
-        strip.arguments = ["-dr", "com.apple.quarantine", destination.path]
-        try? strip.run(); strip.waitUntilExit()
-
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: destination, configuration: config) { _, _ in
+        NSWorkspace.shared.openApplication(at: destination, configuration: config) { _, error in
+            guard error == nil else { return }
             DispatchQueue.main.async { NSApp.terminate(nil) }
         }
         return true

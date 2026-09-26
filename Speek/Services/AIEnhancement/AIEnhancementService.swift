@@ -81,12 +81,12 @@ class AIEnhancementService: ObservableObject {
         guard configuration.prompt != nil else { return false }
         guard let provider = configuration.provider else { return false }
 
-        if provider == .localCLI || provider == .ollama {
+        if provider == .localCLI {
             return true
         }
 
-        if provider == .s1Mini {
-            return FileManager.default.fileExists(atPath: S1MiniModelManager.modelFileURL.path)
+        if provider == .s1Mini || provider == .ollama {
+            return ActionCredentials.activeProvider != nil
         }
 
         if provider == .custom {
@@ -94,6 +94,7 @@ class AIEnhancementService: ObservableObject {
             return CustomAIProviderManager.shared.requestConfiguration(forModel: modelName) != nil
         }
 
+        if provider == .openAI || provider == .openRouter { return ActionCredentials.activeProvider != nil }
         return APIKeyManager.shared.hasAPIKey(forProvider: provider.rawValue)
     }
 
@@ -179,10 +180,22 @@ class AIEnhancementService: ObservableObject {
             throw EnhancementError.notConfigured
         }
 
-        guard let provider = configuration.provider else {
+        guard let configuredProvider = configuration.provider else {
             throw EnhancementError.notConfigured
         }
-        let modelName = configuration.modelName ?? provider.defaultModel
+        let provider: AIProvider
+        let modelName: String
+        if configuredProvider == .s1Mini || configuredProvider == .ollama ||
+            (configuredProvider == .openAI && !ActionCredentials.hasKey(for: .openAI)) ||
+            (configuredProvider == .openRouter && !ActionCredentials.hasKey(for: .openRouter)) {
+            guard let cloud = ActionCredentials.activeProvider else { throw EnhancementError.notConfigured }
+            provider = cloud == .openAI ? .openAI : .openRouter
+            let stronger = configuredProvider == .ollama
+            modelName = cloud == .openAI ? (stronger ? "gpt-4o" : "gpt-4o-mini") : (stronger ? "openai/gpt-4o" : "openai/gpt-4o-mini")
+        } else {
+            provider = configuredProvider
+            modelName = configuration.modelName ?? provider.defaultModel
+        }
 
         guard !text.isEmpty else {
             return ""
@@ -198,56 +211,6 @@ class AIEnhancementService: ObservableObject {
         await MainActor.run {
             self.lastSystemMessageSent = systemMessage
             self.lastUserMessageSent = formattedText
-        }
-
-        if provider == .s1Mini {
-            let mode = configuration.mode
-            // S1-mini is English only. A mode pinned to another language pastes the raw
-            // transcript; auto-detect still runs it, since mixed text passes through intact.
-            if let language = mode?.selectedLanguage, language != "auto", language != "en" {
-                return text
-            }
-            let styling = S1MiniService.Styling(rawValue: mode?.s1Styling ?? "") ?? .semiFormal
-            let structure = S1MiniService.Structure(rawValue: mode?.s1Structure ?? "") ?? .prose
-            let promptID = mode?.selectedPrompt.flatMap { UUID(uuidString: $0) }
-            let context: S1MiniService.Context = promptID == PromptTemplates.emailPromptId ? .email : .general
-            do {
-                let result = try await S1MiniService.shared.normalize(text, styling: styling, structure: structure, context: context)
-                // An empty answer for a few words means filler only ("um, uh"): nothing
-                // to paste. For anything longer it is a failure, and the raw text is safer.
-                if result.isEmpty {
-                    return WordCounter.count(in: text) <= 4 ? "" : text
-                }
-                return result
-            } catch {
-                throw EnhancementError.customError(error.localizedDescription)
-            }
-        }
-
-        if provider == .ollama {
-            // The mode's tone applies to rewriting too.
-            let tone = S1MiniService.Styling(rawValue: configuration.mode?.s1Styling ?? "") ?? .semiFormal
-            let tonedSystemMessage = systemMessage + "\n\nWrite the result in a \(tone.displayName.lowercased()) register. Keep the speaker's meaning; never add information that was not said."
-            do {
-                let result = try await aiService.enhanceWithOllama(
-                    text: formattedText,
-                    systemPrompt: tonedSystemMessage,
-                    model: modelName,
-                    timeout: baseTimeout
-                )
-                return AIEnhancementOutputFilter.filter(result)
-            } catch {
-                if let localError = error as? LocalAIError {
-                    switch localError {
-                    case .timeout:
-                        throw EnhancementError.timeout
-                    default:
-                        throw EnhancementError.customError(localError.errorDescription ?? "An unknown Ollama error occurred.")
-                    }
-                } else {
-                    throw EnhancementError.customError(error.localizedDescription)
-                }
-            }
         }
 
         if provider == .localCLI {
@@ -333,7 +296,11 @@ class AIEnhancementService: ObservableObject {
             return customConfiguration.apiKey
         }
 
-        guard let key = APIKeyManager.shared.getAPIKey(forProvider: provider.rawValue), !key.isEmpty else {
+        let key: String?
+        if provider == .openAI { key = ActionCredentials.key(for: .openAI) }
+        else if provider == .openRouter { key = ActionCredentials.key(for: .openRouter) }
+        else { key = APIKeyManager.shared.getAPIKey(forProvider: provider.rawValue) }
+        guard let key, !key.isEmpty else {
             throw EnhancementError.notConfigured
         }
         return key
@@ -451,7 +418,7 @@ class AIEnhancementService: ObservableObject {
     }
 
     func captureScreenContext() async {
-        guard CGPreflightScreenCaptureAccess() else {
+        guard await PermissionsCenter.shared.refreshScreenCapture() else {
             return
         }
 

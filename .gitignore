@@ -129,3 +129,6 @@ Temporary Items
 # Release output
 dist/
 .release-build/
+
+# Feature verification build output
+.feature-build/

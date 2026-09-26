@@ -44,7 +44,6 @@ final class ModelIdleUnloader {
             self.logger.notice("Idle for \(seconds)s: unloading models")
             await engine.serviceRegistry.unloadAllModels()
             engine.whisperModelManager.unloadModel()
-            S1MiniService.shared.unload()
         }
     }
 }

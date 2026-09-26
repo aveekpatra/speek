@@ -238,16 +238,13 @@ class AIService: ObservableObject {
     
     var connectedProviders: [AIProvider] {
         AIProvider.allCases.filter { provider in
+            guard provider != .ollama && provider != .s1Mini else { return false }
             guard provider.supportsEnhancement else {
                 return false
             }
 
             if provider == .custom {
                 return CustomAIProviderManager.shared.hasConfiguredModels
-            } else if provider == .ollama {
-                return ollamaService.isConnected
-            } else if provider == .s1Mini {
-                return FileManager.default.fileExists(atPath: S1MiniModelManager.modelFileURL.path)
             } else if provider == .localCLI {
                 return localCLIService.isConfigured
             } else if provider.requiresAPIKey {
@@ -306,10 +303,11 @@ class AIService: ObservableObject {
         }
 
         if let savedProvider = userDefaults.string(forKey: "selectedAIProvider"),
-           let provider = AIProvider(rawValue: savedProvider) {
+           let provider = AIProvider(rawValue: savedProvider),
+           provider != .ollama && provider != .s1Mini {
             self.selectedProvider = provider
         } else {
-            self.selectedProvider = .gemini
+            self.selectedProvider = ActionCredentials.activeProvider == .openRouter ? .openRouter : .openAI
         }
 
         if selectedProvider.requiresAPIKey {
@@ -595,7 +593,7 @@ class AIService: ObservableObject {
     }
     
     func enhanceWithOllama(text: String, systemPrompt: String, model: String? = nil, timeout: TimeInterval = 30) async throws -> String {
-        try await ollamaService.enhance(text, withSystemPrompt: systemPrompt, model: model, timeout: timeout)
+        throw EnhancementError.notConfigured
     }
 
     func updateOllamaBaseURL(_ newURL: String) {

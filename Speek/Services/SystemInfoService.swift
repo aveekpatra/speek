@@ -185,7 +185,7 @@ class SystemInfoService {
     }
 
     private func getScreenRecordingStatus() -> String {
-        return CGPreflightScreenCaptureAccess() ? "Granted" : "Not Granted"
+        return CGPreflightScreenCaptureAccess() ? "Granted" : "Check live Screen Recording status in Speek Settings"
     }
 
     private func getMicrophoneStatus() -> String {

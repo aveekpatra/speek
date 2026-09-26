@@ -1,0 +1,33 @@
+import Foundation
+@main struct Check {
+ static func main() {
+  var s = HandsFreeShortcut()
+  assert(s.press(at: 0, enabled: false) == .startRecording)
+  assert(s.release(at: 0.1) == .none)
+  assert(s.didStartRecording() == .finishRecording)
+  assert(!s.isEngaged)
+  assert(s.press(at: 1, enabled: true) == .startRecording)
+  assert(s.release(at: 1.1) == .waitForSecondTap)
+  assert(s.press(at: 1.2, enabled: true) == .none)
+  assert(s.isHandsFree)
+  assert(s.release(at: 1.3) == .none)
+  assert(s.didStartRecording() == .none)
+  assert(s.expireTapWindow(at: 2) == .none)
+  assert(s.press(at: 3, enabled: true) == .finishRecording)
+  assert(!s.isEngaged)
+  assert(s.press(at: 4, enabled: true) == .startRecording)
+  assert(s.didStartRecording() == .none)
+  assert(s.release(at: 5) == .finishRecording)
+  assert(s.press(at: 6, enabled: true) == .startRecording)
+  assert(s.release(at: 6.1) == .waitForSecondTap)
+  assert(s.expireTapWindow(at: 6.3) == .none)
+  assert(s.expireTapWindow(at: 6.5) == .none)
+  assert(s.didStartRecording() == .finishRecording)
+  assert(s.press(at: 7, enabled: true) == .startRecording)
+  s.cancel()
+  assert(s.didStartRecording() == .none)
+  assert(s.release(at: 7.1) == .none)
+  assert(s.expireTapWindow(at: 8) == .none)
+  print("PASS: default startup-release race, doubletap startup latch, longhold, deferred tap expiry, cancellation")
+ }
+}

@@ -1,4 +1,41 @@
-# Speek: Product Requirements Document
+# Speek: Current product requirements
+
+Updated: 2026-09-26.
+
+## Current direction
+
+Speek is a cloud-connected macOS voice-to-action assistant. Users can dictate into the current app, rewrite selected text, ask questions with screen/file context, and request actions through connected tools. The application combines a persistent notch assistant with in-app Tasks, Memory, Models & Voice, Integrations, and Settings.
+
+The current feature inventory and remaining limitations are in [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md). That document distinguishes implemented source paths from live-tested capabilities. Neither this PRD nor a passing build establishes full VoiceOS parity or production readiness.
+
+## Current workflows
+
+- Dictation: hold the shortcut, or opt into double-tap hands-free capture; transcribe, apply corrections and the selected writing mode, then insert only into the captured valid destination. Preserve text when delivery is unsafe.
+- Edit: explicitly enable selected-text editing, capture the selection, speak the edit, and replace only if the original selection still matches.
+- Agent: capture fresh permitted context, select a connected tool, validate arguments, review consequential actions, execute and report the actual result. Continue dependent steps within execution limits.
+- Integrations: configure MCP servers, supported native apps, trusted CLI manifests, scoped dictation hooks and local instruction skills. Unavailable services must not be represented as connected.
+- Coding: configure Codex or Claude Code under Integrations > Native apps. Use a request review sheet; show its progress and result in shared Activity. Do not add a separate Coding tasks page or workspace.
+- Memory: maintain explicit facts, dated completed-request/result episodes, user-authored procedures and transcription corrections. Respect history opt-out and allow inspection, editing and removal.
+- Activity: show background requests and integration jobs together. Schedules create reviewable due requests while Speek is running; they do not silently grant permission for external writes.
+- Recovery: optional local audio backup, bounded by age/count/disk size, for retry and copying. Keep it off by default and disable new backups when history saving is off.
+
+## Design and acceptance requirements
+
+Preserve the established notch design. In-app screens use the current settings background, consistent type hierarchy, compact flat action buttons beside section headings, shared card surfaces, responsive grids and right-aligned controls. Reuse existing model controls and actual provider identities.
+
+Each feature needs real persistence and error handling, cancellation where work is asynchronous, and a reachable empty/loading/error state. Do not show fake success, silently reset user selections, hide unsupported behavior behind placeholder buttons, or claim completion without a tool result. Missing credentials or account permissions must be explicit.
+
+Verification includes source helper checks, a signed app build, and permission/account-dependent manual checks. Retain the stable Speek Dev Signing identity and canonical Applications install. Production release requires the outstanding tests and implementation gaps recorded in FEATURE_STATUS.md to be resolved or explicitly scoped out.
+
+## Current boundaries
+
+The active lifecycle uses cloud speech and request providers. Local model downloads and inference in the historical implementation are not the current product direction. Subscription request authentication and speech API credentials remain separate. Computer use, the full third-party OAuth catalog, rich integration widgets, cross-platform clients and enterprise services are not implemented merely because local abstractions exist.
+
+---
+
+# Historical appendix: retired local-dictation requirements
+
+The remainder is preserved as historical reference. It describes the pre-pivot product, including retired local-only models, former navigation, old recorder placement, and legacy plugin behavior. It is not the current implementation contract and must not override the requirements above.
 
 ## 1. Product vision
 
@@ -74,3 +111,5 @@ Menu bar: Toggle Recording, Transcribe File..., History..., Settings..., microph
 ## 8. Status
 
 All phases of `PLAN.md` are implemented. Remaining: prune the cloud LLM providers left inside `AIService`, remove the iOS targets from the project, notarized release builds, Sparkle signing key and appcast publishing.
+
+Messages adds separate history/sending permissions and reviewed iMessage sending. Create Prompt in the chat Add menu retains numbered images while editing or refining a draft with the selected chat model. These paths have fixture checks; live account and permission testing remains outstanding.

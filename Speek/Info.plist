@@ -30,8 +30,12 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Speek needs access to your microphone to record audio for transcription.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Speek needs to interact with your browser to detect the current website so Modes can activate for specific sites.</string>
+	<string>Speek uses the native applications you connect to read information and perform actions after review.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Speek uses screen recording only to read on-screen context for AI modes when you enable it.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Speek reads your calendars and creates or changes events after you review an action.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Speek reads reminders and makes changes after you review an action.</string>
 </dict>
 </plist>

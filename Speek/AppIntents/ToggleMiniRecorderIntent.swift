@@ -4,13 +4,13 @@ import AppKit
 
 struct ToggleMiniRecorderIntent: AppIntent {
     static var title: LocalizedStringResource = "Toggle Speek Recorder"
-    static var description = IntentDescription("Start or stop the Speek recorder for voice transcription.")
+    static var description = IntentDescription("Start or stop the Speek recorder for online voice requests.")
     
     static var openAppWhenRun: Bool = false
     
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        NotificationCenter.default.post(name: .toggleRecorderPanel, object: nil)
+        AssistantController.shared.toggleVoice()
         
         let dialog: IntentDialog = "Speek recorder toggled"
         return .result(dialog: dialog)

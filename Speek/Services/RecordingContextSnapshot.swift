@@ -45,7 +45,7 @@ enum RecordingContextCaptureService {
                 store.updateSelectedText(selectedText)
             },
             Task { @MainActor in
-                guard CGPreflightScreenCaptureAccess(), !Task.isCancelled else { return }
+                guard await PermissionsCenter.shared.refreshScreenCapture(), !Task.isCancelled else { return }
                 let screenCaptureService = ScreenCaptureService()
                 let screenText = await screenCaptureService.captureAndExtractText()
                 guard !Task.isCancelled else { return }

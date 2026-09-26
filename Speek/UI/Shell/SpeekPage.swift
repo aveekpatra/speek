@@ -16,7 +16,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .home: return "Home"
+        case .home: return "Workspace"
         case .modes: return "Modes"
         case .vocabulary: return "Vocabulary"
         case .agents: return "Agent Panel"
@@ -30,7 +30,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
 
     var systemImage: String {
         switch self {
-        case .home: return "house.fill"
+        case .home: return "waveform.path"
         case .modes: return "sparkle"
         case .vocabulary: return "text.book.closed.fill"
         case .agents: return "apple.terminal.fill"
@@ -44,7 +44,7 @@ enum SpeekPage: String, CaseIterable, Identifiable, Hashable {
 
     var tileColor: Color {
         switch self {
-        case .home: return Color(red: 0.98, green: 0.45, blue: 0.20)
+        case .home: return Color(red: 0.17, green: 0.34, blue: 0.70)
         case .modes: return Color(red: 0.20, green: 0.50, blue: 0.98)
         case .vocabulary: return Color(red: 0.20, green: 0.55, blue: 0.98)
         case .agents: return Color(red: 0.20, green: 0.52, blue: 0.98)

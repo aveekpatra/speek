@@ -34,10 +34,7 @@ struct PermissionsGuideView: View {
                 )
             }
             if !center.accessibilityTrusted {
-                Text("macOS does not let apps switch Accessibility on themselves. In the pane that opens, turn on the switch next to Speek. If the switch is already on, turn it off and on again.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                AccessibilitySetupHelp()
             }
         }
         .padding(24)
@@ -78,7 +75,64 @@ struct PermissionRow: View {
             } else {
                 Button(buttonTitle, action: action)
                     .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
             }
+        }
+    }
+}
+
+
+/// A real file URL drag source, shared by onboarding and the permissions panel.
+struct AccessibilitySetupHelp: View {
+    @State private var installFailed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !AccessibilityRepair.isInstalledInApplications {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Install Speek first").font(.headline)
+                        Text("Keep Speek in Applications so macOS can find it.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Move to Applications") {
+                        installFailed = !AccessibilityRepair.moveToApplicationsAndRelaunch()
+                    }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                }
+                if installFailed {
+                    Text("Finder is open. Move this copy into Applications, then reopen it there.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Turn on Speek in the settings pane that opens.")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                        .resizable().frame(width: 36, height: 36)
+                    Text("Speek.app").font(.system(size: 13, weight: .medium))
+                }
+                .padding(10)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                .onDrag { NSItemProvider(object: Bundle.main.bundleURL as NSURL) }
+                .accessibilityLabel("Drag Speek into the permission list")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Missing from the list? Drag this app into it.")
+                    Text("Or use + and choose Speek from Applications.")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                Spacer(minLength: 0)
+                Button("Show in Finder", action: AccessibilityRepair.revealInFinder)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+            }
+            Text("macOS may call this Accessibility or Device Control and Data Access. Only you can enable its switch.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

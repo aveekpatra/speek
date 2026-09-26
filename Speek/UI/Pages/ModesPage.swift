@@ -140,7 +140,7 @@ private struct ModeRowView: View {
                 HStack(spacing: 4) {
                     modelChip(symbol: "waveform", title: voiceModelName)
                     if config.isAIEnhancementEnabled {
-                        modelChip(symbol: "text.alignleft", title: config.selectedAIProvider == AIProvider.ollama.rawValue ? (config.selectedAIModel ?? "Rewrite") : "Clean up")
+                        modelChip(symbol: "text.alignleft", title: ModeDetailPage.isRewrite(config) ? "Online rewrite" : "Online cleanup")
                     }
                 }
             }
@@ -180,11 +180,9 @@ private struct ModeRowView: View {
 struct ModeDetailPage: View {
     @ObservedObject private var modeManager = ModeManager.shared
     @EnvironmentObject private var transcriptionModelManager: TranscriptionModelManager
-    @EnvironmentObject private var aiService: AIService
     @EnvironmentObject private var enhancementService: AIEnhancementService
     @ObservedObject private var settings = SpeekSettings.shared
     @ObservedObject private var navigation = SpeekNavigation.shared
-    @ObservedObject private var s1MiniModelManager = S1MiniModelManager.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     let modeID: UUID
@@ -209,7 +207,7 @@ struct ModeDetailPage: View {
         let preset = ModePreset.preset(for: config)
         return SpeekPageScroll(spacing: 14) {
             SpeekGroup {
-                SpeekRow("Preset", help: "A starting point for tone and shape. With Clean up: Message sets a casual tone, Email adds a greeting and sign-off, Note prefers lists. With Rewrite, the preset also chooses the instructions the model follows; Custom lets you write your own.") {
+                SpeekRow("Preset", help: "A starting point for tone and shape. Online cleanup and rewrite use the selected cloud provider. Custom lets you write your own instructions.") {
                     Picker("", selection: Binding(get: { preset }, set: { apply(preset: $0) })) {
                         ForEach(ModePreset.allCases) { preset in
                             Label(preset.displayName, systemImage: preset.symbol).tag(preset)
@@ -225,7 +223,7 @@ struct ModeDetailPage: View {
                             Slider(
                                 value: Binding(
                                     get: { Double(toneIndex(config)) },
-                                    set: { v in update { $0.s1Styling = S1MiniService.Styling.allCases[Int(v.rounded())].rawValue } }
+                                    set: { v in update { $0.s1Styling = OnlineTextTone.allCases[Int(v.rounded())].rawValue } }
                                 ),
                                 in: 0...3, step: 1
                             )
@@ -236,10 +234,10 @@ struct ModeDetailPage: View {
                     if cleanupLevel(config) == .cleanup {
                         SpeekRow("Structure", help: "Prose keeps sentences and paragraphs. Lists lets the model turn enumerations of three or more items into bullet points.") {
                             Picker("", selection: Binding(
-                                get: { S1MiniService.Structure(rawValue: config.s1Structure ?? "") ?? .prose },
+                                get: { OnlineTextStructure(rawValue: config.s1Structure ?? "") ?? .prose },
                                 set: { v in update { $0.s1Structure = v.rawValue } }
                             )) {
-                                ForEach(S1MiniService.Structure.allCases) { Text($0.displayName).tag($0) }
+                                ForEach(OnlineTextStructure.allCases) { Text($0.displayName).tag($0) }
                             }
                             .pickerStyle(.segmented)
                             .labelsHidden()
@@ -247,21 +245,19 @@ struct ModeDetailPage: View {
                         }
                     }
                 }
-                if preset == .custom, cleanupLevel(config) != .rewrite {
-                    // S1-mini normalizes; it cannot take instructions. Say so instead of
-                    // showing an editor whose text would be ignored.
-                    SpeekRow("Custom instructions", help: "Only Rewrite models follow written instructions.") {
+                if preset == .custom, cleanupLevel(config) == .off {
+                    SpeekRow("Custom instructions", help: "Turn on online cleanup to use written instructions.") {
                         HStack(spacing: 10) {
-                            Text(cleanupLevel(config) == .off ? "Turn on Rewrite to use custom instructions." : "S1-mini cleans text but does not follow instructions.")
+                            Text("Turn on online cleanup to use custom instructions.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
-                            Button("Switch to Rewrite") { apply(cleanup: .rewrite) }
+                            Button("Turn on rewrite") { apply(cleanup: .rewrite) }
                                 .buttonStyle(.glass)
                                 .buttonBorderShape(.capsule)
                         }
                     }
                 }
-                if preset == .custom, cleanupLevel(config) == .rewrite {
+                if preset == .custom, cleanupLevel(config) != .off {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Instructions for the language model")
                             .font(.system(size: 15))
@@ -272,7 +268,7 @@ struct ModeDetailPage: View {
                             .padding(8)
                             .background(RoundedRectangle(cornerRadius: 10).fill(SpeekDesign.controlFill(scheme).opacity(0.5)))
                             .onChange(of: customPromptText) { _, text in saveCustomPrompt(text, config: config) }
-                        Text("Custom instructions need an Ollama model. S1-mini only follows the tone setting.")
+                        Text("Speek sends these instructions to the selected cloud provider.")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
@@ -314,7 +310,7 @@ struct ModeDetailPage: View {
                         }
                     }
                 }
-                SpeekRow("Cleanup", help: "Off pastes the raw transcript. Clean up runs S1-mini on device: fillers, stutters and false starts go, a correction like \"Friday, no, Thursday\" becomes Thursday, numbers and punctuation are written out, and your wording stays yours. Rewrite hands the transcript to an Ollama model with the preset's instructions: it rephrases for clarity and intent, and can change meaning.") {
+                SpeekRow("Cleanup", help: "Off pastes the raw transcript. Clean up and Rewrite send text to the selected cloud provider. Rewrite may change wording more substantially.") {
                     Picker("", selection: Binding(get: { cleanupLevel(config) }, set: { apply(cleanup: $0) })) {
                         ForEach(CleanupLevel.allCases) { level in
                             Text(level.displayName).tag(level)
@@ -325,39 +321,10 @@ struct ModeDetailPage: View {
                     .fixedSize()
                 }
                 if cleanupLevel(config) != .off {
-                    SpeekRow("Text model", help: cleanupLevel(config) == .rewrite
-                        ? "Any model installed in Ollama. 7B to 8B instruct models are a good fit on Apple silicon; expect a few seconds per dictation."
-                        : "The on-device model that cleans the transcript. S1-mini is Superwhisper's open-weights normalizer, 462 MB, English.") {
-                        let options = textModelOptions(for: cleanupLevel(config))
-                        if options.isEmpty {
-                            Text("No Ollama models found. Install Ollama and pull a model.")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            let selectedID = options.first { $0.id == config.selectedAIModel }?.id ?? options[0].id
-                            let selected = options.first { $0.id == selectedID }!
-                            SpeekModelPopup(
-                                title: selected.title,
-                                icon: selected.icon,
-                                options: options,
-                                selectedID: selectedID
-                            ) { id in
-                                update { $0.selectedAIModel = id }
-                            }
-                        }
-                    }
-                }
-                if cleanupLevel(config) == .cleanup, !s1MiniModelManager.isDownloaded {
-                    SpeekRow("S1-mini is not downloaded", subtitle: LocalizedStringKey(s1MiniModelManager.downloadStatus?.message ?? "One-time \(S1MiniModelManager.sizeText) download. Until then this mode pastes the raw transcript.")) {
-                        if let status = s1MiniModelManager.downloadStatus {
-                            ProgressView(value: status.fractionCompleted)
-                                .progressViewStyle(.circular)
-                                .controlSize(.small)
-                        } else {
-                            Button("Download") { s1MiniModelManager.download() }
-                                .buttonStyle(.glass)
-                                .buttonBorderShape(.capsule)
-                        }
+                    SpeekRow("Text provider", subtitle: "Uses OpenAI when connected, or OpenRouter as the alternative.") {
+                        Text(ActionCredentials.activeProvider?.displayName ?? "Connect a cloud provider")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -526,8 +493,8 @@ struct ModeDetailPage: View {
     }
 
     private func toneIndex(_ config: ModeConfig) -> Int {
-        let styling = S1MiniService.Styling(rawValue: config.s1Styling ?? "") ?? .semiFormal
-        return S1MiniService.Styling.allCases.firstIndex(of: styling) ?? 2
+        let styling = OnlineTextTone(rawValue: config.s1Styling ?? "") ?? .semiFormal
+        return OnlineTextTone.allCases.firstIndex(of: styling) ?? 2
     }
 
     private func voiceModel(_ config: ModeConfig) -> (any TranscriptionModel)? {
@@ -564,25 +531,26 @@ struct ModeDetailPage: View {
             }
             switch preset {
             case .message:
-                config.s1Styling = S1MiniService.Styling.casual.rawValue
-                config.s1Structure = S1MiniService.Structure.prose.rawValue
+                config.s1Styling = OnlineTextTone.casual.rawValue
+                config.s1Structure = OnlineTextStructure.prose.rawValue
             case .email:
-                config.s1Styling = S1MiniService.Styling.semiFormal.rawValue
-                config.s1Structure = S1MiniService.Structure.prose.rawValue
+                config.s1Styling = OnlineTextTone.semiFormal.rawValue
+                config.s1Structure = OnlineTextStructure.prose.rawValue
             case .note:
-                config.s1Styling = S1MiniService.Styling.semiCasual.rawValue
-                config.s1Structure = S1MiniService.Structure.lists.rawValue
+                config.s1Styling = OnlineTextTone.semiCasual.rawValue
+                config.s1Structure = OnlineTextStructure.lists.rawValue
             case .voiceToText:
-                config.s1Structure = S1MiniService.Structure.prose.rawValue
+                config.s1Structure = OnlineTextStructure.prose.rawValue
             case .custom:
                 break
             }
             // Picking a formatting preset other than plain voice-to-text implies a language model.
             if preset != .voiceToText, !config.isAIEnhancementEnabled {
                 config.isAIEnhancementEnabled = true
-                config.selectedAIProvider = AIProvider.s1Mini.rawValue
-                config.selectedAIModel = "S1-mini"
-                if config.s1Styling == nil { config.s1Styling = S1MiniService.Styling.semiFormal.rawValue }
+                let cloud = ActionCredentials.activeProvider ?? ActionCredentials.selectedProvider
+                config.selectedAIProvider = cloud.displayName
+                config.selectedAIModel = cloud == .openAI ? "gpt-4o-mini" : "openai/gpt-4o-mini"
+                if config.s1Styling == nil { config.s1Styling = OnlineTextTone.semiFormal.rawValue }
             }
         }
     }
@@ -605,24 +573,14 @@ struct ModeDetailPage: View {
         }
     }
 
-    /// Models offered for a cleanup level. Clean up lists on-device normalizers (S1-mini
-    /// today; the list is the place to add another); Rewrite lists what Ollama has.
-    private func textModelOptions(for level: CleanupLevel) -> [SpeekModelPopup.Option] {
-        switch level {
-        case .off:
-            return []
-        case .cleanup:
-            return [SpeekModelPopup.Option(id: "S1-mini", title: "S1-mini", icon: AnyView(SpeekModelIcon.tile(brand: .superwhisper)))]
-        case .rewrite:
-            return aiService.availableModels(for: .ollama).map {
-                SpeekModelPopup.Option(id: $0, title: $0, icon: AnyView(SpeekModelIcon.tile(brand: .ollama)))
-            }
-        }
+    static func isRewrite(_ config: ModeConfig) -> Bool {
+        config.selectedAIProvider == AIProvider.ollama.rawValue ||
+            config.selectedAIModel == "gpt-4o" || config.selectedAIModel == "openai/gpt-4o"
     }
 
     private func cleanupLevel(_ config: ModeConfig) -> CleanupLevel {
         guard config.isAIEnhancementEnabled else { return .off }
-        return config.selectedAIProvider == AIProvider.ollama.rawValue ? .rewrite : .cleanup
+        return Self.isRewrite(config) ? .rewrite : .cleanup
     }
 
     private func apply(cleanup level: CleanupLevel) {
@@ -632,18 +590,20 @@ struct ModeDetailPage: View {
                 config.isAIEnhancementEnabled = false
             case .cleanup:
                 config.isAIEnhancementEnabled = true
-                config.selectedAIProvider = AIProvider.s1Mini.rawValue
-                config.selectedAIModel = "S1-mini"
+                let cloud = ActionCredentials.activeProvider ?? ActionCredentials.selectedProvider
+                config.selectedAIProvider = cloud.displayName
+                config.selectedAIModel = cloud == .openAI ? "gpt-4o-mini" : "openai/gpt-4o-mini"
             case .rewrite:
                 config.isAIEnhancementEnabled = true
-                config.selectedAIProvider = AIProvider.ollama.rawValue
-                config.selectedAIModel = aiService.availableModels(for: .ollama).first
+                let cloud = ActionCredentials.activeProvider ?? ActionCredentials.selectedProvider
+                config.selectedAIProvider = cloud.displayName
+                config.selectedAIModel = cloud == .openAI ? "gpt-4o" : "openai/gpt-4o"
             }
             if config.selectedPrompt == nil {
                 config.selectedPrompt = PromptTemplates.cleanPromptId.uuidString
             }
             if config.s1Styling == nil {
-                config.s1Styling = S1MiniService.Styling.semiFormal.rawValue
+                config.s1Styling = OnlineTextTone.semiFormal.rawValue
             }
         }
     }

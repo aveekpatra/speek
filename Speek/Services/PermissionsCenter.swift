@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import ApplicationServices
 import SwiftUI
+import ScreenCaptureKit
 import os
 
 /// One place that knows the state of the two permissions Speek cannot work without
@@ -21,6 +22,52 @@ final class PermissionsCenter: ObservableObject {
     @Published private(set) var accessibilityTrusted = AXIsProcessTrusted()
     @Published private(set) var isRepairingAccessibility = false
 
+    @Published private(set) var screenCaptureGranted = CGPreflightScreenCaptureAccess()
+    @Published private(set) var screenCaptureError: String?
+    // Passive status checks never enumerate screens or request access.
+    // Only an explicit capture/request action may invoke a prompting API.
+    @discardableResult
+    func refreshScreenCapture(force: Bool = false) async -> Bool {
+        refreshScreenCaptureStatus()
+        return screenCaptureGranted
+    }
+
+    private func refreshScreenCaptureStatus() {
+        screenCaptureGranted = CGPreflightScreenCaptureAccess()
+        if screenCaptureGranted { screenCaptureError = nil }
+    }
+
+    func shareableScreenContent() async throws -> SCShareableContent {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            screenCaptureGranted = true
+            screenCaptureError = nil
+            return content
+        } catch {
+            let failure = error as NSError
+            if failure.domain == SCStreamErrorDomain && failure.code == SCStreamError.Code.userDeclined.rawValue {
+                screenCaptureGranted = false
+                screenCaptureError = "macOS has not authorized this installed copy. If Speek is already enabled, remove its old entry and add Speek from Applications again."
+            } else {
+                // A capture failure does not prove that authorization was denied.
+                refreshScreenCaptureStatus()
+                screenCaptureError = "Screen capture failed: " + error.localizedDescription
+            }
+            throw ActionClientError.requestFailed(screenCaptureError ?? error.localizedDescription)
+        }
+    }
+
+    func allowScreenCapture() {
+        refreshScreenCaptureStatus()
+        guard !screenCaptureGranted else { return }
+        CGRequestScreenCaptureAccess()
+        refreshScreenCaptureStatus()
+        guard !screenCaptureGranted else { return }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     var microphoneGranted: Bool { microphoneStatus == .authorized }
     var allGranted: Bool { microphoneGranted && accessibilityTrusted }
 
@@ -37,6 +84,7 @@ final class PermissionsCenter: ObservableObject {
     func refresh() {
         microphoneStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         accessibilityTrusted = AXIsProcessTrusted()
+        refreshScreenCaptureStatus()
         if accessibilityTrusted {
             UserDefaults.standard.set(true, forKey: wasTrustedKey)
         }
@@ -65,19 +113,8 @@ final class PermissionsCenter: ObservableObject {
     func allowAccessibility() {
         refresh()
         guard !accessibilityTrusted else { return }
-        let wasTrusted = UserDefaults.standard.bool(forKey: wasTrustedKey)
-        if wasTrusted, !isRepairingAccessibility {
-            isRepairingAccessibility = true
-            logger.notice("Accessibility was granted before; dropping the stale entry before asking again")
-            AccessibilityRepair.resetAndReprompt { [weak self] in
-                self?.isRepairingAccessibility = false
-                AccessibilityRepair.prompt()
-                AccessibilityRepair.openSettings()
-            }
-        } else {
-            AccessibilityRepair.prompt()
-            AccessibilityRepair.openSettings()
-        }
+        AccessibilityRepair.prompt()
+        AccessibilityRepair.openSettings()
     }
 
     func openMicrophoneSettings() {

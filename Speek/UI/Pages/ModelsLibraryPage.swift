@@ -58,9 +58,7 @@ struct ModelsLibraryPage: View {
     @EnvironmentObject private var transcriptionModelManager: TranscriptionModelManager
     @ObservedObject private var cohereModelManager = CohereModelManager.shared
     @ObservedObject private var canaryModelManager = CanaryModelManager.shared
-    @ObservedObject private var s1MiniModelManager = S1MiniModelManager.shared
     @ObservedObject private var settings = SpeekSettings.shared
-    @StateObject private var ollama = OllamaService()
     @Environment(\.colorScheme) private var scheme
 
     @State private var searchText = ""
@@ -208,21 +206,6 @@ struct ModelsLibraryPage: View {
             }
         }
 
-        result.append(LibraryModel(
-            id: S1MiniModelManager.modelName, displayName: S1MiniModelManager.displayName, provider: .superwhisper, kind: .text, badge: "EN",
-            speed: 0.9, accuracy: 0.95,
-            availability: s1MiniAvailability,
-            description: "S1-mini by Superwhisper: open-weights text normalizer that turns raw transcripts into clean written text, fully on device."
-        ))
-
-        for model in ollama.availableModels {
-            result.append(LibraryModel(
-                id: "ollama:\(model.name)", displayName: model.name, provider: .ollama, kind: .text,
-                speed: 0.7, accuracy: 0.8, availability: .downloaded,
-                description: "Local Ollama model"
-            ))
-        }
-
         return result
     }
 
@@ -231,13 +214,6 @@ struct ModelsLibraryPage: View {
             return .downloading(fraction: status.fractionCompleted, message: status.message)
         }
         return canaryModelManager.isDownloaded ? .downloaded : .notDownloaded(size: size)
-    }
-
-    private var s1MiniAvailability: LibraryModel.Availability {
-        if let status = s1MiniModelManager.downloadStatus {
-            return .downloading(fraction: status.fractionCompleted, message: status.message)
-        }
-        return s1MiniModelManager.isDownloaded ? .downloaded : .notDownloaded(size: S1MiniModelManager.sizeText)
     }
 
     private func cohereAvailability(size: String) -> LibraryModel.Availability {
@@ -316,14 +292,12 @@ struct ModelsLibraryPage: View {
         case .downloading:
             if model.provider == .cohere { cohereModelManager.cancelDownload() }
             if model.id == CanaryModelManager.modelName { canaryModelManager.cancelDownload() }
-            if model.id == S1MiniModelManager.modelName { s1MiniModelManager.cancelDownload() }
         case .unavailable:
             break
         }
     }
 
     private func download(_ model: LibraryModel) {
-        if model.id == S1MiniModelManager.modelName { s1MiniModelManager.download(); return }
         if model.provider == .apple { installAppleAsset(); return }
         switch model.transcriptionModel {
         case let cohere as CohereModel where cohere.provider == .cohere:
@@ -340,7 +314,6 @@ struct ModelsLibraryPage: View {
     }
 
     private func delete(_ model: LibraryModel) {
-        if model.id == S1MiniModelManager.modelName { s1MiniModelManager.delete(); return }
         switch model.transcriptionModel {
         case is CohereModel:
             cohereModelManager.delete()
@@ -362,7 +335,6 @@ struct ModelsLibraryPage: View {
     }
 
     private func reveal(_ model: LibraryModel) {
-        if model.id == S1MiniModelManager.modelName { s1MiniModelManager.showInFinder(); return }
         switch model.transcriptionModel {
         case is CohereModel:
             cohereModelManager.showInFinder()
@@ -395,7 +367,6 @@ struct ModelsLibraryPage: View {
     private func refresh() {
         transcriptionModelManager.refreshAllAvailableModels()
         refreshAppleAssetState()
-        Task { _ = await ollama.refreshConnectionAndModels() }
     }
 }
 

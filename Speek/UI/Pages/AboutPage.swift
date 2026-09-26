@@ -62,7 +62,6 @@ struct AboutPage: View {
                 SpeekSectionHeader("Bundled libraries")
                 SpeekGroup {
                     creditRow("whisper.cpp", "Georgi Gerganov and contributors, MIT", url: "https://github.com/ggerganov/whisper.cpp")
-                    creditRow("llama.cpp", "Georgi Gerganov and contributors, MIT", url: "https://github.com/ggerganov/llama.cpp")
                     creditRow("FluidAudio", "FluidInference, Apache 2.0", url: "https://github.com/FluidInference/FluidAudio")
                     creditRow("Sparkle", "Sparkle Project, MIT", url: "https://github.com/sparkle-project/Sparkle")
                     creditRow("swift-markdown-ui", "Guillermo Gonzalez, MIT", url: "https://github.com/gonzalezreal/swift-markdown-ui")
@@ -80,7 +79,6 @@ struct AboutPage: View {
                     creditRow("Cohere Transcribe", "Cohere Labs", url: "https://huggingface.co/CohereLabs/cohere-transcribe-03-2026")
                     creditRow("Parakeet and Canary", "NVIDIA, CC BY 4.0", url: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3")
                     creditRow("Whisper", "OpenAI, MIT", url: "https://github.com/openai/whisper")
-                    creditRow("S1-mini", "Superwhisper", url: "https://huggingface.co/superwhisper/s1-mini")
                 }
                 Text("Not part of Speek. Each model is fetched from its authors when you choose it and stays under its own license.")
                     .font(.system(size: 12))

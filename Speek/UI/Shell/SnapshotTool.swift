@@ -27,7 +27,6 @@ enum SnapshotTool {
         runAgentInstallIfRequested(defaults)
         applyDevLaunchOptions(defaults)
         runTranscriptionTestIfRequested(defaults)
-        runS1TestIfRequested(defaults)
         guard let directory = defaults.string(forKey: "speekSnapshot"), !directory.isEmpty else { return }
         let requested = defaults.string(forKey: "speekSnapshotPages")?
             .split(separator: ",")
@@ -81,8 +80,9 @@ enum SnapshotTool {
                 guard let engine, let enhancementService = engine.getEnhancementService(), let aiService = enhancementService.getAIService() else { return }
                 var mode = ModeManager.shared.currentEffectiveConfiguration ?? ModeConfig(name: "Test", isAIEnhancementEnabled: true)
                 mode.isAIEnhancementEnabled = true
-                mode.selectedAIProvider = AIProvider.s1Mini.rawValue
-                mode.selectedAIModel = "S1-mini"
+                let cloud = ActionCredentials.activeProvider ?? ActionCredentials.selectedProvider
+                mode.selectedAIProvider = cloud.displayName
+                mode.selectedAIModel = cloud == .openAI ? "gpt-4o-mini" : "openai/gpt-4o-mini"
                 mode.selectedPrompt = PromptTemplates.chatPromptId.uuidString
                 mode.s1Styling = "casual"
                 let configuration = ModeRuntimeResolver.currentEnhancementConfiguration(mode: mode, enhancementService: enhancementService, aiService: aiService)
@@ -119,8 +119,9 @@ enum SnapshotTool {
                        let aiService = enhancementService.getAIService() {
                         var mode = ModeManager.shared.currentEffectiveConfiguration ?? ModeConfig(name: "Test", isAIEnhancementEnabled: true)
                         mode.isAIEnhancementEnabled = true
-                        mode.selectedAIProvider = AIProvider.s1Mini.rawValue
-                        mode.selectedAIModel = "S1-mini"
+                        let cloud = ActionCredentials.activeProvider ?? ActionCredentials.selectedProvider
+                        mode.selectedAIProvider = cloud.displayName
+                        mode.selectedAIModel = cloud == .openAI ? "gpt-4o-mini" : "openai/gpt-4o-mini"
                         mode.selectedPrompt = PromptTemplates.chatPromptId.uuidString
                         mode.s1Styling = "casual"
                         let configuration = ModeRuntimeResolver.currentEnhancementConfiguration(mode: mode, enhancementService: enhancementService, aiService: aiService)
@@ -135,30 +136,6 @@ enum SnapshotTool {
                 } catch {
                     NSLog("SpeekDev: transcription failed: %@", String(describing: error))
                 }
-            }
-        }
-    }
-
-    /// `-speekS1Test "raw transcript"` downloads S1-mini if needed and logs the cleaned text.
-    static func runS1TestIfRequested(_ defaults: UserDefaults) {
-        guard let text = defaults.string(forKey: "speekS1Test"), !text.isEmpty else { return }
-        Task { @MainActor in
-            if !S1MiniModelManager.shared.isDownloaded {
-                S1MiniModelManager.shared.download()
-                while !S1MiniModelManager.shared.isDownloaded {
-                    try? await Task.sleep(for: .seconds(2))
-                    if let status = S1MiniModelManager.shared.downloadStatus { NSLog("SpeekDev: %@", status.message) }
-                }
-            }
-            let start = Date()
-            do {
-                let result = try await S1MiniService.shared.normalize(text, styling: .semiCasual, structure: .prose, context: .general)
-                NSLog("SpeekDev: S1 RESULT (%.1fs): %@", Date().timeIntervalSince(start), result)
-                let start2 = Date()
-                let result2 = try await S1MiniService.shared.normalize(text, styling: .formal, structure: .lists, context: .email)
-                NSLog("SpeekDev: S1 RESULT formal/lists (%.1fs): %@", Date().timeIntervalSince(start2), result2)
-            } catch {
-                NSLog("SpeekDev: S1 failed: %@", String(describing: error))
             }
         }
     }

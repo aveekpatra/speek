@@ -55,7 +55,13 @@ class CursorPaster {
     }
 
     @MainActor
-    private static func performPasteSession(_ text: String, targetConfirmed: Bool? = nil) async -> PasteResult {
+    static func pasteDictation(_ text: String, target: VoiceTarget, validateSelection: (() -> Bool)? = nil) async -> PasteResult {
+        await performPasteSession(text, targetConfirmed: false, validateTarget: { target.isStillFocused() && validateSelection?() != false })
+    }
+
+    @MainActor
+    private static func performPasteSession(_ text: String, targetConfirmed: Bool? = nil, validateTarget: (() -> Bool)? = nil) async -> PasteResult {
+        guard !Task.isCancelled, validateTarget?() != false else { return .commandNotPosted }
         let pasteboard = NSPasteboard.general
 
         // Always paste. The accessibility probe is advisory only: Firefox-based browsers
@@ -90,7 +96,12 @@ class CursorPaster {
 
         await wait(prePasteDelay)
 
-        let pasteResult = await pasteFromClipboard()
+        let pasteResult: PasteResult
+        if !Task.isCancelled && validateTarget?() != false {
+            pasteResult = await pasteFromClipboard()
+        } else {
+            pasteResult = .commandNotPosted
+        }
         if shouldRestoreClipboard {
             scheduleClipboardRestore(
                 savedContents,

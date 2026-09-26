@@ -1,97 +1,48 @@
-<div align="center">
-  <h1>Speek</h1>
-  <p>Free, open-source dictation for macOS. Every model runs on your Mac.</p>
-  <p>
-    <img src="https://img.shields.io/badge/platform-macOS%2026%2B-brightgreen" alt="macOS 26+">
-    <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="GPL-3.0">
-  </p>
-</div>
+# Speek
 
-Press a shortcut, speak, and the text lands wherever your cursor is. Speek has a macOS 26
-Liquid Glass interface and only ever uses local models: nothing you say leaves your Mac.
+Speek is a cloud-connected voice assistant for macOS. Dictate into the focused app, edit selected text by voice, or ask an agent to use connected tools with screen and file context.
 
-## Features
+## Current application
 
-- **Local voice models**: Cohere Transcribe (open 2B model, 14 languages), NVIDIA Canary 1B v2 (25 European languages), NVIDIA Parakeet V2/V3/110M/Japanese, Whisper Large v3 Turbo (whisper.cpp), and Apple Speech.
-- **Modes**: presets (Voice to text, Message, Email, Note, Custom) with per-mode language, voice model, cleanup level, tone, app and website triggers, and shortcuts. The default mode is the source of truth for the app-wide voice model.
-- **Cleanup, on by default**: S1-mini by Superwhisper (open-weights, 462 MB, runs on device through llama.cpp) removes fillers and false starts, resolves spoken corrections, writes out numbers and punctuation, and keeps your wording. Three levels per mode: Off, Clean up (S1-mini), Rewrite (any Ollama model, rephrases for intent). Tone from casual to formal applies to both.
-- **Agent plugins**: Claude Code and Codex notify Speek when they finish, need permission, or ask a question; answer by voice (or type) in a reply panel and the answer goes straight back to the agent.
-- **Recording window styles**: Classic (compact waveform panel), Mini (pill), or None. Mini has an "Always show" option: a thin strip stays on the screen edge and expands on hover into change-mode, record, and open-app controls. Its edge (Bottom, Top, Left, Right) is set next to it under Configuration > Appearance.
-- **Vocabulary and replacements**, searchable history with audio playback and a clear-all button, and a menu bar app with Transcribe File.
-- **Sound collections** (Off, Simple, Classic, Ticks, Bells, Soft, plus macOS pairs like Glass, Ping, Hero, or two files of your own), silence removal, dynamic normalization, and playback pause or mute while recording (pauses whatever the system shows as Now Playing, including videos in a browser, and resumes it afterwards).
+- Global hold-to-speak shortcut, optional double-tap hands-free capture, and a persistent notch assistant.
+- Raw, Light, and Polished dictation; destination-aware writing styles, saved replacements, language hints, microphone selection, and focus-checked insertion.
+- Selected-text Edit Mode, local dictation history and estimates, JSON export, and opt-in temporary recording recovery.
+- Chats with provider/model/reasoning defaults, screen and circled-region context, image/PDF/text attachments, and reusable prompts.
+- Reviewed tool execution for web research, working-folder files, Calendar, Reminders, Mail, Notes, Apple Music, and Spotify.
+- Local and remote MCP servers, imported CLI tools, scoped dictation hooks, and local instruction skills.
+- Explicit facts, dated request/result episodes, and user-authored procedures with search and editing.
+- Shared Activity for background requests, schedules, and coding integration progress. Codex and Claude Code are configured under Integrations > Native apps; coding requests open a review sheet, not a separate coding workspace.
 
-## Install
+This is an implementation in active verification. It is not full VoiceOS feature parity or a claim of production readiness. [Feature status](docs/FEATURE_STATUS.md) records the supported paths, limits, and remaining work. Older architecture documents describe earlier stages and may not reflect current behavior.
 
-Download the latest `.dmg` from [Releases](https://github.com/aveekpatra/speek/releases),
-open it, and drag Speek to Applications. On first launch Speek asks for Microphone and
-Accessibility access and lets you download a voice model. Whenever either permission is
-missing later (for example after an update), a small Permissions window opens with one
-button per permission that leads straight to the right dialog or Settings pane; it is
-also under the menu bar icon as Permissions.... Builds are signed with one stable local
-certificate so macOS keeps the grants across updates.
+## Setup
 
-## Build from source
+Open the app's Models & Voice page to connect a request provider and a separate voice API connection. Existing Codex login or ChatGPT subscription authentication does not provide general speech API access. Enable native services or connect external tools under Integrations. Choose a working folder before file or coding actions.
 
-Requires macOS 26, Xcode 26, and CMake (`brew install cmake`).
+macOS permissions depend on the feature: Microphone, Accessibility, Screen Recording, Calendar, Reminders, and Automation for native app scripting. Live provider calls, account-specific actions, and permission-dependent flows still require testing with the user's configuration.
 
-```bash
-git clone https://github.com/aveekpatra/speek.git
-cd speek
-make local
+
+Messages adds separate history/sending permissions and reviewed iMessage sending. Create Prompt in the chat Add menu retains numbered images while editing or refining a draft with the selected chat model. These paths have fixture checks; live account and permission testing remains outstanding.
+
+## Build and verification
+
+Use Xcode 26 and the Speek scheme. Read the deployment target from `Speek.xcodeproj`.
+
+```sh
+./scripts/dev-build.sh
+python3 scripts/checks/check_voice_features.py
+python3 scripts/checks/check_runtime.py
+python3 scripts/checks/check_integrations.py
+python3 scripts/checks/check_local_plugins.py
+python3 scripts/checks/check_native_activity.py
+python3 scripts/checks/check_attachments.py
+python3 scripts/checks/check_coding_tasks.py
 ```
 
-`make local` builds `whisper.cpp` as an XCFramework the first time (a few minutes); `llama.cpp` is built the same way (`~/Speek-Dependencies/llama.cpp`, `./build-xcframework.sh macos`), then
-produces an ad-hoc signed `Speek.app`. During development use `scripts/dev-build.sh` for
-incremental builds and `scripts/dev-show.sh <page>` to launch on a given page.
+The checks compile production helpers with fixtures. They do not establish live API compatibility, successful TCC permissions, or final visual quality. See the feature status document for the manual verification matrix.
 
-`Vendor/MediaRemoteAdapter` holds a prebuilt [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter)
-framework and script (BSD-3), used to pause and resume playback while recording. It is embedded,
-never linked; `scripts/build-mediaremote-adapter.sh` rebuilds it from the upstream tag.
+Keep the stable `Speek Dev Signing` identity and canonical `/Applications/Speek.app` installation. The development script refuses to substitute ad-hoc signing, because changing identity can invalidate macOS permissions. Do not launch an unsigned verification build as the installed app or reset TCC to work around a build failure.
 
-## Agent plugins
+## Credits and license
 
-The Agent Panel page in the sidebar connects Claude Code and Codex: it installs a small hook script into
-`~/Library/Application Support/Speek/hooks/` and wires it into:
-
-- **Claude Code**: installed as a real plugin (`speek@speek`, visible under Claude Code > Plugins) from a local marketplace Speek writes under Application Support, with hooks for Stop, Notification, PermissionRequest, PreToolUse (AskUserQuestion), and UserPromptSubmit plus the `/speek` skill. Without the `claude` CLI it falls back to the same hooks in `~/.claude/settings.json`.
-- **Codex**: installed as a real plugin (`speek@speek`, visible under `/plugins`) from a local marketplace Speek writes under Application Support, with Codex's six lifecycle hooks (SessionStart, UserPromptSubmit, PreToolUse for `request_user_input` questions, PostToolUse, PermissionRequest, Stop) plus the `/speek` skill. Codex only runs hooks you have reviewed in `/hooks`, so Speek records that trust itself through `codex app-server` (the same `hooks.state` entry the review screen writes). Without the `codex` CLI it falls back to `~/.codex/hooks.json`, which then needs a one-time `/hooks` review. Your `notify` setting is left alone.
-
-When the agent finishes, asks a question, or needs permission, a reply panel appears at the Bottom, Center, or Top of the screen (Agent Panel > Position), always horizontally centred: a pill per waiting session (agent icon, project, git branch),
-the selected agent's message rendered as markdown, and a reply card. Press your recording
-shortcut and speak (the transcript is appended to the box), edit the text like any text
-field (select, arrow keys, type), paste or drop screenshots, then Return sends
-(Shift+Return breaks a line). The arrow on the selected session pill (Cmd+O) jumps to the agent's own window and dismisses that session (the hook is released, so the agent takes your next input there): the exact Terminal.app tab (by tty), iTerm2 session, tmux pane, cmux surface, Claude desktop session (through its own session id), or Codex desktop thread (`codex://threads/<id>`), and for other apps the window whose title mentions the project. Hide (Cmd+H) tucks the panel away for 15 seconds (adjustable under Agent Panel); it
-comes back by itself, on the next agent event, or from the menu bar. Events reach Speek through a named pipe (`/tmp/speek-agent/events`), not a URL, so nothing activates Speek or switches Spaces when an agent needs you; the URL is only a fallback while Speek is not running. Nothing is typed into the terminal: the hook itself waits for your
-answer and returns it to the agent as hook output (a Stop hook "block" with your reply as
-the reason, an allow/deny decision for permissions, the chosen option for questions), so
-the agent continues in the background while you stay where you are. Images are saved
-under Application Support and sent as file paths the agent opens with its Read tool.
-Esc dismisses the selected session and lets that agent stop normally; several agents can
-wait at once and you answer them one by one. Answering in the terminal closes that
-session's panel automatically.
-
-Both agents also get a `/speek` skill (`on`, `off`, `status`) that mutes the hook for
-the current project directory. Uninstall from the same screen removes everything.
-
-## Project layout
-
-- `Speek/UI/`: the Speek UI (design system, sidebar, pages, recorder windows, agent plugins, onboarding).
-- `Speek/Transcription/`: engines (Whisper, FluidAudio Parakeet, Cohere, Apple Speech) and the recording pipeline.
-- `Speek/Modes/`: mode configuration and app/site triggers.
-
-Speek grew out of
-[Whisper Pro](https://github.com/ZdenekCulik/whisper-pro), itself a fork of
-[VoiceInk](https://github.com/Beingpax/VoiceInk). Cloud providers, licensing, the English
-coach, and the iOS keyboard from that lineage are not part of Speek.
-
-## Acknowledgments
-
-[whisper.cpp](https://github.com/ggerganov/whisper.cpp), [FluidAudio](https://github.com/FluidInference/FluidAudio),
-[Cohere Transcribe](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026),
-[Sparkle](https://github.com/sparkle-project/Sparkle), [LaunchAtLogin](https://github.com/sindresorhus/LaunchAtLogin-Modern),
-[LLMkit](https://github.com/Beingpax/LLMkit), [SelectedTextKit](https://github.com/Beingpax/SelectedTextKit),
-[mediaremote-adapter](https://github.com/ungive/mediaremote-adapter), [Zip](https://github.com/marmelroy/Zip).
-
-## License
-
-GNU General Public License v3.0, see [LICENSE](LICENSE).
+Speek is derived from Whisper Pro by Zdenek Culik and VoiceInk by Prakash Joshi Pax. Their GPL-3.0 license and attribution remain. Avo by Aristu Sachdev was studied as an interaction reference; its source was not copied. See the repository license files for details.

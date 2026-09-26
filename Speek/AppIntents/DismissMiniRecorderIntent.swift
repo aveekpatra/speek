@@ -10,7 +10,7 @@ struct DismissMiniRecorderIntent: AppIntent {
     
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        NotificationCenter.default.post(name: .dismissRecorderPanel, object: nil)
+        AssistantController.shared.collapse()
         
         let dialog: IntentDialog = "Speek recorder dismissed"
         return .result(dialog: dialog)

@@ -80,7 +80,7 @@ private struct ConfigurationRootPage: View {
         VStack(alignment: .leading, spacing: 10) {
             SpeekSectionHeader("Keyboard Shortcuts")
             SpeekGroup {
-                SpeekRow("Toggle Recording", subtitle: "Starts and stops recordings") {
+                SpeekRow("Speak a request", subtitle: "Opens the workspace and records an online request") {
                     HStack(spacing: 10) {
                         ResetShortcutButton {
                             ShortcutStore.setShortcut(.command, for: .primaryRecording)
@@ -96,7 +96,7 @@ private struct ConfigurationRootPage: View {
                         .id("primary-\(shortcutResetID)")
                     }
                 }
-                SpeekRow("Cancel Recording", subtitle: "Discards the active recording") {
+                SpeekRow("Cancel offline recording", subtitle: "Discards an offline dictation") {
                     HStack(spacing: 10) {
                         ResetShortcutButton {
                             ShortcutStore.setShortcut(Self.defaultCancelShortcut, for: .cancelRecorder)
@@ -106,7 +106,7 @@ private struct ConfigurationRootPage: View {
                             .id("cancel-\(shortcutResetID)")
                     }
                 }
-                SpeekRow("Change mode", subtitle: "Activates the mode switcher") {
+                SpeekRow("Change offline mode", subtitle: "Activates the dictation mode switcher") {
                     HStack(spacing: 10) {
                         ResetShortcutButton {
                             ShortcutStore.setShortcut(Self.defaultChangeModeShortcut, for: .changeMode)
@@ -116,7 +116,7 @@ private struct ConfigurationRootPage: View {
                             .id("mode-\(shortcutResetID)")
                     }
                 }
-                SpeekRow("Push to Talk", subtitle: "Hold to record, release when done") {
+                SpeekRow("Offline push to talk", subtitle: "Hold to dictate, release when done") {
                     HStack(spacing: 10) {
                         if recordingShortcutManager.secondaryRecordingShortcut == .custom {
                             Button {
@@ -140,7 +140,7 @@ private struct ConfigurationRootPage: View {
                         .id("ptt-\(shortcutResetID)")
                     }
                 }
-                SpeekRow("Mouse shortcut", subtitle: "Tap to toggle, or hold and release when done") {
+                SpeekRow("Offline mouse shortcut", subtitle: "Tap to toggle, or hold and release when done") {
                     Picker("", selection: $recordingShortcutManager.isMiddleClickToggleEnabled) {
                         Text("Off").tag(false)
                         Text("Middle click").tag(true)

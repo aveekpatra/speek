@@ -33,51 +33,30 @@ class TranscriptionServiceRegistry {
     }
 
     func service(for provider: ModelProvider) -> TranscriptionService {
-        switch provider {
-        case .whisper:
-            return localTranscriptionService
-        case .fluidAudio:
-            return fluidAudioTranscriptionService
-        case .cohere:
-            return cohereTranscriptionService
-        case .canary:
-            return canaryTranscriptionService
-        case .nativeApple:
-            return nativeAppleTranscriptionService
-        default:
-            return localTranscriptionService
-        }
+        OnlineOnlyTranscriptionService()
     }
 
     func transcribe(audioURL: URL, model: any TranscriptionModel, context: TranscriptionRequestContext = .currentDefaults) async throws -> String {
-        let service = service(for: model.provider)
-        logger.debug("Transcribing with \(model.displayName, privacy: .public) using \(String(describing: type(of: service)), privacy: .public)")
-        return try await service.transcribe(audioURL: audioURL, model: model, context: context)
+        return try await CloudActionClient.transcribe(audioURL)
     }
 
     /// Creates a streaming or file-based session for the resolved transcription configuration.
     func createSession(for configuration: TranscriptionRuntimeConfiguration, onPartialTranscript: ((String, String) -> Void)? = nil) -> TranscriptionSession {
-        let model = configuration.model
-
-        if shouldUseRealtimeTranscription(for: configuration) {
-            let streamingService = StreamingTranscriptionService(
-                modelContext: modelContext,
-                fluidAudioService: model.provider == .fluidAudio ? fluidAudioTranscriptionService : nil,
-                onPartialTranscript: onPartialTranscript
-            )
-            let fallback = service(for: model.provider)
-            return StreamingTranscriptionSession(streamingService: streamingService, fallbackService: fallback)
-        } else {
-            return FileTranscriptionSession(service: service(for: model.provider))
-        }
+        FileTranscriptionSession(service: OnlineOnlyTranscriptionService())
     }
 
     /// Whether the resolved transcription configuration should use real-time transcription.
     func shouldUseRealtimeTranscription(for configuration: TranscriptionRuntimeConfiguration) -> Bool {
-        configuration.isRealtimeEnabled
+        false
     }
 
     func cleanup() async {
         await fluidAudioTranscriptionService.cleanup()
+    }
+}
+
+private struct OnlineOnlyTranscriptionService: TranscriptionService {
+    func transcribe(audioURL: URL, model: any TranscriptionModel, context: TranscriptionRequestContext) async throws -> String {
+        try await CloudActionClient.transcribe(audioURL)
     }
 }

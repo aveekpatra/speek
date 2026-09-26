@@ -1,15 +1,16 @@
 #!/bin/zsh
-# Fast local Debug build (ad-hoc signed). Prints only errors on failure.
+# Local Debug build with a persistent signing identity. Prints errors on failure.
 set -o pipefail
 cd "$(dirname "$0")/.."
 LOG=${LOG:-/tmp/speek-build.log}
 # A stable local identity keeps macOS permissions (Accessibility, Microphone) across
 # rebuilds. Import ~/Speek-Dependencies/speek-dev-signing/speek-dev.p12 into the
 # login keychain (password: speek) and the build picks it up automatically.
-IDENTITY="-"
+IDENTITY="Speek Dev Signing"
 # (no -v: the self-signed cert is untrusted by the system, codesign still accepts it)
-if security find-identity -p codesigning 2>/dev/null | grep -q "Speek Dev Signing"; then
-  IDENTITY="Speek Dev Signing"
+if ! security find-identity -p codesigning 2>/dev/null | grep -q "Speek Dev Signing"; then
+  echo "Missing Speek Dev Signing identity. Refusing an ad-hoc build that would invalidate macOS permissions."
+  exit 1
 fi
 echo "Signing with: $IDENTITY"
 xcodebuild -project "Speek.xcodeproj" -scheme "Speek" -configuration Debug \
@@ -28,7 +29,9 @@ else
     # re-sign the finished bundle so the TCC grant survives rebuilds.
     codesign --force --deep --sign "$IDENTITY" \
       --entitlements "$PWD/Speek/Speek.local.entitlements" "$APP" >> "$LOG" 2>&1 \
-      && echo "Re-signed with: $IDENTITY" || echo "Re-sign failed (see $LOG), app stays ad-hoc"
+      || { echo "Stable signing failed. Existing app was not replaced. See $LOG"; exit 1; }
+    codesign --verify --deep --strict "$APP" >> "$LOG" 2>&1 || exit 1
+    echo "Re-signed with: $IDENTITY"
   fi
   # One canonical copy: if Speek lives in /Applications, refresh it in place so the
   # speek:// scheme, TCC grants and the Dock all point at the same bundle.
