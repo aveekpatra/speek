@@ -22,16 +22,11 @@ struct CodingIntegrationSettingsView: View {
     @State private var locations: [String: String] = [:]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Coding assistants").font(.system(size: 13, weight: .semibold))
-            VStack(spacing: 0) {
-                ForEach(CodingTaskJob.Engine.allCases) { engine in
-                    if engine != CodingTaskJob.Engine.allCases.first { Divider().padding(.horizontal, 16) }
-                    row(engine)
-                }
-            }.settingsSurface()
-            Text("Use Codex or Claude Code from a chat. Each task requires review of the request and project folder. Speek uses the CLI's existing sign-in; installation does not verify account access.")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        SettingsSection(title: "Coding assistants", info: "Send reviewed coding tasks to Codex or Claude Code from a chat. Speek uses the CLI's existing sign-in; being installed does not confirm account access.", spacing: 16) {
+            ForEach(CodingTaskJob.Engine.allCases) { engine in
+                if engine != CodingTaskJob.Engine.allCases.first { Divider().padding(.horizontal, 16) }
+                row(engine)
+            }
         }
         .onAppear(perform: refresh)
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }

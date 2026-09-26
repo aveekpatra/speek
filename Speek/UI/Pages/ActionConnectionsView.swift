@@ -5,6 +5,7 @@ struct ActionConnectionsView: View {
     @AppStorage("speek.actions.connection") private var preferred = ActionConnection.localCodex.rawValue
     @AppStorage("speek.actions.voiceProvider") private var voice = ActionCloudProvider.openRouter.rawValue
     @AppStorage("speek.assistant.readReplies") private var readReplies = false
+    @AppStorage("speek.voice.playbackRate") private var playbackRate = 1.0
     @State private var expanded: ActionConnection?
     @State private var voiceExpanded = false
     @State private var chatExpanded = true
@@ -69,8 +70,6 @@ struct ActionConnectionsView: View {
                     if voiceExpanded { voiceSettings.padding(.horizontal, 16).padding(.bottom, 16) }
                 }.settingsSurface()
             }
-            Text("ChatGPT covers agent requests. Dictation and spoken replies use a separate voice connection.")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         }
         .frame(maxWidth: 680).frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 12)
@@ -144,12 +143,12 @@ struct ActionConnectionsView: View {
 
     private var chatSettings: some View {
         VStack(alignment: .leading, spacing: 16) {
-            settingRow("Provider", detail: "Used for every new chat.") {
+            settingRow("Provider") {
                 Picker("Default provider", selection: $preferred) {
                     ForEach(ActionConnection.allCases) { Text($0.title).tag($0.rawValue) }
                 }.labelsHidden().fixedSize()
             }
-            settingRow("Model", detail: "You can override it in an individual chat.") {
+            settingRow("Model", info: "Used for new chats. You can change it in any chat. Existing chats keep their provider, model, and reasoning.") {
                 AudioOptionPicker(title: "Default model", selected: defaultModel,
                     options: chatModels.map { ($0.id, $0.name) }, fallback: defaultModel.replacingOccurrences(of: "gpt-6-", with: "GPT-6 ").replacingOccurrences(of: "-", with: " ")) { id in
                     AgentDefaults.setModel(id, for: defaultConnection)
@@ -157,7 +156,7 @@ struct ActionConnectionsView: View {
                     defaultReasoning = AgentDefaults.reasoning(for: defaultConnection) ?? "default"
                 }
             }
-            settingRow("Reasoning", detail: supportedEfforts.isEmpty ? "Uses the model's default behavior." : "How much reasoning the model uses.") {
+            settingRow("Reasoning", info: "How much the model thinks before answering. Model default uses the provider's setting.") {
                 Picker("Default reasoning", selection: Binding(get: { defaultReasoning }, set: { value in
                     defaultReasoning = value
                     AgentDefaults.setReasoning(value == "default" ? nil : value, for: defaultConnection)
@@ -176,8 +175,6 @@ struct ActionConnectionsView: View {
                     Button("Retry") { Task { await loadDefaultModels() } }.buttonStyle(SpeekActionButtonStyle())
                 }
             }
-            Text("Defaults apply to new chats. Existing chats keep their provider, model, and reasoning.")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }.padding(16).background(.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
     }
 
@@ -203,13 +200,20 @@ struct ActionConnectionsView: View {
 
     private var voiceSettings: some View {
         VStack(alignment: .leading, spacing: 16) {
-            settingRow("Connection", detail: "For dictation and spoken replies.") {
+            settingRow("Connection", info: "Dictation and spoken replies use this connection, separate from chat accounts.") {
                 Picker("Voice connection", selection: $voice) {
                     Text("OpenRouter").tag(ActionCloudProvider.openRouter.rawValue)
                     if ActionCredentials.hasKey(for: .openAI) { Text("OpenAI API").tag(ActionCloudProvider.openAI.rawValue) }
                 }.labelsHidden().fixedSize()
             }
-            Toggle("Read replies aloud", isOn: $readReplies).toggleStyle(.switch).controlSize(.small)
+            settingRow("Spoken replies", info: "Read responses aloud with the voice below.") {
+                Toggle("Spoken replies", isOn: $readReplies).labelsHidden().toggleStyle(.switch)
+            }
+            settingRow("Speaking speed") {
+                Picker("Speaking speed", selection: $playbackRate) {
+                    ForEach([0.75, 1.0, 1.25, 1.5, 2.0], id: \.self) { rate in Text(String(format: "%g x", rate)).tag(rate) }
+                }.labelsHidden().fixedSize()
+            }
             if voice == ActionCloudProvider.openRouter.rawValue {
                 Divider()
                 RouterAudioSettings()
@@ -217,20 +221,15 @@ struct ActionConnectionsView: View {
         }.padding(16).background(.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func settingRow<Content: View>(_ title: String, detail: String, @ViewBuilder content: () -> Content) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 20) { rowLabel(title, detail); Spacer(minLength: 16); content() }
-            VStack(alignment: .leading, spacing: 10) {
-                rowLabel(title, detail)
-                content().frame(maxWidth: .infinity, alignment: .trailing)
+    private func settingRow<Content: View>(_ title: String, info: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 20) {
+            HStack(spacing: 6) {
+                Text(title).font(.system(size: 13)).lineLimit(1)
+                if let info { InfoButton(text: info, subject: title) }
             }
+            Spacer(minLength: 16)
+            content().fixedSize()
         }
-    }
-    private func rowLabel(_ title: String, _ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 13))
-            Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
-        }.fixedSize(horizontal: true, vertical: false)
     }
     private func isConnected(_ connection: ActionConnection) -> Bool { status(connection).hasPrefix("Connected") }
     private func status(_ connection: ActionConnection) -> String {

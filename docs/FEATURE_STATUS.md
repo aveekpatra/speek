@@ -6,9 +6,9 @@ This inventory describes current source wiring, not a certification of productio
 
 ## Current navigation and design contract
 
-The main destinations are Tasks, Memory, Models & Voice, Integrations, and Settings. Tasks provides shared Activity and schedules, prompts, and attachment actions. Integrations separates Plugins, Native apps, Local tools, and Skills.
+The main destinations are Tasks, Memory, Models & Voice, Integrations, and Settings. Tasks has chat, Dictation history, Activity (jobs and schedules) and Coding tasks subpages. Each setting has one home. Models & Voice: accounts, default provider/model/reasoning for new chats, voice connection, dictation and speech models, voice, spoken replies and speaking speed. Settings: General (speak shortcut, double-tap hands-free, screen context, launch at login), Dictation (microphone, recognition language, vocabulary hints, writing mode and style, Edit Mode), Privacy (save history, recording recovery), Permissions (Microphone, Accessibility, Screen Recording). Memory: Facts, Episodic, Procedural, Vocabulary (names, terms, corrections, spoken shortcuts). Integrations: Plugins, Native apps (Calendar, Reminders, Mail, Notes, music, Messages, Files working folder), Local tools (Codex and Claude Code, CLI manifests, hooks), Skills. App-specific macOS access is requested from its integration card.
 
-Codex and Claude Code are integrations configured under Native apps. A coding request opens a review sheet for its request, engine, folder, and supported options. Its progress and result appear in shared Activity. There is no separate Coding tasks destination or coding workspace in the product navigation.
+Codex and Claude Code are integrations configured under Local tools. A coding request opens a review sheet for its request, engine, folder, and supported options. Its progress and result appear on the Coding tasks subpage, not in Activity.
 
 Use the existing settings background, shared settingsSurface cards, compact flat action buttons, consistent typography, and trailing controls. The established notch geometry and main navigation styling are not invitations to redesign those surfaces during feature work.
 

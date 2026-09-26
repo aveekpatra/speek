@@ -11,18 +11,15 @@ struct OrganizerSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("On this Mac").font(.system(size: 13, weight: .semibold))
-            VStack(spacing: 0) {
+            SettingsSection(title: "Calendar and Reminders", info: "Speek reads connected calendars and lists when you ask. Changes need your approval. Manage system access in Privacy & Security.", spacing: 16) {
                 ForEach(OrganizerService.allCases) { service in
-                    if service != OrganizerService.allCases.first { Divider().padding(.leading, 56) }
-                    HStack(spacing: 12) {
-                        serviceLabel(service).frame(maxWidth: .infinity, alignment: .leading)
-                        connectionControl(service).fixedSize()
-                    }.padding(16)
+                    if service != OrganizerService.allCases.first { SettingsRowDivider(leading: 56) }
+                    SettingsRow(title: service.title, icon: service == .calendar ? "calendar" : "list.bullet.rectangle",
+                                info: service == .calendar ? "Find availability and manage events." : "Find, create, and complete reminders.") {
+                        connectionControl(service)
+                    }
                 }
-            }.settingsSurface()
-            Text("Speek reads connected calendars and lists when you ask. Changes require your approval. Manage system access in Privacy & Security.")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             if let error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true).accessibilityLabel("Connection error: \(error)")
@@ -30,19 +27,6 @@ struct OrganizerSettingsView: View {
         }
         .onAppear(perform: refresh)
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
-    }
-
-    private func serviceLabel(_ service: OrganizerService) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: service == .calendar ? "calendar" : "list.bullet.rectangle")
-                .font(.system(size: 19)).frame(width: 28, height: 28)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(service.title).font(.system(size: 13, weight: .medium))
-                Text(service == .calendar ? "Find availability and manage events." : "Find, create, and complete reminders.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
     }
 
     @ViewBuilder private func connectionControl(_ service: OrganizerService) -> some View {

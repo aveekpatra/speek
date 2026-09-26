@@ -3,31 +3,17 @@ import AppKit
 
 struct RecordingRecoveryView: View {
     @ObservedObject private var recovery = RecordingRecovery.shared
-    @ObservedObject private var memory = AssistantMemory.shared
-    @AppStorage("speek.voice.recordingRecovery") private var enabled = false
     @State private var retryID: UUID?
     @State private var resultID: UUID?
     @State private var transcript = ""
     @State private var requestError: String?
-    @State private var confirmingDelete = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Text("Recording recovery").font(.system(size: 13, weight: .semibold))
-                Spacer(minLength: 8)
-                if !recovery.recordings.isEmpty {
-                    Button("Delete recordings") { confirmingDelete = true }.buttonStyle(SpeekActionButtonStyle()).disabled(retryID != nil)
-                }
-            }
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Keep failed recordings temporarily").font(.system(size: 13, weight: .medium))
-                    Text("Opt in to local audio backups for retries. Up to 5 recordings or 100 MB, deleted after 24 hours when Speek is running. Successful delivery removes the backup.")
-                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    if !memory.saveHistory { Text("Recovery is paused while history saving is off.").font(.system(size: 11)).foregroundStyle(.secondary) }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                Toggle("Keep failed recordings temporarily", isOn: $enabled).labelsHidden().toggleStyle(.switch).fixedSize()
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Waiting for recovery").font(.system(size: 13, weight: .semibold))
+                Text("Failed recordings kept on this Mac. Retry to transcribe, then copy the text.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if let error = requestError ?? recovery.error { Text(error).font(.system(size: 11)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             if !transcript.isEmpty {
@@ -59,9 +45,6 @@ struct RecordingRecoveryView: View {
                         .buttonStyle(.plain).help("Delete recording").accessibilityLabel("Delete recording").disabled(retryID == item.id)
                 }
             }
-            if recovery.recordings.isEmpty {
-                Text("No recordings waiting for recovery.").font(.system(size: 12)).foregroundStyle(.secondary)
-            }
         }.padding(16).settingsSurface()
         .task(id: retryID) {
             guard let id = retryID else { return }
@@ -75,8 +58,5 @@ struct RecordingRecoveryView: View {
             catch { requestError = error.localizedDescription }
             if !Task.isCancelled { retryID = nil }
         }
-        .confirmationDialog("Delete all recovery recordings?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("Delete recordings", role: .destructive) { recovery.deleteAll(); transcript = ""; resultID = nil }
-        } message: { Text("The saved audio will be removed from this Mac. This cannot be undone.") }
     }
 }

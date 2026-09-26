@@ -9,32 +9,17 @@ struct NativeAppSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("App automation").font(.system(size: 13, weight: .semibold))
-            VStack(spacing: 0) {
+            SettingsSection(title: "App automation", info: "Connecting grants macOS Automation access. Sending, note, and playback changes need your review. Disconnecting turns the tools off in Speek; macOS permissions stay in System Settings.", spacing: 16) {
                 ForEach(NativeAppService.allCases) { service in
-                    if service != NativeAppService.allCases.first { Divider().padding(.leading, 56) }
-                    HStack(spacing: 12) {
-                        label(service).frame(maxWidth: .infinity, alignment: .leading)
-                        controls(service).fixedSize()
-                    }.padding(16)
+                    if service != NativeAppService.allCases.first { SettingsRowDivider(leading: 56) }
+                    SettingsRow(title: service.title, icon: service.symbol, info: detail(service)) { controls(service) }
                 }
-            }.settingsSurface()
-            Text("Connect each app to grant macOS Automation access. Messages, notes, and playback changes require review. Disconnecting disables these tools in Speek; macOS permissions remain in System Settings.")
-                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             if let error { Text(error).font(.system(size: 11)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
         }.onAppear(perform: refresh)
             .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
 
-    private func label(_ service: NativeAppService) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: service.symbol).font(.system(size: 19)).frame(width: 28, height: 28)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(service.title).font(.system(size: 13, weight: .medium))
-                Text(detail(service)).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
     @ViewBuilder private func controls(_ service: NativeAppService) -> some View {
         if !NativeAppTools.shared.isInstalled(service) {
             Text("Not installed").font(.system(size: 11)).foregroundStyle(.secondary)

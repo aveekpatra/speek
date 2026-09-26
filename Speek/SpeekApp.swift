@@ -65,17 +65,6 @@ struct CheckForUpdatesView: View {
     }
 }
 
-/// Menu bar entry that opens the guided permissions window.
-struct PermissionsMenuItem: View {
-    @ObservedObject private var permissions = PermissionsCenter.shared
-
-    var body: some View {
-        Button(permissions.allGranted ? "Permissions..." : "Permissions (action needed)...") {
-            PermissionsCenter.shared.showGuide()
-        }
-    }
-}
-
 /// Observes ThemeManager and applies skin + font live to the main window content.
 /// Light/Dark keep the current look (nil overrides); Warm/Midnight paint a background and tint.
 struct ThemedRootView<Content: View>: View {

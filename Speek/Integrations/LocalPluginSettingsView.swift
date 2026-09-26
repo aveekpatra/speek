@@ -62,9 +62,9 @@ struct LocalPluginSettingsView: View {
         .sheet(isPresented: $showFormat) { LocalManifestFormat() }
     }
     private var heading: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 6) {
             Text("Local tools").font(.system(size: 15, weight: .semibold))
-            Text("App commands and optional dictation hooks.").font(.system(size: 12)).foregroundStyle(.secondary)
+            InfoButton(text: "Expose an app's command-line tool to Speek, or add a dictation hook, by importing a manifest.", subject: "Local tools")
         }
     }
     private var importButton: some View {

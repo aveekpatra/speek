@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct DictationHistoryView: View {
     @ObservedObject private var history = DictationHistory.shared
     @ObservedObject private var memory = AssistantMemory.shared
+    @ObservedObject private var recovery = RecordingRecovery.shared
     @State private var query = ""
     @State private var confirmingClear = false
     @State private var exportError: String?
@@ -23,18 +24,11 @@ struct DictationHistoryView: View {
                     statistic("Dictations", value: "\(history.insights.sessions)")
                     statistic("Words", value: "\(history.insights.words)")
                     statistic("Recorded", value: minutes(history.insights.audioSeconds))
-                    statistic("Estimated time saved", value: minutes(history.insights.estimatedSecondsSaved))
+                    statistic("Estimated time saved", value: minutes(history.insights.estimatedSecondsSaved),
+                              info: "Typing at 40 words per minute, minus recording time. Based on saved dictations only; excludes processing time.")
                 }
-                Text("Based on saved dictations only. Time saved estimates typing at 40 words per minute minus recording time. It excludes processing time and may vary by language.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Save history on this Mac").font(.system(size: 13, weight: .medium))
-                        Text("Shared with conversation memory. Speek keeps the latest 500 dictations. Turning saving off keeps existing entries.")
-                            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                    Toggle("Save history on this Mac", isOn: $memory.saveHistory).labelsHidden().toggleStyle(.switch).fixedSize()
-                }.padding(16).settingsSurface()
+                if !recovery.recordings.isEmpty { RecordingRecoveryView() }
+                if !memory.saveHistory { HistoryPausedNotice() }
                 TextField("Search dictations or applications", text: $query).textFieldStyle(.roundedBorder).font(.system(size: 13))
                 if let error = exportError ?? history.error {
                     Label(error, systemImage: "exclamationmark.circle.fill").font(.system(size: 12)).foregroundStyle(.red)
@@ -91,10 +85,13 @@ struct DictationHistoryView: View {
             Button("Clear history") { confirmingClear = true }.buttonStyle(SpeekActionButtonStyle())
         }.disabled(history.entries.isEmpty).fixedSize()
     }
-    private func statistic(_ title: String, value: String) -> some View {
+    private func statistic(_ title: String, value: String, info: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(value).font(.system(size: 24, weight: .semibold)).monospacedDigit()
-            Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
+                if let info { InfoButton(text: info, subject: title) }
+            }
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading).settingsSurface()
     }
     private func minutes(_ seconds: TimeInterval) -> String { String(format: "%.1f min", seconds / 60) }
@@ -105,5 +102,18 @@ struct DictationHistoryView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try history.export(to: url); exportError = nil }
         catch { exportError = "Could not export dictation history. " + error.localizedDescription }
+    }
+}
+
+/// Shown where saved history appears while saving is off. The switch itself lives in Settings > Privacy.
+struct HistoryPausedNotice: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "pause.circle.fill").font(.system(size: 15)).foregroundStyle(.white)
+            Text("History saving is off. New items are not saved.").font(.system(size: 12)).foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Button("Open Privacy settings") { SpeekMainWindow.shared.showSettings(tab: "Privacy") }
+                .buttonStyle(SpeekActionButtonStyle()).fixedSize()
+        }.padding(12).settingsSurface()
     }
 }

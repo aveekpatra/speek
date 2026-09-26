@@ -396,7 +396,7 @@ final class AssistantController: ObservableObject {
             voiceAppName = focus.appName
             voiceBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             if present && focus.permissionMissing {
-                fail(ActionClientError.requestFailed("macOS has not authorized this copy of Speek. Open Settings > General to check Accessibility. If Speek is already enabled, remove its old entry and add the installed copy from Applications once."))
+                fail(ActionClientError.requestFailed("macOS has not authorized this copy of Speek. Open Settings > Permissions to check Accessibility. If Speek is already enabled, remove its old entry and add the installed copy from Applications once."))
                 return
             }
             guard !focus.secure else {
@@ -424,13 +424,13 @@ final class AssistantController: ObservableObject {
                 let auth = AVCaptureDevice.authorizationStatus(for: .audio)
                 if auth == .notDetermined {
                     guard await AVCaptureDevice.requestAccess(for: .audio) else {
-                        fail(ActionClientError.requestFailed("Microphone access is off. Enable it in Settings > General.")); return
+                        fail(ActionClientError.requestFailed("Microphone access is off. Enable it in Settings > Permissions.")); return
                     }
                 } else if auth != .authorized {
-                    fail(ActionClientError.requestFailed("Microphone access is off. Enable it in Settings > General.")); return
+                    fail(ActionClientError.requestFailed("Microphone access is off. Enable it in Settings > Permissions.")); return
                 }
                 guard ActionCredentials.hasKey(for: ActionCredentials.voiceProvider) else {
-                    fail(ActionClientError.requestFailed("Connect a voice provider in Settings > Connections.")); return
+                    fail(ActionClientError.requestFailed("Connect a voice provider in Models & Voice.")); return
                 }
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent("speek-voice-\(UUID().uuidString).wav")
                 do {

@@ -46,7 +46,7 @@ enum WorkspaceTools {
         return url
     }
     static func execute(_ name: String, arguments: [String: Any]) throws -> String {
-        guard !folder.isEmpty else { throw ActionClientError.requestFailed("Choose a working folder in Settings first.") }
+        guard !folder.isEmpty else { throw ActionClientError.requestFailed("Choose a working folder in Integrations > Native apps first.") }
         let root = URL(fileURLWithPath: folder).resolvingSymlinksInPath().standardizedFileURL
         let fm = FileManager.default
         let url = try resolved(arguments["path"] as? String ?? "", root: root)

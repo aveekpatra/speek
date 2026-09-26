@@ -22,11 +22,11 @@ struct RouterAudioSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            row("Dictation", detail: "Turn speech into text") {
+            row("Dictation model") {
                 AudioOptionPicker(title: "Dictation model", selected: dictation,
                                   options: dictationModels.map { ($0.id, $0.name) }, fallback: display(dictation)) { dictation = $0 }
             }
-            row("Spoken replies", detail: "Choose a speech model") {
+            row("Speech model") {
                 AudioOptionPicker(title: "Speech model", selected: speech,
                                   options: speechModels.map { ($0.id, $0.name) }, fallback: display(speech)) { id in
                     player?.stop(); previewTask?.cancel()
@@ -36,7 +36,7 @@ struct RouterAudioSettings: View {
                     }
                 }
             }
-            row("Voice", detail: "Available for this speech model") {
+            row("Voice", info: "Voices available for the selected speech model.") {
                 AudioOptionPicker(title: "Voice", selected: voice, options: voices.map { ($0, voiceTitle($0)) }, fallback: voiceTitle(voice)) { voice = $0; player?.stop() }
             }
             HStack(spacing: 10) {
@@ -67,20 +67,15 @@ struct RouterAudioSettings: View {
         .onDisappear { previewTask?.cancel(); player?.stop() }
     }
 
-    private func row<Content: View>(_ title: String, detail: String, @ViewBuilder content: () -> Content) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 16) { label(title, detail); Spacer(minLength: 10); content() }
-            VStack(alignment: .leading, spacing: 10) {
-                label(title, detail)
-                content().frame(maxWidth: .infinity, alignment: .trailing)
+    private func row<Content: View>(_ title: String, info: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 16) {
+            HStack(spacing: 6) {
+                Text(title).font(.system(size: 13)).lineLimit(1)
+                if let info { InfoButton(text: info, subject: title) }
             }
+            Spacer(minLength: 16)
+            content().fixedSize()
         }
-    }
-    private func label(_ title: String, _ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 13))
-            Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
-        }.fixedSize()
     }
     private func display(_ id: String) -> String {
         switch id {

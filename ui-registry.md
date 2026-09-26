@@ -79,7 +79,7 @@ Last updated: 2026-09-26
 
 The product lives in a non-activating floating panel across Spaces. The collapsed control is a quiet native-material capsule with waveform and expand actions. Expanded requests use a single 24 point rounded material surface, an 18 point inset, 12 point spacing, 19 point empty-state text, 14 point response text, and 10 to 12 point controls. No card grid, colored sidebar, chat bubbles, or model library. Status, removable context, current response, and composer form one vertical reading order. Native glass capsule buttons are reserved for task approval and settings actions.
 
-Settings has four destinations: General, Connections, Memory, Activity. General owns shortcuts and permissions; Connections owns credentials and providers; Memory owns remembered facts; Activity owns saved conversations. There is no separate onboarding wizard with duplicate settings.
+(Superseded by "Settings ownership" below.)
 
 ### Main application shell
 
@@ -214,9 +214,9 @@ Verified the running compact and expanded layouts with Computer Use; the collaps
 
 ## Memory library tabs
 - Memory now shares Integrations' 880-point column, neutral pill tabs, adaptive grid, 16-point gaps, and rounded cards. This replaces Memory's disclosure groups.
-- Tabs are Facts (semantic), Episodic (saved conversations), Procedural (not implemented), and Corrections (existing vocabulary storage).
+- Tabs are Facts (semantic), Episodic (completed requests), Procedural (reusable instructions), and Vocabulary (names, terms, corrections and spoken shortcuts; one editor with "Write as" and optional "When heard as").
 - Do not imply conversation history is structured episodic recall or that saved corrections already affect dictation. Keep current implementation limits visible.
-- Preserve fact and vocabulary persistence, add/remove controls, and the conversation-saving preference.
+- Preserve fact and vocabulary persistence and add/remove controls. The history-saving switch lives only in Settings > Privacy; Episodic shows a paused notice when it is off.
 
 ## Primary creation actions (user design rule)
 - Place the primary Add/Create action beside its section heading, above the content grid. Never leave it floating at the bottom or across empty space away from its context.
@@ -231,12 +231,17 @@ Verified the running compact and expanded layouts with Computer Use; the collaps
 - Hover and pressed states change the fill; disabled actions are subdued. Header placement stays unchanged.
 - This supersedes earlier recommendations for glass capsule action buttons. Glass remains appropriate for the window and floating assistant material, not ordinary page actions.
 
+## Settings ownership (user rule, 2026-09-26)
+- One setting, one home. Never show the same control on two screens; elsewhere, show a status line with a link to its home.
+- Each setting has one home. Models & Voice: accounts, default provider/model/reasoning for new chats, voice connection, dictation and speech models, voice, spoken replies and speaking speed. Settings: General (speak shortcut, double-tap hands-free, screen context, launch at login), Dictation (microphone, recognition language, vocabulary hints, writing mode and style, Edit Mode), Privacy (save history, recording recovery), Permissions (Microphone, Accessibility, Screen Recording). Memory: Facts, Episodic, Procedural, Vocabulary (names, terms, corrections, spoken shortcuts). Integrations: Plugins, Native apps (Calendar, Reminders, Mail, Notes, music, Messages, Files working folder), Local tools (Codex and Claude Code, CLI manifests, hooks), Skills. App-specific macOS access is requested from its integration card.
+
 ## General settings page
 - Use the Connections layout for preferences: centered 680-point column, 25-point heading, 28-point section gaps, and shared settingsSurface groups.
-- Voice and context, Startup, Permissions, and Files organize settings by purpose. Rows use 16-point insets, 28-point white icon slots, and consistent trailing controls.
-- Each row has a 13-point medium title and wrapping 11-point description. Narrow layouts move controls beneath labels without clipping.
+- Settings uses the same neutral pill tabs as Integrations: General, Dictation, Privacy, Permissions.
+- Every settings row uses `SettingsRow` / `SettingsSection` (`Speek/Assistant/SettingsRow.swift`): 16-point row padding, 19-point white icon in a 28x32 slot, 13-point medium title leading, control trailing on the same line. Never stack a switch or menu under its label. Do not shrink padding, icons, or type when removing text; density matches Integrations and Models & Voice.
+- No explanatory paragraphs under rows or sections. Explanations go in `InfoButton` (tooltip on hover, popover on click) and only where the option is not self-explanatory. The secondary line under a title is reserved for live state: a path, a count, an error, a paused state.
 - Permissions retain live state and use checkmark.circle.fill with Allowed, or the shared flat Allow action. Redesigning permission rows must not alter grant or refresh logic.
-- Version comes from the app bundle; license and menu-bar behavior share a quiet aligned footer.
+- Version is an About row with the value trailing; license text lives in its info button.
 
 ## Sidebar type and native symbol motion
 - Chat titles, New task, and task search use 13-point regular text. Recents stays 11-point medium as a secondary heading.
@@ -307,8 +312,8 @@ Verified the running compact and expanded layouts with Computer Use; the collaps
 
 
 ## Integration requests and activity
-- Codex and Claude Code are opt-in integrations under Native apps. Never add a separate coding workspace or coding shortcut to the chat sidebar.
-- A user request opens a compact review sheet for the integration, project, request and permissions. Ongoing work and results belong in the shared Activity list.
+- Codex and Claude Code are opt-in integrations under Local tools. Coding history has one sidebar destination, the Coding tasks subpage.
+- A user request opens a compact review sheet for the integration, project, request and permissions. Ongoing work and results belong on the Coding tasks subpage.
 - Integration switches report enabled state separately from CLI installation. Installation does not imply authenticated or connected.
 - New settings use the existing page background, settingsSurface groups, 13-point labels and compact flat action buttons. Controls align right at intrinsic width; descriptions wrap before controls.
 

@@ -40,9 +40,11 @@ struct IntegrationsShellView: View {
                     }
                 }.padding(4).frame(maxWidth: 420).background(.black.opacity(0.14), in: Capsule())
                 VStack(alignment: .leading, spacing: 16) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack { if tab != "Local tools" { sectionHeading }; Spacer(minLength: 16); if tab != "Native apps" && tab != "Local tools" { addButton } }
-                        VStack(alignment: .leading, spacing: 12) { if tab != "Local tools" { sectionHeading }; if tab != "Native apps" && tab != "Local tools" { addButton.frame(maxWidth: .infinity, alignment: .trailing) } }
+                    if hasHeading {
+                        ViewThatFits(in: .horizontal) {
+                            HStack { sectionHeading; Spacer(minLength: 16); addButton }
+                            VStack(alignment: .leading, spacing: 12) { sectionHeading; addButton.frame(maxWidth: .infinity, alignment: .trailing) }
+                        }
                     }
                     if let message = error ?? store.storageError {
                         Label(message, systemImage: "exclamationmark.circle")
@@ -56,13 +58,16 @@ struct IntegrationsShellView: View {
                             }
                         }
                     } else if tab == "Local tools" {
-                        LocalPluginSettingsView()
+                        VStack(alignment: .leading, spacing: 28) {
+                            CodingIntegrationSettingsView()
+                            LocalPluginSettingsView()
+                        }
                     } else if tab == "Native apps" {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 24, alignment: .top)], alignment: .leading, spacing: 24) {
                             OrganizerSettingsView()
                             NativeAppSettingsView()
-                            CodingIntegrationSettingsView()
                             MessagesIntegrationSettingsView()
+                            FilesIntegrationSettingsView()
                         }
                     } else {
                         if store.skills.isEmpty { emptyState("No skills yet", text: "Import a SKILL.md file to add instructions for a workflow.", icon: "doc.text") }
@@ -95,12 +100,13 @@ struct IntegrationsShellView: View {
 
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 230, maximum: 420), spacing: 16, alignment: .top)] }
     private var sectionHeading: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(tab == "Plugins" ? "Your plugins" : tab == "Native apps" ? "Apps on this Mac" : "Skill library").font(.system(size: 15, weight: .semibold))
-            Text(tab == "Plugins" ? "Connect remote services or tools running on this Mac." : tab == "Native apps" ? "Choose which apps Speek can use. Changes wait for your review." : "Enabled skills guide matching requests. Reimport to update them.")
-                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 6) {
+            Text(tab == "Plugins" ? "Your plugins" : "Skill library").font(.system(size: 15, weight: .semibold))
+            InfoButton(text: tab == "Plugins" ? "Connect MCP servers: remote services or tools running on this Mac." : "Enabled skills guide matching requests. Reimport a skill to update it.", subject: tab)
         }
     }
+    /// Native apps and Local tools render their own section headers.
+    private var hasHeading: Bool { tab == "Plugins" || tab == "Skills" }
     private var addButton: some View {
         Button {
             if tab == "Plugins" { sheet = .editor(nil) } else { importSkill() }

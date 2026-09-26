@@ -18,7 +18,9 @@ final class SpeekMainWindow: ObservableObject {
     func showCodingTasks() { showingCodingTasks = true; show() }
     static let shared = SpeekMainWindow()
     private var window: NSWindow?
-    func showSettings() {
+    @Published var settingsTab = "General"
+    func showSettings(tab: String = "General") {
+        settingsTab = tab
         section = .settings
         show()
     }
@@ -109,7 +111,10 @@ struct SpeekMainShell: View {
                     }
                     else if section == .integrations { IntegrationsShellView() }
                     else if section == .memory { MemoryShellView() }
-                    else { AssistantSettingsView(initialSection: section == .settings ? "General" : "Connections", embedded: true).id(section) }
+                    else if section == .connections {
+                        ScrollView { ActionConnectionsView().padding(24).frame(maxWidth: .infinity, alignment: .leading) }
+                    }
+                    else { AssistantSettingsView() }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(section == .tasks ? canvas : Color(nsColor: .windowBackgroundColor))

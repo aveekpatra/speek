@@ -28,6 +28,14 @@ struct MemoryShellView: View {
     @AppStorage("speek.memory.vocabularyDrafts") private var vocabularyData = Data()
     private var vocabulary: [VocabularyDraft] { (try? JSONDecoder().decode([VocabularyDraft].self, from: vocabularyData)) ?? [] }
     private func clean(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// A spoken phrase maps to one entry; a term without a spoken phrase is saved once.
+    private var vocabularyConflict: String? {
+        let spoken = clean(heardAs)
+        if !spoken.isEmpty {
+            return vocabulary.contains { $0.heardAs.caseInsensitiveCompare(spoken) == .orderedSame } ? "This spoken phrase is already saved." : nil
+        }
+        return vocabulary.contains { $0.heardAs.isEmpty && $0.term.caseInsensitiveCompare(clean(term)) == .orderedSame } ? "This term is already saved." : nil
+    }
 
     private let columns = [GridItem(.adaptive(minimum: 210, maximum: 340), spacing: 16, alignment: .top)]
 
@@ -46,6 +54,7 @@ struct MemoryShellView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .center, spacing: 16) {
                             Text(selected).font(.system(size: 15, weight: .semibold))
+                            InfoButton(text: sectionDescription, subject: selected)
                             Spacer(minLength: 8)
                             if selected == "Facts" {
                                 addButton("Add fact") { editingFactID = nil; fact = ""; addingFact = true; focusedField = "fact" }
@@ -53,12 +62,11 @@ struct MemoryShellView: View {
                             } else if selected == "Procedural" {
                                 addButton("Add procedure") { procedureID = nil; procedureTitle = ""; procedureInstructions = ""; procedureEditor = true }
                                     .disabled(procedureEditor)
-                            } else if selected == "Corrections" {
-                                addButton("Add correction") { addingWord = true; focusedField = "term" }
+                            } else if selected == "Vocabulary" {
+                                addButton("Add entry") { addingWord = true; focusedField = "term" }
                                     .disabled(addingWord)
                             }
                         }
-                        Text(sectionDescription).font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                     TextField("Search " + selected.lowercased(), text: $query)
                         .textFieldStyle(.roundedBorder).font(.system(size: 13))
@@ -84,14 +92,14 @@ struct MemoryShellView: View {
         case "Facts": return "Semantic memory: preferences, people, and things you know."
         case "Episodic": return "Completed requests and their results, saved with dates for future context."
         case "Procedural": return "How to do things: reusable instructions and learned workflows."
-        default: return "Transcription corrections, names, and specialist terms."
+        default: return "Names, terms, corrections, and spoken shortcuts. Speek writes each entry exactly as saved. Add a spoken phrase to replace what you say, such as a misheard name or your address. Entries without one guide Light and Polished mode."
         }
     }
 
     private func tabs(vertical: Bool) -> some View {
         let layout = vertical ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
         return layout {
-            ForEach(["Facts", "Episodic", "Procedural", "Corrections"], id: \.self) { title in
+            ForEach(["Facts", "Episodic", "Procedural", "Vocabulary"], id: \.self) { title in
                 Button {
                     withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { selected = title; query = "" }
                 } label: {
@@ -119,14 +127,7 @@ struct MemoryShellView: View {
 
     private var episodes: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Save conversations and events").font(.system(size: 13, weight: .medium))
-                    Text("Turning this off also excludes saved episodes from new requests.").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                Toggle("Save conversations and events", isOn: $memory.saveHistory).labelsHidden().toggleStyle(.switch).fixedSize()
-            }.padding(16).settingsSurface()
+            if !memory.saveHistory { HistoryPausedNotice() }
             if let episodeID {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Edit event").font(.system(size: 13, weight: .medium))
@@ -230,18 +231,16 @@ struct MemoryShellView: View {
 
     private var words: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Saved corrections are applied to dictation. Terms without an alternative spelling guide Light and Polished mode.")
-                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if vocabulary.isEmpty {
-                emptyState("No corrections yet", detail: "Keep names, abbreviations, and specialist terms here.")
+                emptyState("No vocabulary yet", detail: "Keep names, abbreviations, specialist terms, and snippets here.")
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
                     ForEach(vocabulary.filter { matches($0.term + " " + $0.heardAs) }) { word in
                         HStack(alignment: .top, spacing: 12) {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(word.term).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+                                Text(word.term).font(.system(size: 13)).lineLimit(6).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                                 if !word.heardAs.isEmpty {
-                                    Text("Transcribed as: " + word.heardAs).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                    Text("When heard as: " + word.heardAs).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                                 }
                             }.frame(maxWidth: .infinity, alignment: .leading)
                             removeButton("Remove " + word.term) {
@@ -252,18 +251,19 @@ struct MemoryShellView: View {
                 }
             }
             if !vocabulary.isEmpty && vocabulary.filter({ matches($0.term + " " + $0.heardAs) }).isEmpty {
-                Text("No matching corrections. Try a different search.").font(.system(size: 13)).foregroundStyle(.secondary)
+                Text("No matching vocabulary. Try a different search.").font(.system(size: 13)).foregroundStyle(.secondary)
             }
             if addingWord {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Correct spelling").font(.system(size: 12, weight: .medium))
-                    TextField("Name or term", text: $term).textFieldStyle(.roundedBorder).focused($focusedField, equals: "term")
-                    Text("Transcribed as (optional)").font(.system(size: 12, weight: .medium))
-                    TextField("Alternative spelling", text: $heardAs).textFieldStyle(.roundedBorder)
-                    if vocabulary.contains(where: { $0.term.caseInsensitiveCompare(clean(term)) == .orderedSame }) {
-                        Text("This term is already saved.").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("Write as").font(.system(size: 12, weight: .medium))
+                    TextField("Name, term, or text to insert", text: $term, axis: .vertical).lineLimit(1...5)
+                        .textFieldStyle(.roundedBorder).focused($focusedField, equals: "term")
+                    Text("When heard as (optional)").font(.system(size: 12, weight: .medium))
+                    TextField("Spoken phrase or misspelling", text: $heardAs).textFieldStyle(.roundedBorder)
+                    if let vocabularyConflict {
+                        Text(vocabularyConflict).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
-                    formActions(disabled: clean(term).isEmpty || vocabulary.contains(where: { $0.term.caseInsensitiveCompare(clean(term)) == .orderedSame }), cancel: {
+                    formActions(disabled: clean(term).isEmpty || vocabularyConflict != nil, cancel: {
                         addingWord = false; term = ""; heardAs = ""
                     }) {
                         var entries = vocabulary
