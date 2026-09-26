@@ -29,7 +29,6 @@ struct DictationHistoryView: View {
                 }
                 if !recovery.recordings.isEmpty { RecordingRecoveryView() }
                 if !memory.saveHistory { HistoryPausedNotice() }
-                TextField("Search dictations or applications", text: $query).textFieldStyle(.roundedBorder).font(.system(size: 13))
                 if let error = exportError ?? history.error {
                     Label(error, systemImage: "exclamationmark.circle.fill").font(.system(size: 12)).foregroundStyle(.red)
                 }
@@ -81,9 +80,12 @@ struct DictationHistoryView: View {
     }
     private var actions: some View {
         HStack(spacing: 8) {
-            Button("Export") { export() }.buttonStyle(SpeekActionButtonStyle())
-            Button("Clear history") { confirmingClear = true }.buttonStyle(SpeekActionButtonStyle())
-        }.disabled(history.entries.isEmpty).fixedSize()
+            SpeekSearchField(prompt: "Search dictations or apps", text: $query)
+            Group {
+                Button("Export") { export() }.buttonStyle(SpeekActionButtonStyle())
+                Button("Clear history") { confirmingClear = true }.buttonStyle(SpeekActionButtonStyle())
+            }.disabled(history.entries.isEmpty)
+        }.fixedSize()
     }
     private func statistic(_ title: String, value: String, info: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 8) {

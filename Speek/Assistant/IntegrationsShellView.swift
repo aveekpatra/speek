@@ -18,7 +18,6 @@ struct IntegrationsShellView: View {
     @State private var sheet: IntegrationSheet?
     @State private var error: String?
     @State private var removing: MCPPlugin?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView {
@@ -27,18 +26,7 @@ struct IntegrationsShellView: View {
                     Text("Integrations").font(.system(size: 25, weight: .semibold))
                     Text("Extend Speek with tools and skills.").font(.system(size: 13)).foregroundStyle(.secondary)
                 }
-                HStack(spacing: 4) {
-                    ForEach(["Plugins", "Native apps", "Local tools", "Skills"], id: \.self) { item in
-                        Button {
-                            withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { tab = item }
-                        } label: {
-                            Text(item).font(.system(size: 13, weight: .medium))
-                                .frame(maxWidth: .infinity).padding(.vertical, 8)
-                                .background(tab == item ? Color.white.opacity(0.11) : .clear, in: Capsule())
-                                .contentShape(Capsule())
-                        }.buttonStyle(.plain).accessibilityAddTraits(tab == item ? .isSelected : [])
-                    }
-                }.padding(4).frame(maxWidth: 420).background(.black.opacity(0.14), in: Capsule())
+                PillTabs(items: ["Plugins", "Native apps", "Local tools", "Skills"], selection: $tab)
                 if let message = error ?? store.storageError {
                     Label(message, systemImage: "exclamationmark.circle")
                         .font(.system(size: 12)).foregroundStyle(.secondary).textSelection(.enabled)

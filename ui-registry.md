@@ -212,11 +212,13 @@ Verified the running compact and expanded layouts with Computer Use; the collaps
 - Preserve the Connections background color. Cards disclose details; unfinished installation and import are explicitly marked unavailable, never shown as installed.
 - This replaces the earlier grouped Integrations disclosure-row design.
 
-## Memory library tabs
-- Memory now shares Integrations' 880-point column, neutral pill tabs, adaptive grid, 16-point gaps, and rounded cards. This replaces Memory's disclosure groups.
-- Tabs are Facts (semantic), Episodic (completed requests), Procedural (reusable instructions), and Vocabulary (names, terms, corrections and spoken shortcuts; one editor with "Write as" and optional "When heard as").
-- Do not imply conversation history is structured episodic recall or that saved corrections already affect dictation. Keep current implementation limits visible.
-- Preserve fact and vocabulary persistence and add/remove controls. The history-saving switch lives only in Settings > Privacy; Episodic shows a paused notice when it is off.
+## Memory library tabs (2026-09-27)
+- Layout follows content shape. Facts, Episodic, and Vocabulary are grouped lists (statements, dated events, and word pairs are scanned). Procedural uses the Integrations tile grid (titled documents, like skills).
+- Episodic groups events under day headers (Today, Yesterday, weekday and date), newest first; tap a row to expand it. Vocabulary rows read "heard as -> write as", sorted by term.
+- One header row on every tab, fixed 32-point height: title and info leading, `SpeekSearchField` and the add action trailing. Never place a full-width search bar between the header and content.
+- Row edit and delete controls appear on hover (`HoverRowActions`). Add and edit open a 460-point sheet; never insert inline editors that reflow the page.
+- The history-saving switch lives only in Settings > Privacy; Episodic shows `HistoryPausedNotice` when it is off.
+- Tabs use the shared `PillTabs` component (also Integrations and Settings).
 
 ## Primary creation actions (user design rule)
 - Place the primary Add/Create action beside its section heading, above the content grid. Never leave it floating at the bottom or across empty space away from its context.

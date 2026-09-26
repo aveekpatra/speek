@@ -6,38 +6,31 @@ private struct VocabularyDraft: Codable, Identifiable {
     var heardAs: String
 }
 
+/// Add and edit forms open as sheets so the page never reflows around an inline editor.
+private enum MemoryEditor: Identifiable {
+    case fact(RememberedFact?), episode(RememberedEpisode), procedure(RememberedProcedure?), vocabulary
+    var id: String {
+        switch self {
+        case .fact(let item): return "fact-" + (item?.id.uuidString ?? "new")
+        case .episode(let item): return "episode-" + item.id.uuidString
+        case .procedure(let item): return "procedure-" + (item?.id.uuidString ?? "new")
+        case .vocabulary: return "vocabulary"
+        }
+    }
+}
+
+/// Memory follows the shape of each kind of content: short statements, dated events and
+/// word pairs are lists to scan; procedures are titled documents, so they are tiles.
 struct MemoryShellView: View {
+    private static let tabs = ["Facts", "Episodic", "Procedural", "Vocabulary"]
     @ObservedObject private var memory = AssistantMemory.shared
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selected = "Facts"
-    @State private var addingFact = false
-    @State private var addingWord = false
-    @State private var fact = ""
     @State private var query = ""
-    @State private var editingFactID: UUID?
-    @State private var procedureEditor = false
-    @State private var procedureID: UUID?
-    @State private var procedureTitle = ""
-    @State private var procedureInstructions = ""
-    @State private var episodeID: UUID?
-    @State private var episodeRequest = ""
-    @State private var episodeResult = ""
-    @State private var term = ""
-    @State private var heardAs = ""
-    @FocusState private var focusedField: String?
+    @State private var editor: MemoryEditor?
+    @State private var hovered: UUID?
+    @State private var expanded: UUID?
     @AppStorage("speek.memory.vocabularyDrafts") private var vocabularyData = Data()
     private var vocabulary: [VocabularyDraft] { (try? JSONDecoder().decode([VocabularyDraft].self, from: vocabularyData)) ?? [] }
-    private func clean(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
-    /// A spoken phrase maps to one entry; a term without a spoken phrase is saved once.
-    private var vocabularyConflict: String? {
-        let spoken = clean(heardAs)
-        if !spoken.isEmpty {
-            return vocabulary.contains { $0.heardAs.caseInsensitiveCompare(spoken) == .orderedSame } ? "This spoken phrase is already saved." : nil
-        }
-        return vocabulary.contains { $0.heardAs.isEmpty && $0.term.caseInsensitiveCompare(clean(term)) == .orderedSame } ? "This term is already saved." : nil
-    }
-
-    private let columns = [GridItem(.adaptive(minimum: 210, maximum: 340), spacing: 16, alignment: .top)]
 
     var body: some View {
         ScrollView {
@@ -46,269 +39,296 @@ struct MemoryShellView: View {
                     Text("Memory").font(.system(size: 25, weight: .semibold))
                     Text("Facts, experiences, and the way you work.").font(.system(size: 13)).foregroundStyle(.secondary)
                 }
-                ViewThatFits(in: .horizontal) {
-                    tabs(vertical: false)
-                    tabs(vertical: true)
-                }
+                PillTabs(items: Self.tabs, selection: $selected)
                 VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .center, spacing: 16) {
-                            Text(selected).font(.system(size: 15, weight: .semibold))
-                            InfoButton(text: sectionDescription, subject: selected)
-                            Spacer(minLength: 8)
-                            if selected == "Facts" {
-                                addButton("Add fact") { editingFactID = nil; fact = ""; addingFact = true; focusedField = "fact" }
-                                    .disabled(addingFact)
-                            } else if selected == "Procedural" {
-                                addButton("Add procedure") { procedureID = nil; procedureTitle = ""; procedureInstructions = ""; procedureEditor = true }
-                                    .disabled(procedureEditor)
-                            } else if selected == "Vocabulary" {
-                                addButton("Add entry") { addingWord = true; focusedField = "term" }
-                                    .disabled(addingWord)
-                            }
-                        }
-                    }
-                    TextField("Search " + selected.lowercased(), text: $query)
-                        .textFieldStyle(.roundedBorder).font(.system(size: 13))
-                        .accessibilityLabel("Search " + selected.lowercased())
+                    header
                     if let error = memory.persistenceError {
                         Label(error, systemImage: "exclamationmark.circle.fill").font(.system(size: 12)).foregroundStyle(.red)
                     }
                     switch selected {
-                    case "Facts": facts
                     case "Episodic": episodes
                     case "Procedural": procedures
-                    default: words
+                    case "Vocabulary": words
+                    default: facts
                     }
                 }
             }
             .frame(maxWidth: 880, alignment: .leading)
             .padding(.vertical, 12).padding(24).frame(maxWidth: .infinity)
         }
-    }
-
-    private var sectionDescription: String {
-        switch selected {
-        case "Facts": return "Semantic memory: preferences, people, and things you know."
-        case "Episodic": return "Completed requests and their results, saved with dates for future context."
-        case "Procedural": return "How to do things: reusable instructions and learned workflows."
-        default: return "Names, terms, corrections, and spoken shortcuts. Speek writes each entry exactly as saved. Add a spoken phrase to replace what you say, such as a misheard name or your address. Entries without one guide Light and Polished mode."
+        .onChange(of: selected) { _, _ in query = ""; expanded = nil }
+        .sheet(item: $editor) { item in
+            MemoryEditorSheet(editor: item, vocabulary: vocabulary) { entry in
+                vocabularyData = (try? JSONEncoder().encode(vocabulary + [entry])) ?? vocabularyData
+            }
         }
     }
 
-    private func tabs(vertical: Bool) -> some View {
-        let layout = vertical ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
-        return layout {
-            ForEach(["Facts", "Episodic", "Procedural", "Vocabulary"], id: \.self) { title in
-                Button {
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { selected = title; query = "" }
-                } label: {
-                    Text(title).font(.system(size: 13, weight: .medium)).fixedSize()
-                        .frame(minWidth: 90, maxWidth: .infinity).padding(.vertical, 8)
-                        .background(selected == title ? Color.white.opacity(0.11) : .clear, in: Capsule())
-                        .contentShape(Capsule())
-                }.buttonStyle(.plain).accessibilityAddTraits(selected == title ? .isSelected : [])
+    // MARK: Header
+
+    /// Same height on every tab: title and info leading, search and add trailing.
+    private var header: some View {
+        HStack(spacing: 10) {
+            Text(selected).font(.system(size: 13, weight: .semibold))
+            InfoButton(text: description, subject: selected)
+            Spacer(minLength: 16)
+            SpeekSearchField(prompt: "Search " + selected.lowercased(), text: $query)
+            if let add = addAction {
+                Button(action: add.action) { Label(add.title, systemImage: "plus") }
+                    .buttonStyle(SpeekActionButtonStyle()).fixedSize()
             }
-        }.padding(4).frame(maxWidth: 500)
-            .background(.black.opacity(0.14), in: RoundedRectangle(cornerRadius: 22))
+        }
+        .frame(height: 32).padding(.leading, 4)
     }
 
-    private func infoCard(_ title: String, icon: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Image(systemName: icon).font(.system(size: 22)).foregroundStyle(.white)
-                .frame(width: 44, height: 44).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-            Text(title).font(.system(size: 14, weight: .semibold))
-            Text(detail).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }.padding(20).frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading).settingsSurface()
+    private var description: String {
+        switch selected {
+        case "Episodic": return "Completed requests and their results, saved with dates for future context."
+        case "Procedural": return "How to do things: reusable instructions Speek includes with matching requests. Actions still need their usual permissions."
+        case "Vocabulary": return "Names, terms, corrections, and spoken shortcuts. Speek writes each entry exactly as saved. Add a spoken phrase to replace what you say, such as a misheard name or your address. Entries without one guide Light and Polished mode."
+        default: return "Semantic memory: preferences, people, and things you know. Say \"Remember that...\" to add one by voice."
+        }
+    }
+
+    private var addAction: (title: String, action: () -> Void)? {
+        switch selected {
+        case "Facts": return ("Add fact", { editor = .fact(nil) })
+        case "Procedural": return ("Add procedure", { editor = .procedure(nil) })
+        case "Vocabulary": return ("Add entry", { editor = .vocabulary })
+        default: return nil
+        }
     }
 
     private func matches(_ text: String) -> Bool { query.isEmpty || text.localizedCaseInsensitiveContains(query) }
 
-    private var episodes: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if !memory.saveHistory { HistoryPausedNotice() }
-            if let episodeID {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Edit event").font(.system(size: 13, weight: .medium))
-                    TextField("Request", text: $episodeRequest, axis: .vertical).lineLimit(2...4).textFieldStyle(.roundedBorder)
-                    TextField("Result", text: $episodeResult, axis: .vertical).lineLimit(3...8).textFieldStyle(.roundedBorder)
-                    formActions(disabled: clean(episodeRequest).isEmpty || clean(episodeResult).isEmpty, cancel: { self.episodeID = nil }) {
-                        memory.updateEpisode(episodeID, request: episodeRequest, result: episodeResult); self.episodeID = nil
-                    }
-                }.padding(16).settingsSurface()
-            }
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                let items = memory.episodes.filter { matches($0.request + " " + $0.result) }.sorted { $0.date > $1.date }
-                if items.isEmpty { infoCard(query.isEmpty ? "No saved events" : "No matching events", icon: "clock.fill", detail: query.isEmpty ? "Completed requests and results will appear here while saving is enabled." : "Try a different search.") }
-                ForEach(items) { episode in
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text(episode.date, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
-                            Spacer(minLength: 0)
-                            editButton("Edit event") { episodeID = episode.id; episodeRequest = episode.request; episodeResult = episode.result }
-                            removeButton("Forget event") { memory.removeEpisode(episode.id) }
-                        }
-                        Text(episode.request).font(.system(size: 13, weight: .medium)).lineLimit(4).textSelection(.enabled)
-                        Text(episode.result).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(8).textSelection(.enabled)
-                        DisclosureGroup("Full event") {
-                            Text(episode.request + "\n\n" + episode.result).font(.system(size: 12)).textSelection(.enabled)
-                        }.font(.system(size: 11))
-                        Spacer(minLength: 0)
-                    }.padding(20).frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading).settingsSurface()
-                }
-            }
-        }
-    }
-
-    private var procedures: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if procedureEditor {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(procedureID == nil ? "New procedure" : "Edit procedure").font(.system(size: 13, weight: .medium))
-                    TextField("Name, such as Weekly project update", text: $procedureTitle).textFieldStyle(.roundedBorder)
-                    TextField("Instructions to reuse for this kind of request", text: $procedureInstructions, axis: .vertical).lineLimit(4...12).textFieldStyle(.roundedBorder)
-                    Text("Relevant procedures are included with future requests. Actions still require their usual permissions.").font(.system(size: 11)).foregroundStyle(.secondary)
-                    formActions(disabled: clean(procedureTitle).isEmpty || clean(procedureInstructions).isEmpty, cancel: { procedureEditor = false }) {
-                        memory.saveProcedure(id: procedureID, title: procedureTitle, instructions: procedureInstructions); procedureEditor = false
-                    }
-                }.padding(16).settingsSurface()
-            }
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                let items = memory.procedures.filter { matches($0.title + " " + $0.instructions) }.sorted { $0.date > $1.date }
-                if items.isEmpty { infoCard(query.isEmpty ? "No saved procedures" : "No matching procedures", icon: "list.bullet.clipboard.fill", detail: query.isEmpty ? "Add the steps and preferences Speek should use for recurring kinds of work." : "Try a different search.") }
-                ForEach(items) { procedure in
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .top, spacing: 8) {
-                            Text(procedure.title).font(.system(size: 13, weight: .semibold)).frame(maxWidth: .infinity, alignment: .leading)
-                            editButton("Edit procedure") { procedureID = procedure.id; procedureTitle = procedure.title; procedureInstructions = procedure.instructions; procedureEditor = true }
-                            removeButton("Forget procedure") { memory.removeProcedure(procedure.id) }
-                        }
-                        Text(procedure.instructions).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(8).textSelection(.enabled)
-                        Text(procedure.date, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
-                        Spacer(minLength: 0)
-                    }.padding(20).frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading).settingsSurface()
-                }
-            }
-        }
-    }
+    // MARK: Facts
 
     private var facts: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if memory.facts.isEmpty {
-                emptyState("No saved facts", detail: "Add a preference or say \"Remember that...\" to Speek.")
-            } else {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                    ForEach(memory.facts.filter { matches($0.text) }) { item in
-                        HStack(alignment: .top, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(item.text).font(.system(size: 13)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                                Text(item.date, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
-                            }.frame(maxWidth: .infinity, alignment: .leading)
-                            editButton("Edit fact") { editingFactID = item.id; fact = item.text; addingFact = true }
-                            removeButton("Forget fact") { memory.remove(item.id) }
-                        }.padding(20).frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading).settingsSurface()
+        let items = memory.facts.filter { matches($0.text) }.sorted { $0.date > $1.date }
+        return listSurface(isEmpty: items.isEmpty, empty: empty("text.book.closed.fill", "No saved facts", "Add a preference or tell Speek to remember something.")) {
+            ForEach(items) { item in
+                if item.id != items.first?.id { SettingsRowDivider() }
+                row(item.id) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.text).font(.system(size: 13)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        Text(item.date, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
+                } actions: {
+                    HoverRowActions(visible: hovered == item.id, subject: "fact", edit: { editor = .fact(item) }) { memory.remove(item.id) }
                 }
-            }
-            if !memory.facts.isEmpty && memory.facts.filter({ matches($0.text) }).isEmpty {
-                Text("No matching facts. Try a different search.").font(.system(size: 13)).foregroundStyle(.secondary)
-            }
-            if addingFact {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(editingFactID == nil ? "New fact" : "Edit fact").font(.system(size: 12, weight: .medium))
-                    TextField("What should Speek remember?", text: $fact, axis: .vertical)
-                        .lineLimit(2...6).textFieldStyle(.plain).padding(10)
-                        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
-                        .focused($focusedField, equals: "fact")
-                    formActions(disabled: clean(fact).isEmpty, cancel: { addingFact = false; fact = "" }) {
-                        if let editingFactID { memory.updateFact(editingFactID, text: fact) } else { memory.remember(fact) }; fact = ""; addingFact = false; editingFactID = nil
-                    }
-                }.padding(12).background(.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             }
         }
     }
+
+    // MARK: Episodic
+
+    private var episodes: some View {
+        let items = memory.episodes.filter { matches($0.request + " " + $0.result) }.sorted { $0.date > $1.date }
+        let days = Dictionary(grouping: items) { Calendar.current.startOfDay(for: $0.date) }.sorted { $0.key > $1.key }
+        return VStack(alignment: .leading, spacing: 28) {
+            if !memory.saveHistory { HistoryPausedNotice() }
+            if items.isEmpty {
+                listSurface(isEmpty: true, empty: empty("clock.fill", "No saved events", "Completed requests appear here while history saving is on.")) { EmptyView() }
+            }
+            ForEach(days, id: \.key) { day, events in
+                SettingsSection(title: dayTitle(day)) {
+                    ForEach(events) { event in
+                        if event.id != events.first?.id { SettingsRowDivider() }
+                        row(event.id) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(event.request).font(.system(size: 13, weight: .medium)).lineLimit(expanded == event.id ? nil : 2)
+                                Text(event.result).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(expanded == event.id ? nil : 2)
+                                    .textSelection(.enabled)
+                            }
+                        } actions: {
+                            HStack(spacing: 8) {
+                                Text(event.date, style: .time).font(.system(size: 11)).foregroundStyle(.secondary)
+                                HoverRowActions(visible: hovered == event.id, subject: "event", edit: { editor = .episode(event) }) { memory.removeEpisode(event.id) }
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { expanded = expanded == event.id ? nil : event.id }
+                    }
+                }
+            }
+        }
+    }
+
+    private func dayTitle(_ day: Date) -> String {
+        if Calendar.current.isDateInToday(day) { return "Today" }
+        if Calendar.current.isDateInYesterday(day) { return "Yesterday" }
+        let sameYear = Calendar.current.isDate(day, equalTo: Date(), toGranularity: .year)
+        return day.formatted(sameYear ? .dateTime.weekday(.wide).month(.wide).day() : .dateTime.month(.wide).day().year())
+    }
+
+    // MARK: Procedural
+
+    private var procedures: some View {
+        let items = memory.procedures.filter { matches($0.title + " " + $0.instructions) }.sorted { $0.date > $1.date }
+        return Group {
+            if items.isEmpty {
+                IntegrationEmptyTile(symbol: "list.bullet.clipboard", title: query.isEmpty ? "No procedures yet" : "No matches",
+                                     text: query.isEmpty ? "Save the steps Speek should follow for recurring work." : "Try a different search.")
+            } else {
+                LazyVGrid(columns: IntegrationTile<EmptyView, EmptyView>.columns, alignment: .leading, spacing: 16) {
+                    ForEach(items) { procedure in
+                        IntegrationTile(symbol: "list.bullet.clipboard", title: procedure.title, subtitle: procedure.instructions,
+                                        status: "Updated " + procedure.date.formatted(date: .abbreviated, time: .omitted), statusSymbol: "clock",
+                                        open: { editor = .procedure(procedure) }) {
+                            EmptyView()
+                        } menu: {
+                            Button("Edit") { editor = .procedure(procedure) }
+                            Divider()
+                            Button("Delete", role: .destructive) { memory.removeProcedure(procedure.id) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Vocabulary
 
     private var words: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if vocabulary.isEmpty {
-                emptyState("No vocabulary yet", detail: "Keep names, abbreviations, specialist terms, and snippets here.")
-            } else {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                    ForEach(vocabulary.filter { matches($0.term + " " + $0.heardAs) }) { word in
-                        HStack(alignment: .top, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(word.term).font(.system(size: 13)).lineLimit(6).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                                if !word.heardAs.isEmpty {
-                                    Text("When heard as: " + word.heardAs).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                                }
-                            }.frame(maxWidth: .infinity, alignment: .leading)
-                            removeButton("Remove " + word.term) {
-                                vocabularyData = (try? JSONEncoder().encode(vocabulary.filter { $0.id != word.id })) ?? vocabularyData
-                            }
-                        }.padding(20).frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading).settingsSurface()
+        let items = vocabulary.filter { matches($0.term + " " + $0.heardAs) }
+            .sorted { $0.term.localizedCaseInsensitiveCompare($1.term) == .orderedAscending }
+        return listSurface(isEmpty: items.isEmpty, empty: empty("character.book.closed.fill", "No vocabulary yet", "Keep names, terms, and snippets Speek should write your way.")) {
+            ForEach(items) { word in
+                if word.id != items.first?.id { SettingsRowDivider() }
+                row(word.id) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        if !word.heardAs.isEmpty {
+                            Text(word.heardAs).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+                            Image(systemName: "arrow.right").font(.system(size: 11, weight: .medium)).foregroundStyle(.white)
+                        }
+                        Text(word.term).font(.system(size: 13, weight: .medium)).lineLimit(3).textSelection(.enabled)
+                    }
+                } actions: {
+                    HoverRowActions(visible: hovered == word.id, subject: word.term) {
+                        vocabularyData = (try? JSONEncoder().encode(vocabulary.filter { $0.id != word.id })) ?? vocabularyData
                     }
                 }
             }
-            if !vocabulary.isEmpty && vocabulary.filter({ matches($0.term + " " + $0.heardAs) }).isEmpty {
-                Text("No matching vocabulary. Try a different search.").font(.system(size: 13)).foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: Building blocks
+
+    private func listSurface<Rows: View, Empty: View>(isEmpty: Bool, empty: Empty, @ViewBuilder rows: () -> Rows) -> some View {
+        VStack(spacing: 0) {
+            if isEmpty { empty } else { rows() }
+        }.settingsSurface()
+    }
+
+    private func row<Content: View, Actions: View>(_ id: UUID, @ViewBuilder content: () -> Content, @ViewBuilder actions: () -> Actions) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            content().frame(maxWidth: .infinity, alignment: .leading)
+            actions()
+        }
+        .padding(16)
+        .onHover { inside in if inside { hovered = id } else if hovered == id { hovered = nil } }
+    }
+
+    private func empty(_ symbol: String, _ title: String, _ text: String) -> some View {
+        HStack(spacing: 14) {
+            IntegrationGlyph(symbol: query.isEmpty ? symbol : "magnifyingglass")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(query.isEmpty ? title : "No matches").font(.system(size: 14, weight: .semibold))
+                Text(query.isEmpty ? text : "Try a different search.").font(.system(size: 12)).foregroundStyle(.secondary)
             }
-            if addingWord {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Write as").font(.system(size: 12, weight: .medium))
-                    TextField("Name, term, or text to insert", text: $term, axis: .vertical).lineLimit(1...5)
-                        .textFieldStyle(.roundedBorder).focused($focusedField, equals: "term")
-                    Text("When heard as (optional)").font(.system(size: 12, weight: .medium))
-                    TextField("Spoken phrase or misspelling", text: $heardAs).textFieldStyle(.roundedBorder)
-                    if let vocabularyConflict {
-                        Text(vocabularyConflict).font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
-                    formActions(disabled: clean(term).isEmpty || vocabularyConflict != nil, cancel: {
-                        addingWord = false; term = ""; heardAs = ""
-                    }) {
-                        var entries = vocabulary
-                        entries.append(VocabularyDraft(term: clean(term), heardAs: clean(heardAs)))
-                        vocabularyData = (try? JSONEncoder().encode(entries)) ?? vocabularyData
-                        term = ""; heardAs = ""; addingWord = false
-                    }
-                }.padding(12).background(.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-            }
-        }
-    }
-
-    private func emptyState(_ title: String, detail: String) -> some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-            infoCard(title, icon: selected == "Facts" ? "text.book.closed.fill" : "character.book.closed.fill", detail: detail)
-        }
-    }
-
-    private func addButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: "plus")
-                .font(.system(size: 13, weight: .medium))
-        }
-        .buttonStyle(SpeekActionButtonStyle()).controlSize(.regular)
-        .fixedSize()
-    }
-
-    private func editButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "pencil").font(.system(size: 13)).frame(width: 32, height: 32).contentShape(Rectangle())
-        }.buttonStyle(.plain).help(title).accessibilityLabel(title)
-    }
-
-    private func removeButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "trash").font(.system(size: 13)).foregroundStyle(.white)
-                .frame(width: 32, height: 32).contentShape(Rectangle())
-        }.buttonStyle(.plain).help(title).accessibilityLabel(title)
-    }
-
-    private func formActions(disabled: Bool, cancel: @escaping () -> Void, save: @escaping () -> Void) -> some View {
-        HStack(spacing: 8) {
             Spacer(minLength: 0)
-            Button("Cancel", action: cancel).buttonStyle(SpeekActionButtonStyle())
-            Button("Save", action: save).buttonStyle(SpeekActionButtonStyle()).disabled(disabled)
+        }.padding(20)
+    }
+}
+
+private struct MemoryEditorSheet: View {
+    let editor: MemoryEditor
+    let vocabulary: [VocabularyDraft]
+    let addVocabulary: (VocabularyDraft) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var memory = AssistantMemory.shared
+    @State private var first = ""
+    @State private var second = ""
+    @FocusState private var focused: Bool
+
+    private func clean(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title).font(.system(size: 17, weight: .semibold))
+            switch editor {
+            case .fact:
+                field("Fact") { TextField("What should Speek remember?", text: $first, axis: .vertical).lineLimit(3...8).focused($focused) }
+            case .episode:
+                field("Request") { TextField("Request", text: $first, axis: .vertical).lineLimit(2...4).focused($focused) }
+                field("Result") { TextField("Result", text: $second, axis: .vertical).lineLimit(3...8) }
+            case .procedure:
+                field("Name") { TextField("Weekly project update", text: $first).focused($focused) }
+                field("Instructions") { TextField("Steps and preferences to reuse", text: $second, axis: .vertical).lineLimit(5...12) }
+            case .vocabulary:
+                field("Write as") { TextField("Name, term, or text to insert", text: $first, axis: .vertical).lineLimit(1...5).focused($focused) }
+                field("When heard as (optional)") { TextField("Spoken phrase or misspelling", text: $second) }
+                if let conflict { Text(conflict).font(.system(size: 11)).foregroundStyle(.secondary) }
+            }
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button("Cancel") { dismiss() }.buttonStyle(SpeekActionButtonStyle()).keyboardShortcut(.cancelAction)
+                Button("Save") { save(); dismiss() }.buttonStyle(SpeekActionButtonStyle()).keyboardShortcut(.defaultAction).disabled(!valid)
+            }
+        }
+        .padding(24).frame(width: 460)
+        .onAppear(perform: load)
+    }
+
+    private var title: String {
+        switch editor {
+        case .fact(let item): return item == nil ? "New fact" : "Edit fact"
+        case .episode: return "Edit event"
+        case .procedure(let item): return item == nil ? "New procedure" : "Edit procedure"
+        case .vocabulary: return "New vocabulary entry"
+        }
+    }
+
+    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.system(size: 12, weight: .medium))
+            content().textFieldStyle(.roundedBorder).font(.system(size: 13))
+        }
+    }
+
+    /// A spoken phrase maps to one entry; a term without a spoken phrase is saved once.
+    private var conflict: String? {
+        let spoken = clean(second)
+        if !spoken.isEmpty {
+            return vocabulary.contains { $0.heardAs.caseInsensitiveCompare(spoken) == .orderedSame } ? "This spoken phrase is already saved." : nil
+        }
+        return vocabulary.contains { $0.heardAs.isEmpty && $0.term.caseInsensitiveCompare(clean(first)) == .orderedSame } ? "This term is already saved." : nil
+    }
+
+    private var valid: Bool {
+        switch editor {
+        case .fact: return !clean(first).isEmpty
+        case .episode, .procedure: return !clean(first).isEmpty && !clean(second).isEmpty
+        case .vocabulary: return !clean(first).isEmpty && conflict == nil
+        }
+    }
+
+    private func load() {
+        switch editor {
+        case .fact(let item): first = item?.text ?? ""
+        case .episode(let item): first = item.request; second = item.result
+        case .procedure(let item): first = item?.title ?? ""; second = item?.instructions ?? ""
+        case .vocabulary: break
+        }
+        focused = true
+    }
+
+    private func save() {
+        switch editor {
+        case .fact(let item): if let item { memory.updateFact(item.id, text: first) } else { memory.remember(first) }
+        case .episode(let item): memory.updateEpisode(item.id, request: first, result: second)
+        case .procedure(let item): memory.saveProcedure(id: item?.id, title: first, instructions: second)
+        case .vocabulary: addVocabulary(VocabularyDraft(term: clean(first), heardAs: clean(second)))
         }
     }
 }

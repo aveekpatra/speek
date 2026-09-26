@@ -8,7 +8,7 @@ struct ActionConnectionsView: View {
     @AppStorage("speek.voice.playbackRate") private var playbackRate = 1.0
     @State private var expanded: ActionConnection?
     @State private var voiceExpanded = false
-    @State private var chatExpanded = true
+    @State private var chatExpanded = false
     @State private var defaultModel = AgentDefaults.model(for: .preferred)
     @State private var defaultReasoning = AgentDefaults.reasoning(for: .preferred) ?? "default"
     @State private var chatModels: [AssistantModelOption] = []

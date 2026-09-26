@@ -28,7 +28,8 @@ struct PromptLibraryView: View {
                     VStack(alignment: .leading, spacing: 16) { heading; addButton }
                 }
                 HStack(spacing: 12) {
-                    TextField("Find a prompt", text: $search).textFieldStyle(.roundedBorder).font(.system(size: 13))
+                    SpeekSearchField(prompt: "Find a prompt", text: $search)
+                    Spacer(minLength: 0)
                     Toggle("Favorites", isOn: $favoritesOnly).toggleStyle(.button).buttonStyle(SpeekActionButtonStyle()).fixedSize()
                 }
                 if let error = library.error {

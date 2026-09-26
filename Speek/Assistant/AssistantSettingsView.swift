@@ -16,7 +16,6 @@ struct AssistantSettingsView: View {
     @ObservedObject private var permissions = PermissionsCenter.shared
     @ObservedObject private var memory = AssistantMemory.shared
     @ObservedObject private var recovery = RecordingRecovery.shared
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("speek.assistant.useFocusedContext") private var focusedContext = true
     @AppStorage("speek.dictation.doubleTapHandsFree") private var handsFree = false
     @AppStorage("speek.voice.recordingRecovery") private var recoveryEnabled = false
@@ -64,18 +63,7 @@ struct AssistantSettingsView: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 4) {
-            ForEach(Self.tabs, id: \.self) { item in
-                Button {
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { navigation.settingsTab = item }
-                } label: {
-                    Text(item).font(.system(size: 13, weight: .medium))
-                        .frame(maxWidth: .infinity).padding(.vertical, 8)
-                        .background(navigation.settingsTab == item ? Color.white.opacity(0.11) : .clear, in: Capsule())
-                        .contentShape(Capsule())
-                }.buttonStyle(.plain).accessibilityAddTraits(navigation.settingsTab == item ? .isSelected : [])
-            }
-        }.padding(4).frame(maxWidth: 420).background(.black.opacity(0.14), in: Capsule())
+        PillTabs(items: Self.tabs, selection: $navigation.settingsTab)
     }
 
     private var general: some View {
