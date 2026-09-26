@@ -39,44 +39,19 @@ struct IntegrationsShellView: View {
                         }.buttonStyle(.plain).accessibilityAddTraits(tab == item ? .isSelected : [])
                     }
                 }.padding(4).frame(maxWidth: 420).background(.black.opacity(0.14), in: Capsule())
-                VStack(alignment: .leading, spacing: 16) {
-                    if hasHeading {
-                        ViewThatFits(in: .horizontal) {
-                            HStack { sectionHeading; Spacer(minLength: 16); addButton }
-                            VStack(alignment: .leading, spacing: 12) { sectionHeading; addButton.frame(maxWidth: .infinity, alignment: .trailing) }
-                        }
+                if let message = error ?? store.storageError {
+                    Label(message, systemImage: "exclamationmark.circle")
+                        .font(.system(size: 12)).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                switch tab {
+                case "Native apps": NativeAppsIntegrationView()
+                case "Local tools":
+                    VStack(alignment: .leading, spacing: 28) {
+                        CodingIntegrationSettingsView()
+                        LocalPluginSettingsView()
                     }
-                    if let message = error ?? store.storageError {
-                        Label(message, systemImage: "exclamationmark.circle")
-                            .font(.system(size: 12)).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
-                    if tab == "Plugins" {
-                        if store.plugins.isEmpty { emptyState("No plugins yet", text: "Connect an MCP server to make its tools available to the agent.", icon: "server.rack") }
-                        else {
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                                ForEach(store.plugins) { plugin in pluginCard(plugin) }
-                            }
-                        }
-                    } else if tab == "Local tools" {
-                        VStack(alignment: .leading, spacing: 28) {
-                            CodingIntegrationSettingsView()
-                            LocalPluginSettingsView()
-                        }
-                    } else if tab == "Native apps" {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 24, alignment: .top)], alignment: .leading, spacing: 24) {
-                            OrganizerSettingsView()
-                            NativeAppSettingsView()
-                            MessagesIntegrationSettingsView()
-                            FilesIntegrationSettingsView()
-                        }
-                    } else {
-                        if store.skills.isEmpty { emptyState("No skills yet", text: "Import a SKILL.md file to add instructions for a workflow.", icon: "doc.text") }
-                        else {
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                                ForEach(store.skills) { skill in skillCard(skill) }
-                            }
-                        }
-                    }
+                case "Skills": skills
+                default: plugins
                 }
             }.frame(maxWidth: 880, alignment: .leading)
                 .padding(.vertical, 12).padding(24).frame(maxWidth: .infinity)
@@ -98,100 +73,74 @@ struct IntegrationsShellView: View {
         } message: { Text("This disconnects the server and removes its saved credentials. The server itself is not deleted.") }
     }
 
-    private var columns: [GridItem] { [GridItem(.adaptive(minimum: 230, maximum: 420), spacing: 16, alignment: .top)] }
-    private var sectionHeading: some View {
-        HStack(spacing: 6) {
-            Text(tab == "Plugins" ? "Your plugins" : "Skill library").font(.system(size: 15, weight: .semibold))
-            InfoButton(text: tab == "Plugins" ? "Connect MCP servers: remote services or tools running on this Mac." : "Enabled skills guide matching requests. Reimport a skill to update it.", subject: tab)
-        }
-    }
-    /// Native apps and Local tools render their own section headers.
-    private var hasHeading: Bool { tab == "Plugins" || tab == "Skills" }
-    private var addButton: some View {
-        Button {
-            if tab == "Plugins" { sheet = .editor(nil) } else { importSkill() }
-        } label: { Label(tab == "Plugins" ? "Add plugin" : "Import skill", systemImage: "plus") }
-            .buttonStyle(SpeekActionButtonStyle()).fixedSize()
-            .disabled(store.storageError != nil)
-    }
-
-    private func pluginCard(_ plugin: MCPPlugin) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                tile(plugin.transport == .http ? "server.rack" : "terminal")
-                Spacer(minLength: 8)
-                Menu {
-                    Button("Details") { sheet = .plugin(plugin.id) }
-                    Button("Edit") { sheet = .editor(plugin) }
-                    Divider()
-                    Button("Remove", role: .destructive) { removing = plugin }
-                } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Plugin actions")
+    private var plugins: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            IntegrationSectionHeader(title: "MCP servers", info: "Remote services or tools running on this Mac. Their tools become available to the agent; actions still wait for your review.") {
+                Button { sheet = .editor(nil) } label: { Label("Add plugin", systemImage: "plus") }
+                    .buttonStyle(SpeekActionButtonStyle()).fixedSize().disabled(store.storageError != nil)
             }
-            Button { sheet = .plugin(plugin.id) } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(plugin.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
-                    Text(plugin.transport.title).font(.system(size: 12)).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-            }.buttonStyle(.plain)
-            Spacer(minLength: 0)
-            HStack(spacing: 8) {
-                stateLabel(store.state(for: plugin.id))
-                Spacer(minLength: 4)
-                if case .connecting = store.state(for: plugin.id) {
-                    Button("Cancel") { store.disconnect(pluginID: plugin.id) }.buttonStyle(SpeekActionButtonStyle())
-                } else if case .connected = store.state(for: plugin.id) {
-                    Button("Manage") { sheet = .plugin(plugin.id) }.buttonStyle(SpeekActionButtonStyle())
-                } else {
-                    Button("Connect") { connect(plugin) }.buttonStyle(SpeekActionButtonStyle())
+            if store.plugins.isEmpty {
+                IntegrationEmptyTile(symbol: "server.rack", title: "No plugins yet", text: "Add an MCP server to give Speek new tools.")
+            } else {
+                LazyVGrid(columns: IntegrationTile<EmptyView, EmptyView>.columns, alignment: .leading, spacing: 16) {
+                    ForEach(store.plugins) { plugin in pluginTile(plugin) }
                 }
             }
-        }.padding(20).frame(maxWidth: .infinity, minHeight: 184, alignment: .topLeading).settingsSurface()
+        }
     }
 
-    private func skillCard(_ skill: LocalSkill) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                tile("doc.text")
-                Spacer(minLength: 8)
-                Toggle("Enable " + skill.name, isOn: Binding(get: { skill.enabled }, set: { enabled in
-                    perform { try store.setSkillEnabled(id: skill.id, enabled: enabled) }
-                })).labelsHidden().toggleStyle(.switch).controlSize(.small)
+    private var skills: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            IntegrationSectionHeader(title: "Skill library", info: "Enabled skills guide matching requests. Instructions are copied on import; scripts are never run. Reimport a skill to update it.") {
+                Button { importSkill() } label: { Label("Import skill", systemImage: "plus") }
+                    .buttonStyle(SpeekActionButtonStyle()).fixedSize().disabled(store.storageError != nil)
             }
-            Button { sheet = .skill(skill.id) } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(skill.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
-                    Text(skill.summary).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(3)
-                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-            }.buttonStyle(.plain)
-            Spacer(minLength: 0)
-            HStack {
-                Label(skill.enabled ? "Enabled" : "Disabled", systemImage: skill.enabled ? "checkmark.circle.fill" : "minus.circle")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                Button("Details") { sheet = .skill(skill.id) }.buttonStyle(SpeekActionButtonStyle())
+            if store.skills.isEmpty {
+                IntegrationEmptyTile(symbol: "book.closed", title: "No skills yet", text: "Import a SKILL.md file to teach Speek a workflow.")
+            } else {
+                LazyVGrid(columns: IntegrationTile<EmptyView, EmptyView>.columns, alignment: .leading, spacing: 16) {
+                    ForEach(store.skills) { skill in
+                        IntegrationTile(symbol: "book.closed", title: skill.name, subtitle: skill.summary,
+                                        status: skill.enabled ? "Enabled" : "Off", statusSymbol: skill.enabled ? "checkmark.circle.fill" : "circle",
+                                        open: { sheet = .skill(skill.id) }) {
+                            Toggle("Enable " + skill.name, isOn: Binding(get: { skill.enabled }, set: { enabled in
+                                perform { try store.setSkillEnabled(id: skill.id, enabled: enabled) }
+                            })).labelsHidden().toggleStyle(.switch)
+                        } menu: {
+                            Button("Details") { sheet = .skill(skill.id) }
+                            Divider()
+                            Button("Remove", role: .destructive) { perform { try store.removeSkill(id: skill.id) } }
+                        }
+                    }
+                }
             }
-        }.padding(20).frame(maxWidth: .infinity, minHeight: 184, alignment: .topLeading).settingsSurface()
+        }
     }
 
-    private func tile(_ symbol: String) -> some View {
-        Image(systemName: symbol).font(.system(size: 22)).foregroundStyle(.primary)
-            .frame(width: 44, height: 44).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+    private func pluginTile(_ plugin: MCPPlugin) -> some View {
+        let state = store.state(for: plugin.id)
+        var busy = false
+        if case .connecting = state { busy = true }
+        let location = plugin.transport == .http ? (URL(string: plugin.endpoint)?.host ?? plugin.endpoint) : (plugin.executable as NSString).lastPathComponent
+        return IntegrationTile(symbol: plugin.transport == .http ? "server.rack" : "terminal", title: plugin.name,
+                               subtitle: location.isEmpty ? plugin.transport.title : plugin.transport.title + ", " + location,
+                               status: state.label, statusSymbol: stateSymbol(state), busy: busy,
+                               open: { sheet = .plugin(plugin.id) }) {
+            if case .connecting = state {
+                Button("Cancel") { store.disconnect(pluginID: plugin.id) }.buttonStyle(SpeekActionButtonStyle())
+            } else if case .connected = state {
+                Button("Manage") { sheet = .plugin(plugin.id) }.buttonStyle(SpeekActionButtonStyle())
+            } else {
+                Button("Connect") { connect(plugin) }.buttonStyle(SpeekActionButtonStyle())
+            }
+        } menu: {
+            Button("Details") { sheet = .plugin(plugin.id) }
+            Button("Edit") { sheet = .editor(plugin) }
+            Divider()
+            Button("Remove", role: .destructive) { removing = plugin }
+        }
     }
-    private func emptyState(_ title: String, text: String, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            tile(icon)
-            Text(title).font(.system(size: 14, weight: .semibold))
-            Text(text).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }.padding(20).frame(maxWidth: 300, minHeight: 180, alignment: .topLeading).settingsSurface()
-    }
-    @ViewBuilder private func stateLabel(_ state: IntegrationStore.ConnectionState) -> some View {
-        HStack(spacing: 5) {
-            if case .connecting = state { ProgressView().controlSize(.mini) }
-            else { Image(systemName: stateSymbol(state)) }
-            Text(state.label)
-        }.font(.system(size: 11)).foregroundStyle(.secondary)
-    }
+
     private func stateSymbol(_ state: IntegrationStore.ConnectionState) -> String {
         switch state { case .connected: return "checkmark.circle.fill"; case .failed: return "exclamationmark.circle"; default: return "circle" }
     }

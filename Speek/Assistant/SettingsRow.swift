@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// A titled group of settings rows on the shared settings surface.
 struct SettingsSection<Content: View>: View {
@@ -24,13 +25,20 @@ struct SettingsSection<Content: View>: View {
 struct SettingsRow<Control: View>: View {
     let title: String
     var icon: String? = nil
+    /// A real app icon or brand mark, shown in the same slot as `icon`.
+    var image: NSImage? = nil
+    var asset: String? = nil
     var value: String? = nil
     var info: String? = nil
     @ViewBuilder var control: Control
 
     var body: some View {
         HStack(spacing: 12) {
-            if let icon {
+            if let image {
+                Image(nsImage: image).resizable().interpolation(.high).frame(width: 28, height: 28).frame(width: 28, height: 32)
+            } else if let asset {
+                Image(asset).resizable().scaledToFit().foregroundStyle(.white).frame(width: 22, height: 22).frame(width: 28, height: 32)
+            } else if let icon {
                 Image(systemName: icon).font(.system(size: 19)).foregroundStyle(.white).frame(width: 28, height: 32)
             }
             VStack(alignment: .leading, spacing: 4) {

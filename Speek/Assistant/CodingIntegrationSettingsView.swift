@@ -22,38 +22,22 @@ struct CodingIntegrationSettingsView: View {
     @State private var locations: [String: String] = [:]
 
     var body: some View {
-        SettingsSection(title: "Coding assistants", info: "Send reviewed coding tasks to Codex or Claude Code from a chat. Speek uses the CLI's existing sign-in; being installed does not confirm account access.", spacing: 16) {
+        SettingsSection(title: "Coding assistants", info: "Send reviewed coding tasks to Codex or Claude Code from a chat. Speek uses the CLI's existing sign-in; being installed does not confirm account access.") {
             ForEach(CodingTaskJob.Engine.allCases) { engine in
-                if engine != CodingTaskJob.Engine.allCases.first { Divider().padding(.horizontal, 16) }
-                row(engine)
+                if engine != CodingTaskJob.Engine.allCases.first { SettingsRowDivider(leading: 60) }
+                let location = locations[engine.rawValue]
+                let enabled = binding(for: engine)
+                SettingsRow(title: engine.title, asset: engine == .codex ? "provider-codex" : "provider-anthropic",
+                            value: location == nil ? "CLI not found" : nil, info: location.map { "Uses " + $0 }) {
+                    Toggle("Enable " + engine.title + " integration", isOn: enabled)
+                        .labelsHidden().toggleStyle(.switch)
+                        .disabled(location == nil && !enabled.wrappedValue)
+                        .help(location == nil ? "Install the CLI to enable this integration." : "Allow reviewed tasks through " + engine.title)
+                }
             }
         }
         .onAppear(perform: refresh)
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
-    }
-
-    private func row(_ engine: CodingTaskJob.Engine) -> some View {
-        let location = locations[engine.rawValue]
-        let enabled = binding(for: engine)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(engine.title).font(.system(size: 13, weight: .medium))
-                    Label(location == nil ? "CLI not found" : "CLI installed", systemImage: location == nil ? "minus.circle" : "checkmark.circle.fill")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                Toggle("Enable " + engine.title + " integration", isOn: enabled)
-                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                    .disabled(location == nil && !enabled.wrappedValue)
-                    .help(location == nil ? "Install the CLI to enable this integration." : "Allow reviewed tasks through " + engine.title)
-            }
-            if let location {
-                DisclosureGroup("CLI location") {
-                    Text(location).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 5)
-                }.font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-        }.padding(16)
     }
 
     private func binding(for engine: CodingTaskJob.Engine) -> Binding<Bool> {

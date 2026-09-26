@@ -12,42 +12,26 @@ struct LocalPluginSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center) { heading; Spacer(minLength: 16); importButton }
-                VStack(alignment: .leading, spacing: 12) { heading; importButton.frame(maxWidth: .infinity, alignment: .trailing) }
+            IntegrationSectionHeader(title: "Command-line tools", info: "Expose an app's command-line tool to Speek, or add a dictation hook, by importing a manifest.") {
+                importButton
             }
             if let error = error ?? store.storageError { Text(error).font(.system(size: 12)).foregroundStyle(.secondary) }
             if store.plugins.isEmpty {
-                VStack(alignment: .leading, spacing: 14) {
-                    Image(systemName: "terminal").font(.system(size: 22)).frame(width: 44, height: 44)
-                        .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-                    Text("No local tools yet").font(.system(size: 14, weight: .semibold))
-                    Text("Import a manifest to expose an app's CLI or add a dictation hook.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Button("View manifest format") { showFormat = true }.buttonStyle(.plain).font(.system(size: 12))
-                }.padding(20).frame(maxWidth: 300, minHeight: 190, alignment: .topLeading).settingsSurface()
+                IntegrationEmptyTile(symbol: "terminal", title: "No tools yet", text: "Import a manifest to add one.")
+                Button("View manifest format") { showFormat = true }.buttonStyle(.plain).font(.system(size: 12)).padding(.leading, 4)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 230, maximum: 420), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
+                LazyVGrid(columns: IntegrationTile<EmptyView, EmptyView>.columns, alignment: .leading, spacing: 16) {
                     ForEach(store.plugins) { plugin in
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack {
-                                Image(systemName: "terminal").font(.system(size: 22)).frame(width: 44, height: 44)
-                                    .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-                                Spacer()
-                                Toggle("Enable " + plugin.manifest.name, isOn: Binding(get: { plugin.enabled }, set: { enabled in
-                                    perform { try store.setEnabled(id: plugin.id, enabled: enabled) }
-                                })).labelsHidden().toggleStyle(.switch).controlSize(.small)
-                            }
-                            Text(plugin.manifest.name).font(.system(size: 14, weight: .semibold))
-                            Text(plugin.manifest.description).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(3)
-                            Spacer(minLength: 0)
-                            HStack {
-                                Label(plugin.enabled ? "Enabled" : "Disabled", systemImage: plugin.enabled ? "checkmark.circle.fill" : "minus.circle")
-                                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                                Spacer()
-                                Button("Manage") { selected = plugin }.buttonStyle(SpeekActionButtonStyle())
-                            }
-                        }.padding(20).frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading).settingsSurface()
+                        IntegrationTile(symbol: "terminal", title: plugin.manifest.name, subtitle: plugin.manifest.description,
+                                        status: plugin.enabled ? "Enabled" : "Off", statusSymbol: plugin.enabled ? "checkmark.circle.fill" : "circle",
+                                        open: { selected = plugin }) {
+                            Toggle("Enable " + plugin.manifest.name, isOn: Binding(get: { plugin.enabled }, set: { enabled in
+                                perform { try store.setEnabled(id: plugin.id, enabled: enabled) }
+                            })).labelsHidden().toggleStyle(.switch)
+                        } menu: {
+                            Button("Manage") { selected = plugin }
+                            Button("Manifest format") { showFormat = true }
+                        }
                     }
                 }
             }
@@ -61,14 +45,8 @@ struct LocalPluginSettingsView: View {
         .sheet(item: $selected) { plugin in LocalPluginDetail(id: plugin.id, store: store) }
         .sheet(isPresented: $showFormat) { LocalManifestFormat() }
     }
-    private var heading: some View {
-        HStack(spacing: 6) {
-            Text("Local tools").font(.system(size: 15, weight: .semibold))
-            InfoButton(text: "Expose an app's command-line tool to Speek, or add a dictation hook, by importing a manifest.", subject: "Local tools")
-        }
-    }
     private var importButton: some View {
-        Button { importManifest() } label: { Label("Import plugin", systemImage: "plus") }
+        Button { importManifest() } label: { Label("Import tool", systemImage: "plus") }
             .buttonStyle(SpeekActionButtonStyle()).fixedSize().disabled(store.storageError != nil)
     }
     private func perform(_ work: () throws -> Void) { do { try work(); error = nil } catch { self.error = LocalPluginStore.safeError(error) } }

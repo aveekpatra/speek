@@ -74,8 +74,17 @@ final class NativeOrganizerTools {
         EKEventStore.authorizationStatus(for: service.entity)
     }
 
+    /// macOS access plus Speek's own switch. Turning the switch off keeps the macOS grant.
     func isConnected(_ service: OrganizerService) -> Bool {
-        authorizationStatus(for: service) == .fullAccess
+        authorizationStatus(for: service) == .fullAccess && isEnabled(service)
+    }
+
+    func isEnabled(_ service: OrganizerService) -> Bool {
+        UserDefaults.standard.object(forKey: "speek.organizer.\(service.rawValue).enabled") as? Bool ?? true
+    }
+
+    func setEnabled(_ enabled: Bool, for service: OrganizerService) {
+        UserDefaults.standard.set(enabled, forKey: "speek.organizer.\(service.rawValue).enabled")
     }
 
     func requestAccess(to service: OrganizerService) async throws {

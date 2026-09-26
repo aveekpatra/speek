@@ -347,3 +347,10 @@ Verified the running compact and expanded layouts with Computer Use; the collaps
 
 - Apply the same 15-point sidebar label size to New task, destinations, search and
   recent chats. Section headings use 13 points. Keep regular weight for rows.
+
+## Integrations layout (2026-09-26)
+- Rule: what Speek ships is a grouped list; what the user adds is a grid of equal tiles. Components live in `Speek/Assistant/IntegrationComponents.swift`.
+- Native apps: single-column grouped list (Communication, Organization, Media, Files) at the full 880-point column. Each row shows the real app icon (`AppIcon`), title, info button, and one trailing switch: on means Speek may use it. Switching on requests macOS access; a spinner replaces the switch while it runs. Denied access shows "Open System Settings" instead of a switch. Never mix Connected labels, Connect buttons, and switches in one list.
+- Local tools: Coding assistants as a grouped list (brand marks, switches), then Command-line tools as a tile grid.
+- Plugins (MCP) and Skills: tile grid, adaptive 230 to 420 points, fixed 184-point tiles so rows align. Tile: 44-point glyph, 14-point semibold name, two-line subtitle, status bottom-left, primary control bottom-right (switch or Connect/Manage), overflow menu top-right shown on hover. Tapping the tile opens details.
+- Empty shelves show one placeholder tile of the same size, not a floating message. The add action stays beside the section header.
