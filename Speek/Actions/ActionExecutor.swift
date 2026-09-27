@@ -30,8 +30,7 @@ enum ActionExecutor {
             try await NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
             return "Opened \(name)."
         case .remember:
-            AssistantMemory.shared.remember(action.target)
-            return "Remembered: \(action.target)"
+            return AssistantMemory.shared.remember(action.target) ? "Remembered: \(action.target)" : "Already remembered: \(action.target)"
         case .openWebsite:
             guard let url = safeWebsiteURL(action.target) else {
                 throw ActionClientError.requestFailed("This website address is not allowed.")

@@ -111,6 +111,32 @@ final class ComposerAttachmentStore: ObservableObject {
 
     func remove(id: UUID) { attachments.removeAll { $0.id == id } }
 
+    /// Pastes an image or copied files from the clipboard. Returns false when the clipboard
+    /// holds neither, so an ordinary text paste goes ahead.
+    @discardableResult
+    func paste(from pasteboard: NSPasteboard = .general) -> Bool {
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            add(urls: urls); return true
+        }
+        // Screenshots and images copied from apps or the web arrive as image data. Rich text
+        // copied from documents can carry a picture of itself; the text wins there.
+        let text = pasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard text.isEmpty || (text.hasPrefix("http") && !text.contains(" ")) else { return false }
+        guard pasteboard.availableType(from: [.png, .tiff]) != nil || pasteboard.canReadObject(forClasses: [NSImage.self], options: nil),
+              let data = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff)
+                ?? (pasteboard.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage)?.tiffRepresentation else { return false }
+        guard attachments.count < Self.countLimit else { error = ComposerAttachmentError.tooMany.localizedDescription; return true }
+        do {
+            let normalized = try Self.normalizedImage(data)
+            let name = "Pasted image" + (attachments.contains { $0.name.hasPrefix("Pasted image") } ? " \(attachments.count + 1)" : "") + ".jpg"
+            attachments.append(ComposerAttachment(id: UUID(), name: name, kind: .image, byteCount: normalized.count, extractedText: "",
+                                                  imageData: normalized, previewData: normalized, isTruncated: false,
+                                                  note: "Images are resized to at most 2048 pixels before sending."))
+            error = nil
+        } catch { self.error = ComposerAttachmentError.image.localizedDescription }
+        return true
+    }
+
     /// Attaches text that is not a file, such as a plugin resource.
     func addText(name: String, text: String) {
         guard attachments.count < Self.countLimit else { error = ComposerAttachmentError.tooMany.localizedDescription; return }

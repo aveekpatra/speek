@@ -9,7 +9,7 @@ class SystemInfoService {
 
     func getSystemInfoString() -> String {
         let info = """
-        === WHISPER PRO SYSTEM INFORMATION ===
+        === SPEEK SYSTEM INFORMATION ===
         Generated: \(Self.englishTimestamp())
 
         APP INFORMATION:

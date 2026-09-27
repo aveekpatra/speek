@@ -63,6 +63,8 @@ struct NativeAppsIntegrationView: View {
                 appRow(.music)
                 SettingsRowDivider(leading: 60)
                 appRow(.spotify)
+                SettingsRowDivider(leading: 60)
+                SpotifyAccountRow()
             }
             SettingsSection(title: "Files") {
                 SettingsRow(title: "Working folder", image: AppIcon.image(for: "com.apple.finder"), value: folder.isEmpty ? "Not set" : folder,
@@ -83,6 +85,11 @@ struct NativeAppsIntegrationView: View {
                     }
                     SettingsRowDivider(leading: 60)
                 }
+                let media = policies.tools(inGroup: "media")
+                SettingsRow(title: "Media keys", icon: "playpause", value: policies.summary(media),
+                            info: "Play, pause, next, and previous in whatever is playing, and the Mac's volume.", expanded: isOpen("media")) { EmptyView() }
+                if expanded.contains("media") { ToolPolicyRows(tools: media) }
+                SettingsRowDivider(leading: 60)
                 let web = policies.tools(inGroup: "web")
                 SettingsRow(title: "Web search", icon: "globe", value: policies.summary(web), expanded: isOpen("web")) { EmptyView() }
                 if expanded.contains("web") { ToolPolicyRows(tools: web) }
@@ -98,7 +105,7 @@ struct NativeAppsIntegrationView: View {
 
     @ViewBuilder private func appRow(_ service: NativeAppService) -> some View {
         let installed = NativeAppTools.shared.isInstalled(service)
-        let tools = apps.contains(service) ? policies.tools(inGroup: service.rawValue) : []
+        let tools = policies.tools(inGroup: service.rawValue)
         SettingsRow(title: service.title, icon: service.symbol, image: AppIcon.image(for: service.bundleID),
                     value: installed ? (errors[service.rawValue] ?? policies.summary(tools)) : "Not installed", info: detail(service),
                     expanded: tools.isEmpty ? nil : isOpen(service.rawValue)) {
@@ -151,7 +158,8 @@ struct NativeAppsIntegrationView: View {
         switch service {
         case .mail: return "Read Inbox messages, draft, reply, and send. Connecting grants macOS Automation access."
         case .notes: return "Find, read, create, and append plain-text notes."
-        case .music, .spotify: return "Current track, playback, and volume."
+        case .music: return "Current track, playback, and volume."
+        case .spotify: return "Current track, playback, volume, and playing a link in the Spotify app. Works without Premium."
         }
     }
 
@@ -165,5 +173,66 @@ struct NativeAppsIntegrationView: View {
         apps = Set(NativeAppService.allCases.filter { NativeAppTools.shared.isEnabled($0) })
         messagesHistory = MessagesTools.shared.historyEnabled
         messagesSending = MessagesTools.shared.sendingEnabled
+    }
+}
+
+/// Signs in to the user's Spotify account for search, library, playlists, queue, and devices.
+/// Uses the user's own Spotify app, so only its Client ID is needed (no secret).
+private struct SpotifyAccountRow: View {
+    @ObservedObject private var account = SpotifyAccount.shared
+    @State private var setup = false
+    @State private var clientID = ""
+    @State private var error: String?
+
+    var body: some View {
+        SettingsRow(title: "Spotify account", image: AppIcon.image(for: "com.spotify.client"),
+                    value: error ?? (account.isSignedIn ? "Signed in" + (account.displayName.map { " as " + $0 } ?? "") : "Search, library, playlists, queue, and devices"),
+                    info: "Signs in with your own Spotify app. Create one at developer.spotify.com/dashboard: add the redirect URI http://127.0.0.1:43821/callback, select Web API, then paste its Client ID here. Queue and device control need Premium.") {
+            if account.signingIn {
+                ProgressView().controlSize(.small).frame(width: 38).accessibilityLabel("Signing in to Spotify")
+            } else if account.isSignedIn {
+                Button("Sign Out") { account.signOut() }.buttonStyle(SpeekActionButtonStyle())
+            } else {
+                HStack(spacing: 8) {
+                    if !account.clientID.isEmpty {
+                        Button("Client ID") { clientID = account.clientID; setup = true }.buttonStyle(SpeekActionButtonStyle())
+                    }
+                    Button("Sign In") {
+                        if account.clientID.isEmpty { clientID = ""; setup = true } else { signIn() }
+                    }
+                        .buttonStyle(SpeekActionButtonStyle())
+                        .popover(isPresented: $setup, arrowEdge: .bottom) { setupForm }
+                }
+            }
+        }
+    }
+
+    private var setupForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Spotify Client ID").font(.system(size: 13, weight: .semibold))
+            Text("In your Spotify app's settings on developer.spotify.com, add the redirect URI below, then copy the Client ID.")
+                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Text(SpotifyAccount.redirectURI).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(SpotifyAccount.redirectURI, forType: .string) } label: {
+                    Image(systemName: "doc.on.doc").font(.system(size: 11))
+                }.buttonStyle(.plain).help("Copy redirect URI")
+            }
+            TextField("Client ID", text: $clientID).textFieldStyle(.roundedBorder).font(.system(size: 12, design: .monospaced))
+            HStack {
+                Button("Open Dashboard") { NSWorkspace.shared.open(URL(string: "https://developer.spotify.com/dashboard")!) }
+                Spacer()
+                Button("Sign In") { account.clientID = clientID; setup = false; signIn() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(clientID.trimmingCharacters(in: .whitespaces).count < 16)
+            }
+        }.padding(16).frame(width: 340)
+    }
+
+    private func signIn() {
+        error = nil
+        Task { @MainActor in
+            do { try await account.signIn() } catch { self.error = error.localizedDescription }
+        }
     }
 }

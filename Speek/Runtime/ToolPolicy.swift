@@ -53,7 +53,8 @@ final class ToolPolicyStore: ObservableObject {
 
     func policy(for toolID: String, changesData: Bool) -> ToolPolicy {
         if let disabled = disabledExternally(toolID), disabled { return .never }
-        return overrides[toolID] ?? defaultPolicy(changesData: changesData)
+        // Giving Speek a task on the computer is the permission; it runs unless the user chose otherwise.
+        return overrides[toolID] ?? (toolID == Self.computerUseID ? .allow : defaultPolicy(changesData: changesData))
     }
 
     func override(for toolID: String) -> ToolPolicy? {
@@ -120,11 +121,17 @@ final class ToolPolicyStore: ObservableObject {
                     ToolPolicyEntry(id: $0.name, title: title($0.name), summary: $0.description, changesData: $0.requiresConfirmation)
                 }))
         }
-        for service in NativeAppService.allCases where NativeAppTools.shared.isEnabled(service) && NativeAppTools.shared.isInstalled(service) {
-            result.append(ToolPolicyGroup(id: service.rawValue, title: service.title, icon: .app(service.bundleID),
-                tools: NativeAppTools.catalog.filter { $0.service == service }.map {
-                    ToolPolicyEntry(id: $0.name, title: title($0.name), summary: $0.description, changesData: $0.requiresConfirmation)
-                }))
+        for service in NativeAppService.allCases {
+            let app = NativeAppTools.shared.isEnabled(service) && NativeAppTools.shared.isInstalled(service)
+            var tools = app ? NativeAppTools.catalog.filter { $0.service == service }.map {
+                ToolPolicyEntry(id: $0.name, title: title($0.name), summary: $0.description, changesData: $0.requiresConfirmation)
+            } : []
+            // The Spotify account's tools sit with the Spotify app's.
+            if service == .spotify {
+                tools += SpotifyAccount.shared.availableTools.map { ToolPolicyEntry(id: $0.id, title: title($0.id), summary: $0.summary, changesData: $0.requiresReview) }
+            }
+            guard !tools.isEmpty else { continue }
+            result.append(ToolPolicyGroup(id: service.rawValue, title: service.title, icon: .app(service.bundleID), tools: tools))
         }
         let messages = MessagesTools.shared.availableCatalog
         if !messages.isEmpty {
@@ -144,6 +151,8 @@ final class ToolPolicyStore: ObservableObject {
         }
         result.append(ToolPolicyGroup(id: "schedules", title: "Schedules", icon: .symbol("calendar.badge.clock"),
             tools: ScheduleTools.catalog.map { ToolPolicyEntry(id: $0.id, title: $0.title, summary: $0.summary, changesData: $0.requiresReview) }))
+        result.append(ToolPolicyGroup(id: "media", title: "Media keys", icon: .symbol("playpause"),
+            tools: MediaTools.catalog.map { ToolPolicyEntry(id: $0.id, title: $0.title, summary: $0.summary, changesData: $0.requiresReview) }))
         result.append(ToolPolicyGroup(id: "web", title: "Web", icon: .symbol("globe"),
             tools: [ToolPolicyEntry(id: "web.search", title: "Search the web", summary: "Search public web pages.", changesData: false),
                     ToolPolicyEntry(id: "web.read", title: "Read a web page", summary: "Read a public HTTPS page from search results.", changesData: false)]))

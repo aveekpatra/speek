@@ -274,9 +274,11 @@ struct SpeekMainShell: View {
             HStack {
                 Text("Speek").font(.system(size: 17, weight: .semibold))
                 Spacer()
-                Button { searching.toggle() } label: { Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .light)) }
-                    .buttonStyle(.plain).foregroundStyle(.white).help("Find a task")
-            }.padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 20)
+                Button { searching.toggle() } label: {
+                    Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(.white)
+                        .frame(width: 28, height: 28).modifier(SidebarIconHover(active: searching)).contentShape(Rectangle())
+                }.buttonStyle(.plain).help("Find a task")
+            }.padding(.leading, 18).padding(.trailing, 11).padding(.top, 14).padding(.bottom, 16)
             Button(action: newTask) {
                 HStack(spacing: 10) {
                     Image(systemName: "square.and.pencil").frame(width: 18)
@@ -297,26 +299,32 @@ struct SpeekMainShell: View {
                 Text(showingArchive ? "Archived" : "Recents").font(.system(size: 13, weight: .medium)).foregroundStyle(muted)
                 Spacer()
                 Button { showingArchive.toggle() } label: {
-                    Image(systemName: showingArchive ? "tray.fill" : "archivebox").foregroundStyle(.white)
-                        .frame(width: 24, height: 24).contentShape(Rectangle())
+                    Image(systemName: showingArchive ? "tray.fill" : "archivebox").font(.system(size: 14)).foregroundStyle(.white)
+                        .frame(width: 28, height: 28).modifier(SidebarIconHover(active: showingArchive)).contentShape(Rectangle())
                 }.buttonStyle(.plain).help(showingArchive ? "Show recent chats" : "Show archived chats")
             }
             .frame(maxWidth: .infinity)
-            .padding(.leading, 20).padding(.trailing, 9)
-            .padding(.top, 18).padding(.bottom, 4)
+            // Same trailing edge and size as the search button above.
+            .padding(.leading, 20).padding(.trailing, 11)
+            .padding(.top, 14).padding(.bottom, 2)
             ScrollView {
                 LazyVStack(spacing: 3) {
                     ForEach(visibleThreads) { thread in
                         HStack(spacing: 0) {
                             Button {
-                                guard !assistant.busy && !assistant.recording else { return }
+                                guard !assistant.recording else { return }
                                 navigation.taskPage = .chat
                                 store.selectedID = thread.id
                                 assistant.resume(thread, present: false)
                             } label: {
                                 HStack(spacing: 10) {
-                                    Image(systemName: thread.isPinned == true ? "pin.fill" : (store.selectedID == thread.id && navigation.taskPage == .chat) ? "bubble.left.fill" : "bubble.left")
-                                        .font(.system(size: 15)).foregroundStyle(.white).frame(width: 18)
+                                    // Same-size symbols in a fixed frame so rows never shift; a thread that is
+                                    // working shows a turning dotted circle.
+                                    let working = assistant.workingThreads.contains(thread.id)
+                                    Image(systemName: thread.isPinned == true ? "pin.fill" : working ? "circle.dotted" : "circle")
+                                        .font(.system(size: 15)).foregroundStyle(.white)
+                                        .symbolEffect(.rotate, options: .repeat(.continuous), isActive: working && !reduceMotion)
+                                        .frame(width: 18, height: 18)
                                     Text(thread.title).font(.system(size: 15)).lineLimit(1)
                                     Spacer(minLength: 0)
                                 }.padding(.leading, 11)
@@ -465,16 +473,15 @@ struct SpeekMainShell: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ComposerAttachmentStrip(store: assistant.attachments)
+            ComposerAttachmentSlot(store: assistant.attachments)
             TextField("Ask Speek", text: $assistant.draft, axis: .vertical)
                 .font(.system(size: 14)).lineLimit(2...6).textFieldStyle(.plain)
                 .focused($composerFocused)
-                .onSubmit { assistant.submit() }
-                .padding(.top, 3)
+                .onSubmit { assistant.submit(explicit: true) }
             HStack(spacing: 14) {
                 Button { contextMenuPresented.toggle() } label: {
                     Image(systemName: "plus").font(.system(size: 17)).foregroundStyle(.white)
-                        .frame(width: 32, height: 32).contentShape(Rectangle())
+                        .frame(width: 32, height: 32).modifier(HoverHighlight(active: contextMenuPresented)).contentShape(Circle())
                 }.buttonStyle(.plain).help("Add context")
                     .popover(isPresented: $contextMenuPresented, arrowEdge: .top) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -517,12 +524,12 @@ struct SpeekMainShell: View {
                 Button { assistant.toggleVoice(present: false) } label: {
                     Image(systemName: assistant.recording ? "stop.circle.fill" : "mic").font(.system(size: 16)).foregroundStyle(.white)
                         .symbolEffect(.breathe, isActive: assistant.recording && !reduceMotion)
-                        .frame(width: 28, height: 30).contentShape(Rectangle())
+                        .frame(width: 32, height: 32).modifier(HoverHighlight()).contentShape(Circle())
                 }.buttonStyle(.plain).help(assistant.recording ? "Finish speaking" : "Voice input").disabled(assistant.busy)
-                Button { if assistant.busy { assistant.cancel() } else { assistant.submit() } } label: {
+                Button { if assistant.busy { assistant.cancel() } else { assistant.submit(explicit: true) } } label: {
                     Image(systemName: assistant.busy ? "stop.fill" : "arrow.up")
                         .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                        .frame(width: 32, height: 32).background(.white.opacity(0.12), in: Circle())
+                        .frame(width: 32, height: 32).modifier(HoverHighlight(base: 0.12)).contentShape(Circle())
                 }.buttonStyle(.plain).help(assistant.busy ? "Stop" : "Send")
                     .disabled(!assistant.busy && (assistant.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || assistant.recording))
             }
@@ -531,7 +538,7 @@ struct SpeekMainShell: View {
             guard !assistant.busy && !assistant.recording else { return false }
             assistant.attachments.add(urls: urls); return true
         }
-        .padding(16).background(Color(white: 0.19), in: RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10).background(Color(white: 0.19), in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.035)))
         .frame(maxWidth: 720).padding(.horizontal, 30).padding(.bottom, 24)
         .frame(maxWidth: .infinity)
@@ -609,5 +616,36 @@ private struct ChatMessageRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .onHover { hovered = $0; if !$0 { copied = false } }
+    }
+}
+
+/// The attachment strip only when there is something to show; an always-present strip adds the
+/// composer stack's spacing above the text field.
+private struct ComposerAttachmentSlot: View {
+    @ObservedObject var store: ComposerAttachmentStore
+    var body: some View {
+        if !store.attachments.isEmpty || store.error != nil { ComposerAttachmentStrip(store: store) }
+    }
+}
+
+/// The composer's circular buttons light up on hover, like the model picker.
+private struct HoverHighlight: ViewModifier {
+    var base: Double = 0
+    var active = false
+    @State private var hovered = false
+    @Environment(\.isEnabled) private var enabled
+    func body(content: Content) -> some View {
+        content.background(.white.opacity(base + ((hovered && enabled) || active ? 0.09 : 0)), in: Circle())
+            .onHover { hovered = $0 }
+    }
+}
+
+/// Sidebar header icons: a rounded highlight on hover, and while their mode is on.
+private struct SidebarIconHover: ViewModifier {
+    var active = false
+    @State private var hovered = false
+    func body(content: Content) -> some View {
+        content.background(.white.opacity(hovered || active ? 0.09 : 0), in: RoundedRectangle(cornerRadius: 7))
+            .onHover { hovered = $0 }
     }
 }

@@ -22,7 +22,7 @@ enum CustomCommandTemplate: String, CaseIterable, Identifiable {
         switch self {
         case .pasteAndPressTab:
             return """
-            printf "%s" "$WHISPERPRO_TRANSCRIPT" | pbcopy
+            printf "%s" "$SPEEK_TRANSCRIPT" | pbcopy
             osascript <<'APPLESCRIPT'
             tell application "System Events"
                 keystroke "v" using command down
@@ -36,11 +36,11 @@ enum CustomCommandTemplate: String, CaseIterable, Identifiable {
             mkdir -p "$HOME/Documents/Speek"
             journal="$HOME/Documents/Speek/journal.md"
             timestamp=$(date "+%Y-%m-%d %H:%M")
-            printf -- "- **%s** %s\\n" "$timestamp" "$WHISPERPRO_TRANSCRIPT" >> "$journal"
+            printf -- "- **%s** %s\\n" "$timestamp" "$SPEEK_TRANSCRIPT" >> "$journal"
             """
         case .searchWeb:
             return """
-            query=$(printf "%s" "$WHISPERPRO_TRANSCRIPT" | LC_ALL=C od -An -tx1 -v | tr -d ' \\n' | sed 's/../%&/g')
+            query=$(printf "%s" "$SPEEK_TRANSCRIPT" | LC_ALL=C od -An -tx1 -v | tr -d ' \\n' | sed 's/../%&/g')
             open "https://www.google.com/search?q=$query"
             """
         }

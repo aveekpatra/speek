@@ -59,7 +59,7 @@ final class NativeAppTools {
             tool("music.playlists", "List Apple Music playlists.", service: .music, fields: [:]),
             tool("spotify.status", "Read Spotify playback state and current track.", service: .spotify, fields: [:]),
             tool("spotify.control", "Control Spotify playback after approval: play, pause, skip, volume, shuffle, repeat.", service: .spotify, fields: ["command": playback, "volume": ["type": "integer", "minimum": 0, "maximum": 100]], required: ["command"], write: true),
-            tool("spotify.play", "Play a Spotify track, album, playlist, or artist by its spotify: URI or open.spotify.com link. Find links with web.search (for example site:open.spotify.com plus the song and artist).", service: .spotify, fields: ["uri": text], required: ["uri"], write: true)
+            tool("spotify.play", "Play a Spotify track, album, playlist, or artist by its spotify: URI or open.spotify.com link. Find URIs with spotify.search when the Spotify account is signed in, otherwise with web.search (site:open.spotify.com plus the song and artist).", service: .spotify, fields: ["uri": text], required: ["uri"], write: true)
         ]
     }()
 
@@ -110,11 +110,44 @@ final class NativeAppTools {
         return .init(summary: "\(tool.service.title): \(items.count) result\(items.count == 1 ? "" : "s").", items: items)
     }
 
+    /// Decoded leniently: models sometimes send numbers as strings ("20"), booleans as "true",
+    /// or text as numbers, which strict decoding rejects with an unhelpful format error.
     private struct Arguments: Decodable {
         var id: String?; var query: String?; var limit: Int?; var to: String?; var subject: String?
         var body: String?; var title: String?; var command: String?; var volume: Int?
         var mailbox: String?; var unread: Bool?; var searchBody: Bool?; var action: String?
         var folder: String?; var kind: String?; var uri: String?
+
+        private struct Key: CodingKey {
+            var stringValue: String; var intValue: Int? { nil }
+            init(stringValue: String) { self.stringValue = stringValue }
+            init?(intValue: Int) { nil }
+        }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: Key.self)
+            func string(_ name: String) -> String? {
+                let key = Key(stringValue: name)
+                if let text = try? values.decodeIfPresent(String.self, forKey: key) { return text }
+                if let number = try? values.decodeIfPresent(Double.self, forKey: key) { return number.rounded() == number ? String(Int(number)) : String(number) }
+                if let flag = try? values.decodeIfPresent(Bool.self, forKey: key) { return flag ? "true" : "false" }
+                return nil
+            }
+            func int(_ name: String) -> Int? {
+                let key = Key(stringValue: name)
+                if let number = try? values.decodeIfPresent(Double.self, forKey: key) { return Int(number) }
+                return string(name).flatMap { Double($0.trimmingCharacters(in: .whitespaces)) }.map { Int($0) }
+            }
+            func bool(_ name: String) -> Bool? {
+                let key = Key(stringValue: name)
+                if let flag = try? values.decodeIfPresent(Bool.self, forKey: key) { return flag }
+                switch string(name)?.lowercased() { case "true", "yes", "1": return true; case "false", "no", "0": return false; default: return nil }
+            }
+            id = string("id"); query = string("query"); limit = int("limit"); to = string("to"); subject = string("subject")
+            body = string("body"); title = string("title"); command = string("command"); volume = int("volume")
+            mailbox = string("mailbox"); unread = bool("unread"); searchBody = bool("searchBody"); action = string("action")
+            folder = string("folder"); kind = string("kind"); uri = string("uri")
+        }
     }
     private func argumentValues(_ name: String, _ args: Arguments) throws -> [String] {
         func required(_ value: String?, _ label: String) throws -> String {
@@ -155,7 +188,7 @@ final class NativeAppTools {
     /// Accepts spotify: URIs and open.spotify.com links; returns a spotify: URI.
     static func spotifyURI(_ value: String) throws -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let kinds = ["track", "album", "playlist", "artist", "episode", "show"]
+        let kinds = ["track", "album", "playlist", "artist", "episode", "show", "audiobook"]
         func invalid(_ message: String) -> NSError { NSError(domain: "NativeAppTools", code: 1, userInfo: [NSLocalizedDescriptionKey: message]) }
         if trimmed.hasPrefix("spotify:") {
             let parts = trimmed.split(separator: ":")

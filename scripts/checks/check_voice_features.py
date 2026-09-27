@@ -7,7 +7,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 CHECKS = [
     ("dictation", "Speek/Assistant/DictationPipeline.swift", "DictationChecks.swift"),
-    ("memory", "Speek/Assistant/AssistantMemory.swift", "MemoryChecks.swift"),
+    ("memory", "Speek/Assistant/AssistantMemory.swift Speek/Assistant/MemoryStore.swift", "MemoryChecks.swift"),
     ("prompts", "Speek/Runtime/PromptLibrary.swift", "PromptChecks.swift"),
     ("history", "Speek/Assistant/DictationHistory.swift", "DictationHistoryChecks.swift"),
     ("handsfree", "Speek/Assistant/HandsFreeShortcut.swift", "HandsFreeChecks.swift"),
@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix="speek-voice-checks-") as temporary:
     for name, source, fixture in CHECKS:
         binary = Path(temporary) / name
         subprocess.run([
-            "xcrun", "swiftc", "-o", str(binary), str(ROOT / source),
+            "xcrun", "swiftc", "-parse-as-library", "-o", str(binary), *[str(ROOT / part) for part in source.split()],
             str(ROOT / "scripts/checks" / fixture),
         ], check=True)
         subprocess.run([str(binary)], check=True)

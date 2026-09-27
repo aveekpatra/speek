@@ -20,13 +20,13 @@ enum LocalCLITemplate: String, CaseIterable, Identifiable {
     var commandTemplate: String {
         switch self {
         case .pi:
-            return "pi -ne -ns -p --no-tools --system-prompt \"$WHISPERPRO_SYSTEM_PROMPT\" \"$WHISPERPRO_USER_PROMPT\""
+            return "pi -ne -ns -p --no-tools --system-prompt \"$SPEEK_SYSTEM_PROMPT\" \"$SPEEK_USER_PROMPT\""
         case .claude:
-            return "claude -p \"$WHISPERPRO_FULL_PROMPT\""
+            return "claude -p \"$SPEEK_FULL_PROMPT\""
         case .codex:
-            return "TMPFILE=$(mktemp) && codex exec --skip-git-repo-check --output-last-message \"$TMPFILE\" \"$WHISPERPRO_FULL_PROMPT\" > /dev/null 2>&1 && cat \"$TMPFILE\" && rm \"$TMPFILE\""
+            return "TMPFILE=$(mktemp) && codex exec --skip-git-repo-check --output-last-message \"$TMPFILE\" \"$SPEEK_FULL_PROMPT\" > /dev/null 2>&1 && cat \"$TMPFILE\" && rm \"$TMPFILE\""
         case .copilot:
-            return "copilot -p \"$WHISPERPRO_FULL_PROMPT\" -s --no-ask-user --available-tools=__none__ 2>/dev/null"
+            return "copilot -p \"$SPEEK_FULL_PROMPT\" -s --no-ask-user --available-tools=__none__ 2>/dev/null"
         }
     }
 }
@@ -123,6 +123,10 @@ final class LocalCLIService {
 
                 var environment = ProcessInfo.processInfo.environment
                 environment["PATH"] = ShellCommandEnvironment.preferredPATH(fallback: environment["PATH"])
+                environment["SPEEK_SYSTEM_PROMPT"] = systemPrompt
+                environment["SPEEK_USER_PROMPT"] = userPrompt
+                environment["SPEEK_FULL_PROMPT"] = fullPrompt
+                // Older names, kept so commands written before the rename still work.
                 environment["WHISPERPRO_SYSTEM_PROMPT"] = systemPrompt
                 environment["WHISPERPRO_USER_PROMPT"] = userPrompt
                 environment["WHISPERPRO_FULL_PROMPT"] = fullPrompt

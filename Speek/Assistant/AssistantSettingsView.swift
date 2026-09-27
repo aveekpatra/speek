@@ -17,7 +17,8 @@ struct AssistantSettingsView: View {
     @ObservedObject private var memory = AssistantMemory.shared
     @ObservedObject private var recovery = RecordingRecovery.shared
     @ObservedObject private var policies = ToolPolicyStore.shared
-    @AppStorage("speek.assistant.useFocusedContext") private var focusedContext = true
+    @AppStorage(CircleGesture.enabledKey) private var circleGesture = true
+    @AppStorage(AssistantController.screenByDefaultKey) private var screenByDefault = true
     @AppStorage("speek.dictation.doubleTapHandsFree") private var handsFree = false
     @AppStorage("speek.dictation.mouseButton") private var mouseButton = 0
     @AppStorage("speek.voice.recordingRecovery") private var recoveryEnabled = false
@@ -90,8 +91,12 @@ struct AssistantSettingsView: View {
                 }
             }
             SettingsSection(title: "Context") {
-                SettingsRow(title: "Screen context", icon: "viewfinder", info: "Include the screen and selected text in agent requests.") {
-                    Toggle("Screen context", isOn: $focusedContext).labelsHidden().toggleStyle(.switch)
+                SettingsRow(title: "Send the screen", icon: "macwindow", info: "Notch requests include a screenshot of your display, taken as you start asking. Speek never appears in it. Turn off to send the screen only when you circle something or ask Speek to look.") {
+                    Toggle("Send the screen", isOn: $screenByDefault).labelsHidden().toggleStyle(.switch)
+                }
+                SettingsRowDivider(leading: 60)
+                SettingsRow(title: "Circle to show", icon: "lasso", info: "While holding the agent shortcut, circle something with the pointer to point at it: the screenshot is sent with your circle drawn on it.") {
+                    Toggle("Circle to show", isOn: $circleGesture).labelsHidden().toggleStyle(.switch)
                 }
             }
             SettingsSection(title: "Startup") {
@@ -105,7 +110,7 @@ struct AssistantSettingsView: View {
                 }
             }
             SettingsSection(title: "About") {
-                SettingsRow(title: "Version", icon: "tag.fill", info: "GPL-3.0. Based on Whisper Pro and VoiceInk.") {
+                SettingsRow(title: "Version", icon: "tag.fill", info: "Open source under GPL-3.0.") {
                     Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.8")
                         .font(.system(size: 13)).foregroundStyle(.secondary).textSelection(.enabled)
                 }

@@ -97,16 +97,31 @@ enum MCPOAuth {
         defer { receiver.stop() }
         client.resource = resource
         client.scope = scopes ?? client.scope
+        return try await Self.authorize(client, receiver: receiver, issuer: metadata["issuer"] as? String)
+    }
 
+    /// Sign-in for a service with known endpoints and a public client (PKCE, loopback redirect),
+    /// such as Spotify. No discovery, registration, or resource indicator.
+    /// `port` 0 picks a free port; services that require a registered redirect URI pass a fixed one.
+    static func signIn(authorizationEndpoint: String, tokenEndpoint: String, clientID: String, scopes: String, port fixed: UInt16 = 0) async throws -> MCPOAuthSession {
+        let receiver = LoopbackReceiver()
+        let port = try receiver.start(port: fixed)
+        defer { receiver.stop() }
+        let client = MCPOAuthSession(clientID: clientID, clientSecret: nil, redirectURI: "http://127.0.0.1:\(port)/callback",
+                                     authorizationEndpoint: authorizationEndpoint, tokenEndpoint: tokenEndpoint, resource: "", scope: scopes)
+        return try await authorize(client, receiver: receiver, issuer: nil)
+    }
+
+    private static func authorize(_ client: MCPOAuthSession, receiver: LoopbackReceiver, issuer: String?) async throws -> MCPOAuthSession {
         let verifier = randomString(48)
         let state = randomString(24)
         let codeChallenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded
-        guard var components = URLComponents(string: authorize) else { throw MCPOAuthError.noAuthorizationServer }
+        guard var components = URLComponents(string: client.authorizationEndpoint) else { throw MCPOAuthError.noAuthorizationServer }
         var items = components.queryItems ?? []
         items += [URLQueryItem(name: "response_type", value: "code"), URLQueryItem(name: "client_id", value: client.clientID),
                   URLQueryItem(name: "redirect_uri", value: client.redirectURI), URLQueryItem(name: "code_challenge", value: codeChallenge),
                   URLQueryItem(name: "code_challenge_method", value: "S256"), URLQueryItem(name: "state", value: state)]
-        if sendsResource(client) { items.append(URLQueryItem(name: "resource", value: resource)) }
+        if sendsResource(client) { items.append(URLQueryItem(name: "resource", value: client.resource)) }
         if isGoogle(client) {
             // Google issues a refresh token only for offline access with explicit consent.
             items += [URLQueryItem(name: "access_type", value: "offline"), URLQueryItem(name: "prompt", value: "consent")]
@@ -119,6 +134,8 @@ enum MCPOAuth {
         let callback = try await receiver.waitForCallback(timeout: 300)
         if let error = callback["error"] { throw MCPOAuthError.denied(callback["error_description"] ?? error) }
         guard callback["state"] == state else { throw MCPOAuthError.stateMismatch }
+        // RFC 9207: a returned issuer must be the server this request went to.
+        if let returned = callback["iss"], let issuer, returned != issuer { throw MCPOAuthError.stateMismatch }
         guard let code = callback["code"], !code.isEmpty else { throw MCPOAuthError.denied("no authorization code was returned") }
         return try await exchange(client, form: ["grant_type": "authorization_code", "code": code, "redirect_uri": client.redirectURI, "code_verifier": verifier])
     }
@@ -162,7 +179,7 @@ enum MCPOAuth {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "client_name": "Speek", "client_uri": "https://github.com/aveekpatra/speek",
             "redirect_uris": [redirect], "grant_types": ["authorization_code", "refresh_token"],
-            "response_types": ["code"], "token_endpoint_auth_method": "none"
+            "response_types": ["code"], "token_endpoint_auth_method": "none", "application_type": "native"
         ])
         let (data, response) = try await session.data(for: request)
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
@@ -230,7 +247,7 @@ enum MCPOAuth {
     }
 
     /// Google's authorization server scopes tokens to the client, not a resource indicator.
-    private static func sendsResource(_ client: MCPOAuthSession) -> Bool { !isGoogle(client) }
+    private static func sendsResource(_ client: MCPOAuthSession) -> Bool { !isGoogle(client) && !client.resource.isEmpty }
 
     private static func origin(of url: URL) -> URL? {
         var components = URLComponents()

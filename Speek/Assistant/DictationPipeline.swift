@@ -136,8 +136,13 @@ enum DictationPipeline {
         return output
     }
 
-    /// Uses the user's configured voice API connection and its existing credential store.
     private static func complete(_ system: String, _ input: String) async throws -> String {
+        try await completeWithModel(system, input).text
+    }
+
+    /// Uses the user's configured voice API connection and its existing credential store.
+    /// Also answers plugin model requests (MCP sampling).
+    static func completeWithModel(_ system: String, _ input: String, maxTokens: Int? = nil) async throws -> (text: String, model: String) {
         let provider = ActionCredentials.voiceProvider
         guard let key = ActionCredentials.key(for: provider), !key.isEmpty else { throw ActionClientError.missingKey }
         let router = provider == .openRouter
@@ -149,9 +154,10 @@ enum DictationPipeline {
         request.timeoutInterval = 45
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let payload: [String: Any] = router
+        var payload: [String: Any] = router
             ? ["model": model, "messages": [["role": "system", "content": system], ["role": "user", "content": input]]]
             : ["model": model, "instructions": system, "input": input, "store": false]
+        if let maxTokens { payload[router ? "max_tokens" : "max_output_tokens"] = maxTokens }
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw ActionClientError.invalidResponse }
@@ -159,10 +165,10 @@ enum DictationPipeline {
             throw ActionClientError.requestFailed("Text processing failed (HTTP \(response.statusCode)). Check your voice connection and model access.")
         }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ActionClientError.invalidResponse }
-        if router, let choices = object["choices"] as? [[String: Any]], let message = choices.first?["message"] as? [String: Any], let text = message["content"] as? String { return text }
+        if router, let choices = object["choices"] as? [[String: Any]], let message = choices.first?["message"] as? [String: Any], let text = message["content"] as? String { return (text, model) }
         if !router, let output = object["output"] as? [[String: Any]] {
             let text = output.flatMap { $0["content"] as? [[String: Any]] ?? [] }.compactMap { $0["text"] as? String }.joined()
-            if !text.isEmpty { return text }
+            if !text.isEmpty { return (text, model) }
         }
         throw ActionClientError.invalidResponse
     }

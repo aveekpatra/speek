@@ -36,7 +36,7 @@ import Foundation
         catch MCPError.unsupportedVersion(let versions) { precondition(versions == ["2099-01-01"]) }
         await unsupported.close()
         try await checkStorage()
-        print("PASS: 2026 metadata/auth/custom headers, HTTP+stdio generation fallback, unsupported versions, input-required rejection, JSON/SSE, cancellation, persistence, skills, disabled tools")
+        print("PASS: 2026 metadata/auth/custom headers, HTTP+stdio generation fallback, unsupported versions, multi round-trip answers and retry, sampling text, JSON/SSE, cancellation, persistence, skills, disabled tools")
     }
     static func check(_ transport: any MCPTransport) async throws {
         let initialized = try await transport.request(method: "initialize", params: .object([:]))
@@ -60,10 +60,21 @@ import Foundation
         let value = " leading and trailing \n"
         let called = try await transport.request(method: "tools/call", params: .object(["name": .string("echo"), "arguments": .object(["value": .string(value)])]))
         precondition(called["content"]?.array?.first?["text"]?.string == value)
+        // Multi round-trip: the server asks a question, Speek answers and retries with its state.
+        let needsInput: MCPValue = .object(["name": .string("needs-input"), "arguments": .object([:])])
+        let answered = try await MCPProtocol.call(transport, method: "tools/call", params: needsInput) { method, params in
+            precondition(method == "elicitation/create" && params["message"]?.string == "Name?")
+            return .object(["action": .string("accept"), "content": .object(["name": .string("Ada")])])
+        }
+        precondition(answered["content"]?.array?.first?["text"]?.string == "hi Ada")
         do {
-            _ = try await transport.request(method: "tools/call", params: .object(["name": .string("needs-input"), "arguments": .object([:])]))
-            fatalError("Unsupported interactive result was accepted")
+            _ = try await MCPProtocol.call(transport, method: "tools/call", params: needsInput, handler: nil)
+            fatalError("A question without a handler was accepted")
         } catch MCPError.capabilityRequired {}
+        let sampling = MCPElicitationCenter.samplingText(.object(["systemPrompt": .string("Be brief."), "messages": .array([
+            .object(["role": .string("user"), "content": .object(["type": .string("text"), "text": .string("Capital of France?")])])])]))
+        precondition(sampling?.system == "Be brief." && sampling?.input == "Capital of France?")
+        precondition(MCPElicitationCenter.samplingText(.object(["messages": .array([]), "tools": .array([])])) == nil)
         precondition(MCPProtocol.headerValue("=?base64?literal?=").hasPrefix("=?base64?PT9"))
     }
     @MainActor static func checkStorage() async throws {

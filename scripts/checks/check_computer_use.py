@@ -56,15 +56,15 @@ MAIN = '''import Foundation
    })
    precondition(result == "Verified fixture result")
   }
-  precondition(prompts == 4, "Routine permissions repeated, sensitive permissions skipped, or approval leaked across tasks")
+  precondition(prompts == 0, "A computer task asked for permission mid-task")
   ToolPolicyStore.shared.computerUse = .allow
   let allowed = try await CodexComputerUse.shared.run(request: "Fixture task", context: "", image: nil, history: [], connection: .localCodex, model: "test-model", reasoning: nil, progress: { _ in }, presentApproval: {
    prompts += 1
    let request = CodexComputerUse.shared.approval!
    CodexComputerUse.shared.answerApproval(id: request.id, answer: "Allowed in isolated fixture")
   })
-  precondition(allowed == "Verified fixture result" && prompts == 5, "Always allow must skip routine consent and still ask for sensitive actions")
-  print("PASS: split JSONL, events, errors, cancellation, process exit, task consent reuse, sensitive consent, consent reset, always-allow policy, browser guard")
+  precondition(allowed == "Verified fixture result" && prompts == 0, "Always allow must not ask")
+  print("PASS: split JSONL, events, errors, cancellation, process exit, no mid-task permission prompts (low and high risk), always-allow policy, browser guard")
  }
 }
 '''

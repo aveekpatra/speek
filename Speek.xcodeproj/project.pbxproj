@@ -58,10 +58,6 @@
 		E1AD0001AD0001AD0001AD01 /* MediaRemoteAdapter.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MediaRemoteAdapter.framework; path = Vendor/MediaRemoteAdapter/MediaRemoteAdapter.framework; sourceTree = "<group>"; };
 		E1AD0001AD0001AD0001AD02 /* mediaremote-adapter.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; name = "mediaremote-adapter.pl"; path = "Vendor/MediaRemoteAdapter/mediaremote-adapter.pl"; sourceTree = "<group>"; };
 		09570739CBF518BD01F09BF6 /* SonioxRealtimeClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "Speek/Transcription/Streaming/SonioxRealtimeClient.swift"; sourceTree = SOURCE_ROOT; };
-		0B7CA4A13C823DFA76D7D4CF /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		2FDF21B226214E5ED7F399D0 /* Speek Keyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Speek Keyboard.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		89570C0E9115FC8D780EEF90 /* Speek iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Speek iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		AB9B758480E0D9094C2831CC /* SpeekIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeekIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E11473B02CBE0F0A00318EE4 /* Speek.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Speek.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E11473C32CBE0F0B00318EE4 /* SpeekTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeekTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E11473CD2CBE0F0B00318EE4 /* SpeekUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeekUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -179,9 +175,6 @@
 				E11473B02CBE0F0A00318EE4 /* Speek.app */,
 				E11473C32CBE0F0B00318EE4 /* SpeekTests.xctest */,
 				E11473CD2CBE0F0B00318EE4 /* SpeekUITests.xctest */,
-				89570C0E9115FC8D780EEF90 /* Speek iOS.app */,
-				2FDF21B226214E5ED7F399D0 /* Speek Keyboard.appex */,
-				AB9B758480E0D9094C2831CC /* SpeekIOSTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -193,17 +186,8 @@
 				E1A0BD052EB1E7B800266859 /* whisper.xcframework */,
 				E1CE28772E4336150082B758 /* whisper.xcframework */,
 				E1B2DCAA2E3DE70A008DFD68 /* whisper.xcframework */,
-				E5E1B84CE13CBCB2AB7F4125 /* iOS */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		E5E1B84CE13CBCB2AB7F4125 /* iOS */ = {
-			isa = PBXGroup;
-			children = (
-				0B7CA4A13C823DFA76D7D4CF /* Foundation.framework */,
-			);
-			name = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

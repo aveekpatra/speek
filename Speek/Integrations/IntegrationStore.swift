@@ -272,7 +272,10 @@ final class IntegrationStore: ObservableObject {
             let newClient: any MCPTransport
             if plugin.transport == .http {
                 let token = try await accessToken(for: plugin, secrets: &secrets)
-                newClient = MCPHTTPTransport(endpoint: URL(string: plugin.endpoint)!, token: token)
+                // Google's Gmail MCP endpoint needs Developer Preview enrollment; the REST API does not.
+                // The endpoint is still used for sign-in discovery.
+                newClient = plugin.directoryID == "gmail" ? GmailAPITransport(token: token)
+                    : MCPHTTPTransport(endpoint: URL(string: plugin.endpoint)!, token: token)
             } else {
                 newClient = try MCPStdioTransport(executable: plugin.executable, arguments: plugin.arguments,
                                                  workingDirectory: plugin.workingDirectory, environment: secrets.environment)
@@ -385,7 +388,8 @@ final class IntegrationStore: ObservableObject {
             return IntegrationToolResult(text: try await readResource(pluginID: tool.pluginID, uri: uri), isError: false, content: [], structuredContent: nil)
         }
         do {
-            let result = try await client.request(method: "tools/call", params: .object(["name": .string(tool.name), "arguments": .object(arguments)]))
+            let result = try await MCPProtocol.call(client, method: "tools/call", params: .object(["name": .string(tool.name), "arguments": .object(arguments)]),
+                                                    handler: questionHandler(tool.pluginID))
             let content = result["content"]?.array ?? []
             let text = content.compactMap { item -> String? in
                 if item["type"]?.string == "text" { return item["text"]?.string }
@@ -409,6 +413,11 @@ final class IntegrationStore: ObservableObject {
         }
     }
 
+    /// Shows a plugin's mid-request questions (forms, links, model requests) in the notch.
+    private func questionHandler(_ pluginID: UUID) -> MCPServerRequestHandler {
+        MCPElicitationCenter.handler(plugin: plugins.first { $0.id == pluginID }?.name ?? "A plugin")
+    }
+
     func listResources(pluginID: UUID, cursor: String? = nil) async throws -> [MCPResourceInfo] {
         guard let client = clients[pluginID] else { throw MCPError.disconnected }
         let result = try await client.request(method: "resources/list", params: .object(cursor.map { ["cursor": .string($0)] } ?? [:]))
@@ -421,7 +430,7 @@ final class IntegrationStore: ObservableObject {
     /// Text of a resource, bounded; binary contents are described, not returned.
     func readResource(pluginID: UUID, uri: String) async throws -> String {
         guard let client = clients[pluginID] else { throw MCPError.disconnected }
-        let result = try await client.request(method: "resources/read", params: .object(["uri": .string(uri)]))
+        let result = try await MCPProtocol.call(client, method: "resources/read", params: .object(["uri": .string(uri)]), handler: questionHandler(pluginID))
         let parts = (result["contents"]?.array ?? []).map { item -> String in
             if let text = item["text"]?.string { return String(text.prefix(60_000)) }
             return "[Binary content: " + (item["mimeType"]?.string ?? "unknown type") + "]"
@@ -432,9 +441,9 @@ final class IntegrationStore: ObservableObject {
     /// The prompt's messages as one text, ready to use as a request.
     func prompt(_ info: MCPPromptInfo, arguments: [String: String]) async throws -> String {
         guard let client = clients[info.pluginID] else { throw MCPError.disconnected }
-        let result = try await client.request(method: "prompts/get", params: .object([
+        let result = try await MCPProtocol.call(client, method: "prompts/get", params: .object([
             "name": .string(info.name), "arguments": .object(arguments.mapValues { .string($0) })
-        ]))
+        ]), handler: questionHandler(info.pluginID))
         let texts = (result["messages"]?.array ?? []).compactMap { message -> String? in
             if let text = message["content"]?["text"]?.string { return text }
             if let resource = message["content"]?["resource"]?["text"]?.string { return resource }
@@ -514,4 +523,15 @@ final class IntegrationStore: ObservableObject {
         if error is CancellationError { return "Connection cancelled." }
         return "The server could not complete the request. Check the connection and try again."
     }
+}
+
+/// OAuth sessions for built-in services (Spotify), stored the same way as plugin secrets.
+enum ServiceTokenStore {
+    static func load(_ id: UUID) -> MCPOAuthSession? { (try? IntegrationKeychain.load(id))?.oauth }
+    static func save(_ session: MCPOAuthSession, id: UUID) throws {
+        var secrets = IntegrationSecrets()
+        secrets.oauth = session
+        try IntegrationKeychain.save(secrets, id: id)
+    }
+    static func remove(_ id: UUID) { IntegrationKeychain.remove(id) }
 }

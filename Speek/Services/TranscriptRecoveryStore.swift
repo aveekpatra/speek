@@ -13,7 +13,7 @@ import os
 /// session died mid-dictation and its text can be recovered.
 final class TranscriptRecoveryStore: @unchecked Sendable {
     private let fileURL: URL
-    private let queue = DispatchQueue(label: "com.whisperpro.transcript-recovery", qos: .utility)
+    private let queue = DispatchQueue(label: "com.aveekpatra.speek.transcript-recovery", qos: .utility)
     private let logger = Logger(subsystem: "com.aveekpatra.speek", category: "TranscriptRecovery")
 
     // Debounce disk writes: at most one write per interval. On a crash we lose at most the

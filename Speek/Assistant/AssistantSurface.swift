@@ -40,13 +40,16 @@ struct AssistantSurface: View {
         .onChange(of: controller.proposal != nil) { _, _ in controller.resize() }
         .onChange(of: controller.draft) { _, _ in controller.resize() }
         .onReceive(controller.attachments.$attachments) { _ in controller.resize() }
+        .onReceive(CorrectionLearner.shared.$notice) { _ in DispatchQueue.main.async { controller.resize() } }
         .onExitCommand { controller.collapse() }
     }
 
     private var outline: NotchOutline {
-        NotchOutline(
-            topRadius: 4,
-            bottomRadius: controller.expanded ? 24 : controller.recording || controller.busy ? 18 : 12
+        let resting = !controller.expanded && !controller.recording && !controller.busy
+        return NotchOutline(
+            topRadius: NotchIdleControl.shoulderRadius,
+            bottomRadius: controller.expanded ? 24 : !resting ? 18 : NotchIdleControl.cornerRadius(for: controller.notchInset),
+            continuous: resting
         )
     }
 
@@ -154,8 +157,42 @@ struct AssistantSurface: View {
         }.padding(12)
     }
 
+    /// Which conversation the notch is in. It ends by itself 10 minutes after the last turn.
+    private var sessionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: controller.busy ? "circle.dotted" : "circle")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .symbolEffect(.rotate, options: .repeat(.continuous), isActive: controller.busy && !reduceMotion)
+                .frame(width: 14, height: 14)
+            Text(controller.hasConversation ? (controller.sessionTitle ?? "Conversation") : "New conversation")
+                .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
+                .help(controller.hasConversation ? "Requests within 10 minutes continue this conversation." : "Your next request starts a conversation.")
+            Spacer(minLength: 8)
+            if controller.hasConversation {
+                Button { controller.newConversation() } label: {
+                    Image(systemName: "square.and.pencil").font(.system(size: 12)).frame(width: 24, height: 20).contentShape(Rectangle())
+                }.buttonStyle(AssistantControlStyle()).help("New conversation").disabled(controller.recording)
+            }
+        }.padding(.horizontal, 4)
+    }
+
+    /// The request the answer below belongs to, with the circled screenshot if there was one.
+    @ViewBuilder private var requestRow: some View {
+        if !controller.lastRequest.isEmpty, controller.busy || !controller.response.isEmpty {
+            HStack(alignment: .top, spacing: 8) {
+                if let data = controller.lastRequestImage, let image = NSImage(data: data) {
+                    Image(nsImage: image).resizable().scaledToFill()
+                        .frame(width: 28, height: 20).clipShape(RoundedRectangle(cornerRadius: 4))
+                }
+                Text(controller.lastRequest).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
+                Spacer(minLength: 0)
+            }.padding(.horizontal, 4)
+        }
+    }
+
     private var expanded: some View {
         VStack(alignment: .leading, spacing: 12) {
+            sessionHeader
             BackgroundTaskNoticeView(controller: controller)
             if !controller.taskStatus.isEmpty {
                 HStack(spacing: 8) {
@@ -177,11 +214,13 @@ struct AssistantSurface: View {
                         Image(nsImage: image).resizable().scaledToFill()
                             .frame(width: 28, height: 28).clipShape(RoundedRectangle(cornerRadius: 6))
                     } else { Image(systemName: "macwindow").foregroundStyle(.white).frame(width: 28) }
-                    Text(context.isRegion ? context.label : "Context: " + context.label).font(.system(size: 11)).lineLimit(1)
+                    Text(context.label + ", sent with your next request").font(.system(size: 11)).lineLimit(1)
                     Spacer(minLength: 0)
                     iconButton("xmark", help: "Remove context") { controller.context = nil }
                 }
             }
+
+            requestRow
 
             if !controller.response.isEmpty {
                 ScrollView {
@@ -218,8 +257,6 @@ struct AssistantSurface: View {
                     .padding(.horizontal, 6).padding(.top, 6)
                 HStack(spacing: 4) {
                     iconButton("lasso", help: "Circle screen context") { controller.circleContext() }
-                        .disabled(controller.busy || controller.recording)
-                    iconButton("pencil.tip.crop.circle", help: "Mark up the screen") { controller.markUpScreen() }
                         .disabled(controller.busy || controller.recording)
                     Spacer(minLength: 0)
                     AssistantModelPicker(assistant: controller) {
@@ -394,30 +431,65 @@ private struct VoicePill: View {
 }
 
 private struct NotchIdleControl: View {
+    /// The notch's top shoulders curve outward with this radius.
+    static let shoulderRadius: CGFloat = 4
+    /// The resting notch's lower corners: a continuous curve like the hardware notch's, spanning
+    /// about 49% of the notch's height (radius 0.32 of the height).
+    static func cornerRadius(for height: CGFloat) -> CGFloat { max(20, height) * 0.32 }
+    /// Visible gap between the app icon's rounded square and the notch's edges.
+    static let iconGap: CGFloat = 6
+    /// The surface's own horizontal padding, already between the edge and the icon.
+    static let surfaceInset: CGFloat = 4
     @ObservedObject var controller: AssistantController
     @ObservedObject private var focus = VoiceFocus.shared
+    @ObservedObject private var learner = CorrectionLearner.shared
 
     var body: some View {
+        VStack(spacing: 0) {
+            controls
+            if let entry = learner.notice {
+                // A correction the user just made, saved to Vocabulary.
+                HStack(spacing: 6) {
+                    Image(systemName: "character.book.closed").font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+                    Text("Learned " + entry.term).font(.system(size: 12)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                        .help(entry.heardAs.isEmpty ? "Added to Vocabulary as a hint" : "\"" + entry.heardAs + "\" will be written as \"" + entry.term + "\"")
+                    Spacer(minLength: 4)
+                    Button("Undo") { learner.undoLast() }.font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
+                }
+                .padding(.horizontal, 12).frame(height: 30)
+            }
+        }
+    }
+
+    private var controls: some View {
         HStack(spacing: 0) {
             Button { controller.show(typing: true) } label: {
-                Group {
-                    if let icon = focus.appIcon {
-                        Image(nsImage: icon).resizable().scaledToFit()
-                    } else { Image(nsImage: VoiceFocus.defaultAppIcon).resizable().scaledToFit() }
-                }
-                .frame(width: 17, height: 17)
-                .offset(y: -2)
-                .frame(width: 32, height: controller.notchInset > 0 ? controller.notchInset : 28)
-                .contentShape(Rectangle())
+                // The app's own icon, unaltered, centered in a square as tall as the notch, like a
+                // menu bar item: the same gap above, below, and to its left. The icon file has a
+                // transparent margin around its rounded square, so the frame is larger than what shows.
+                let height = controller.notchInset > 0 ? controller.notchInset : 28
+                let icon = focus.appIcon ?? VoiceFocus.defaultAppIcon
+                let visible = max(14, height - Self.iconGap * 2)
+                // Measured per icon: the part of the image that is not transparent.
+                let box = IconBounds.visible(in: icon)
+                let frame = visible / max(box.width, box.height)
+                Image(nsImage: icon).resizable().interpolation(.high).scaledToFit()
+                    .frame(width: frame, height: frame)
+                    // Move the visible part, not the image file, to the center.
+                    .offset(x: (0.5 - box.midX) * frame, y: (0.5 - box.midY) * frame)
+                    .frame(width: AssistantController.idleWing(height) - Self.surfaceInset, height: height)
+                    // Center in the black body, which starts after the top shoulder's curve.
+                    .offset(x: (Self.shoulderRadius - Self.surfaceInset) / 2)
+                    .contentShape(Rectangle())
             }
             .help("Open Speek for " + focus.appName)
             .accessibilityLabel("Open Speek")
             Spacer(minLength: 0)
             Button { controller.toggleVoice() } label: {
+                // Vertically centered, like the app icon on the other side.
                 Image(systemName: focus.mode == .dictation ? "waveform" : "sparkle")
                     .font(.system(size: 13)).foregroundStyle(.white.opacity(0.7))
-                    .offset(y: -2)
-                    .frame(width: 32, height: controller.notchInset > 0 ? controller.notchInset : 28)
+                    .frame(width: AssistantController.idleWing(controller.notchInset > 0 ? controller.notchInset : 28) - Self.surfaceInset, height: controller.notchInset > 0 ? controller.notchInset : 28)
                     .contentShape(Rectangle())
             }
             .help(focus.label + ". Hold your shortcut to speak.")
@@ -436,30 +508,57 @@ private struct NotchIdleControl: View {
 private struct NotchOutline: Shape {
     var topRadius: CGFloat
     var bottomRadius: CGFloat
+    /// Apple's continuous (squircle) curve for the lower corners, as on the hardware notch.
+    var continuous = false
+
+    /// One continuous corner, from 1.5287 radii along the first edge to 1.5287 along the second
+    /// (the curve UIKit and SwiftUI use for continuous rounded rectangles). Pairs are line points,
+    /// sixes are curves (control 1, control 2, end).
+    private static let continuousCorner: [[CGFloat]] = [
+        [1.08849323, 0, 0.86840689, 0.02229591, 0.66993427, 0.06549600],
+        [0.63149399, 0.07491100],
+        [0.37282392, 0.16905899, 0.16905899, 0.37282392, 0.07491100, 0.63149399],
+        [0.06549600, 0.66993427],
+        [0.02229591, 0.86840689, 0, 1.08849323, 0, 1.52866483]
+    ]
 
     func path(in rect: CGRect) -> Path {
-        // Keep circular curves; idle uses the preferred softer 12-point contour.
+        // Concave top shoulders join the screen edge; the lower corners are convex.
         let shoulder = min(topRadius, rect.height / 2)
-        let radius = min(max(8, bottomRadius), (rect.height - shoulder), (rect.width - shoulder * 2) / 2)
+        let reach: CGFloat = continuous ? 1.52866483 : 1
+        let radius = min(bottomRadius, (rect.height - shoulder) / reach, (rect.width - shoulder * 2) / 2 / reach)
         let left = rect.minX + shoulder
         let right = rect.maxX - shoulder
         let top = rect.minY
         let bottom = rect.maxY
         let k: CGFloat = 0.55228475
+        func corner(_ path: inout Path, _ point: (CGFloat, CGFloat) -> CGPoint) {
+            for part in Self.continuousCorner {
+                if part.count == 2 { path.addLine(to: point(part[0], part[1])) }
+                else { path.addCurve(to: point(part[4], part[5]), control1: point(part[0], part[1]), control2: point(part[2], part[3])) }
+            }
+        }
         return Path { path in
             path.move(to: CGPoint(x: rect.minX, y: top))
             path.addLine(to: CGPoint(x: rect.maxX, y: top))
             path.addCurve(to: CGPoint(x: right, y: top + shoulder),
                           control1: CGPoint(x: rect.maxX - shoulder * k, y: top),
                           control2: CGPoint(x: right, y: top + shoulder * (1 - k)))
-            path.addLine(to: CGPoint(x: right, y: bottom - radius))
-            path.addCurve(to: CGPoint(x: right - radius, y: bottom),
-                          control1: CGPoint(x: right, y: bottom - radius * (1 - k)),
-                          control2: CGPoint(x: right - radius * (1 - k), y: bottom))
-            path.addLine(to: CGPoint(x: left + radius, y: bottom))
-            path.addCurve(to: CGPoint(x: left, y: bottom - radius),
-                          control1: CGPoint(x: left + radius * (1 - k), y: bottom),
-                          control2: CGPoint(x: left, y: bottom - radius * (1 - k)))
+            if continuous {
+                path.addLine(to: CGPoint(x: right, y: bottom - reach * radius))
+                corner(&path) { along, across in CGPoint(x: right - across * radius, y: bottom - along * radius) }
+                path.addLine(to: CGPoint(x: left + reach * radius, y: bottom))
+                corner(&path) { along, across in CGPoint(x: left + along * radius, y: bottom - across * radius) }
+            } else {
+                path.addLine(to: CGPoint(x: right, y: bottom - radius))
+                path.addCurve(to: CGPoint(x: right - radius, y: bottom),
+                              control1: CGPoint(x: right, y: bottom - radius * (1 - k)),
+                              control2: CGPoint(x: right - radius * (1 - k), y: bottom))
+                path.addLine(to: CGPoint(x: left + radius, y: bottom))
+                path.addCurve(to: CGPoint(x: left, y: bottom - radius),
+                              control1: CGPoint(x: left + radius * (1 - k), y: bottom),
+                              control2: CGPoint(x: left, y: bottom - radius * (1 - k)))
+            }
             path.addLine(to: CGPoint(x: left, y: top + shoulder))
             path.addCurve(to: CGPoint(x: rect.minX, y: top),
                           control1: CGPoint(x: left, y: top + shoulder * (1 - k)),
@@ -492,5 +591,38 @@ private struct NotchAttachmentStrip: View {
                 }.padding(.horizontal, 6).padding(.top, 6)
             }.frame(height: 30)
         }
+    }
+}
+
+/// Where an image's solid pixels are, as a fraction of its size (top-left origin). App icons
+/// carry different transparent margins and a soft shadow below, so centering the file (or
+/// every faint pixel) does not center the icon's rounded square.
+@MainActor
+enum IconBounds {
+    private static var cache: [ObjectIdentifier: CGRect] = [:]
+
+    static func visible(in image: NSImage) -> CGRect {
+        let key = ObjectIdentifier(image)
+        if let known = cache[key] { return known }
+        let side = 256
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        var result = CGRect(x: 0, y: 0, width: 1, height: 1)
+        if let context = CGContext(data: &pixels, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+                                   space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+           let cgImage = { var rect = CGRect(x: 0, y: 0, width: side, height: side); return image.cgImage(forProposedRect: &rect, context: nil, hints: nil) }() {
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+            var minX = side, minY = side, maxX = -1, maxY = -1
+            for row in 0..<side { for column in 0..<side where pixels[(row * side + column) * 4 + 3] > 200 {
+                minX = min(minX, column); maxX = max(maxX, column); minY = min(minY, row); maxY = max(maxY, row)
+            } }
+            // Bitmap rows run top to bottom in memory.
+            if maxX >= minX, maxY >= minY {
+                result = CGRect(x: CGFloat(minX) / CGFloat(side), y: CGFloat(minY) / CGFloat(side),
+                                width: CGFloat(maxX - minX + 1) / CGFloat(side), height: CGFloat(maxY - minY + 1) / CGFloat(side))
+            }
+        }
+        if cache.count > 64 { cache.removeAll() }
+        cache[key] = result
+        return result
     }
 }

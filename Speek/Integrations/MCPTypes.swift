@@ -111,7 +111,7 @@ struct LocalSkill: Codable, Identifiable, Equatable {
 
 enum MCPError: LocalizedError {
     case invalidConfiguration(String), disconnected, timeout, invalidResponse, server(Int), http(Int), sessionExpired, cancelled, storage
-    case unsupportedVersion([String]), capabilityRequired, headerMismatch
+    case unsupportedVersion([String]), capabilityRequired, headerMismatch, declined
     var errorDescription: String? {
         switch self {
         case .invalidConfiguration(let message): return message
@@ -126,6 +126,7 @@ enum MCPError: LocalizedError {
         case .unsupportedVersion: return "This server uses an incompatible MCP version. Speek supports 2026-07-28 and initialization-based versions through 2025-11-25."
         case .capabilityRequired: return "This tool requires a client capability Speek has not enabled, such as interactive server input. No follow-up was executed."
         case .headerMismatch: return "The server rejected the tool's request headers. Test the connection to refresh its tool definitions."
+        case .declined: return "You declined the plugin's request, so the action stopped."
         }
     }
 }
@@ -155,6 +156,10 @@ func mcpServerResponse(id: MCPValue, method: String, params: MCPValue, handler: 
         return .object(["jsonrpc": .string("2.0"), "id": id, "error": .object(["code": .number(-32601), "message": .string("Client capability not supported")])])
     }
     do { return .object(["jsonrpc": .string("2.0"), "id": id, "result": try await handler(method, params)]) }
+    catch MCPError.declined {
+        // The sampling convention for a request the user rejected.
+        return .object(["jsonrpc": .string("2.0"), "id": id, "error": .object(["code": .number(-1), "message": .string("User rejected the request")])])
+    }
     catch { return .object(["jsonrpc": .string("2.0"), "id": id, "error": .object(["code": .number(-32601), "message": .string(error.localizedDescription)])]) }
 }
 
@@ -171,9 +176,8 @@ func mcpResult(from data: Data, matching id: MCPValue) throws -> MCPValue? {
         }
     }
     guard let result = message["result"] else { throw MCPError.invalidResponse }
-    if let type = result["resultType"]?.string, type != "complete" {
-        if type == "input_required" { throw MCPError.capabilityRequired }
-        throw MCPError.invalidResponse
-    }
+    // Results from earlier servers omit the type and count as complete. `input_required`
+    // is handled by `MCPProtocol.call`, which answers the questions and retries.
+    if let type = result["resultType"]?.string, type != "complete", type != "input_required" { throw MCPError.invalidResponse }
     return result
 }

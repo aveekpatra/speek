@@ -131,6 +131,11 @@ final class CodexConnection: ObservableObject {
         guard result.status == 0 else {
             throw CodexJobError.failed("Codex could not complete the request. Check the selected connection in Connections, or choose OpenRouter.")
         }
-        return try JSONDecoder().decode(ProposedAction.self, from: Data(contentsOf: outputURL))
+        // The answer should be exactly the schema's JSON; tolerate text or a code fence around it.
+        let output = (try? String(contentsOf: outputURL, encoding: .utf8)) ?? ""
+        if let data = output.data(using: .utf8), let action = try? JSONDecoder().decode(ProposedAction.self, from: data) { return action }
+        if let object = RuntimeCall.firstObject(in: output), let data = try? JSONEncoder().encode(MCPValue.object(object)),
+           let action = try? JSONDecoder().decode(ProposedAction.self, from: data) { return action }
+        throw ActionClientError.requestFailed("The model's answer could not be read. Try again.")
     }
 }

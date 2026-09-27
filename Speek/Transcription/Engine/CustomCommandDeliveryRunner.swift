@@ -11,6 +11,8 @@ struct CustomCommandDeliveryContext {
 
     var environment: [String: String] {
         [
+            "SPEEK_TRANSCRIPT": transcript,
+            // Older name, kept for commands written before the rename.
             "WHISPERPRO_TRANSCRIPT": transcript
         ]
     }

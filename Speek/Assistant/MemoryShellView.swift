@@ -110,17 +110,30 @@ struct MemoryShellView: View {
     // MARK: Facts
 
     private var facts: some View {
-        let items = memory.facts.filter { matches($0.text) }.sorted { $0.date > $1.date }
-        return listSurface(isEmpty: items.isEmpty, empty: empty("text.book.closed.fill", "No saved facts", "Add a preference or tell Speek to remember something.")) {
+        // Locked facts first: they are always part of what Speek knows.
+        let items = memory.facts.filter { matches($0.text) }.sorted { $0.pinned != $1.pinned ? $0.pinned : $0.date > $1.date }
+        return listSurface(isEmpty: items.isEmpty, empty: empty("text.book.closed.fill", "No saved facts", "Add a preference, or say \"remember\" followed by anything.")) {
             ForEach(items) { item in
                 if item.id != items.first?.id { SettingsRowDivider() }
                 row(item.id) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(item.text).font(.system(size: 13)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                        Text(item.date, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            Text(item.date, style: .date)
+                            if item.pinned { Text("Locked") }
+                            if item.fromAgent { Text("Suggested by Speek") }
+                        }.font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                 } actions: {
-                    HoverRowActions(visible: hovered == item.id, subject: "fact", edit: { editor = .fact(item) }) { memory.remove(item.id) }
+                    HStack(spacing: 4) {
+                        if item.pinned || hovered == item.id {
+                            Button { memory.setPinned(item.id, !item.pinned) } label: {
+                                Image(systemName: item.pinned ? "lock.fill" : "lock.open").font(.system(size: 12)).frame(width: 24, height: 24).contentShape(Rectangle())
+                            }.buttonStyle(.plain)
+                                .help(item.pinned ? "Unlock: recall only when relevant, and let Speek change it" : "Lock: always include it, and only you can change it")
+                        }
+                        HoverRowActions(visible: hovered == item.id, subject: "fact", edit: { editor = .fact(item) }) { memory.remove(item.id) }
+                    }
                 }
             }
         }

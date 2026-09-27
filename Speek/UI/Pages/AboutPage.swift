@@ -47,20 +47,10 @@ struct AboutPage: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                SpeekSectionHeader("Speek is a fork of")
+                SpeekSectionHeader("Open-source projects")
                 SpeekGroup {
-                    creditRow("Whisper Pro", "Zdenek Culik. Speek was forked from here, GPL-3.0", url: "https://github.com/ZdenekCulik/whisper-pro")
-                    creditRow("VoiceInk", "Prakash Joshi Pax. Whisper Pro was forked from here, GPL-3.0", url: "https://github.com/Beingpax/VoiceInk")
-                }
-                Text("Speek keeps the GPL-3.0 license of both projects and credits every author in that chain.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
-                    .padding(.leading, 4)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                SpeekSectionHeader("Bundled libraries")
-                SpeekGroup {
+                    creditRow("VoiceInk", "Prakash Joshi Pax, GPL-3.0", url: "https://github.com/Beingpax/VoiceInk")
+                    creditRow("Whisper Pro", "Zdenek Culik, GPL-3.0", url: "https://github.com/ZdenekCulik/whisper-pro")
                     creditRow("whisper.cpp", "Georgi Gerganov and contributors, MIT", url: "https://github.com/ggerganov/whisper.cpp")
                     creditRow("FluidAudio", "FluidInference, Apache 2.0", url: "https://github.com/FluidInference/FluidAudio")
                     creditRow("Sparkle", "Sparkle Project, MIT", url: "https://github.com/sparkle-project/Sparkle")

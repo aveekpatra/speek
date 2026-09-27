@@ -4265,12 +4265,12 @@
         }
       }
     },
-    "Environment variables available: WHISPERPRO_SYSTEM_PROMPT, WHISPERPRO_USER_PROMPT, WHISPERPRO_FULL_PROMPT. Speek also writes WHISPERPRO_FULL_PROMPT to stdin for every command." : {
+    "Environment variables available: SPEEK_SYSTEM_PROMPT, SPEEK_USER_PROMPT, SPEEK_FULL_PROMPT. Speek also writes SPEEK_FULL_PROMPT to stdin for every command." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verfügbare Umgebungsvariablen: WHISPERPRO_SYSTEM_PROMPT, WHISPERPRO_USER_PROMPT, WHISPERPRO_FULL_PROMPT. Speek schreibt außerdem WHISPERPRO_FULL_PROMPT für jeden Befehl nach stdin."
+            "value" : "Verfügbare Umgebungsvariablen: SPEEK_SYSTEM_PROMPT, SPEEK_USER_PROMPT, SPEEK_FULL_PROMPT. Speek schreibt außerdem SPEEK_FULL_PROMPT für jeden Befehl nach stdin."
           }
         }
       }
@@ -8051,12 +8051,12 @@
         }
       }
     },
-    "Runs locally with your user permissions. The final transcript is sent on stdin and exposed as WHISPERPRO_TRANSCRIPT." : {
+    "Runs locally with your user permissions. The final transcript is sent on stdin and exposed as SPEEK_TRANSCRIPT." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wird lokal mit Ihren Benutzerberechtigungen ausgeführt. Das finale Transkript wird über stdin gesendet und als WHISPERPRO_TRANSCRIPT bereitgestellt."
+            "value" : "Wird lokal mit Ihren Benutzerberechtigungen ausgeführt. Das finale Transkript wird über stdin gesendet und als SPEEK_TRANSCRIPT bereitgestellt."
           }
         }
       }
@@ -9949,12 +9949,12 @@
         }
       }
     },
-    "Variables: WHISPERPRO_SYSTEM_PROMPT, WHISPERPRO_USER_PROMPT, WHISPERPRO_FULL_PROMPT" : {
+    "Variables: SPEEK_SYSTEM_PROMPT, SPEEK_USER_PROMPT, SPEEK_FULL_PROMPT" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Variablen: WHISPERPRO_SYSTEM_PROMPT, WHISPERPRO_USER_PROMPT, WHISPERPRO_FULL_PROMPT"
+            "value" : "Variablen: SPEEK_SYSTEM_PROMPT, SPEEK_USER_PROMPT, SPEEK_FULL_PROMPT"
           }
         }
       }

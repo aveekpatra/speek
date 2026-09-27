@@ -44,22 +44,25 @@ struct IntegrationTile<Control: View, MenuItems: View>: View {
     static var columns: [GridItem] { [GridItem(.adaptive(minimum: 230, maximum: 420), spacing: 16, alignment: .top)] }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                IntegrationGlyph(symbol: symbol, asset: asset)
-                Spacer(minLength: 8)
-                if showsMenu {
-                    Menu { menu } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28).contentShape(Rectangle()) }
-                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                        .help(title + " actions").accessibilityLabel(title + " actions")
-                        .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
+        // The status row is pinned to the bottom, so its button keeps the same inset from the
+        // bottom and right edges however tall the text above is.
+        ZStack(alignment: .bottomLeading) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    IntegrationGlyph(symbol: symbol, asset: asset)
+                    Spacer(minLength: 8)
+                    if showsMenu {
+                        Menu { menu } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28).contentShape(Rectangle()) }
+                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                            .help(title + " actions").accessibilityLabel(title + " actions")
+                            .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
+                    }
                 }
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
-                Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-            Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                    Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }.frame(maxHeight: .infinity, alignment: .top)
             HStack(spacing: 8) {
                 HStack(spacing: 5) {
                     if busy { ProgressView().controlSize(.mini) } else { Image(systemName: statusSymbol) }

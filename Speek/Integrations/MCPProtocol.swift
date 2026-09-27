@@ -12,9 +12,39 @@ enum MCPProtocol {
         var metadata = fields["_meta"]?.object ?? [:]
         metadata["io.modelcontextprotocol/protocolVersion"] = .string(version)
         metadata["io.modelcontextprotocol/clientInfo"] = .object(["name": .string("Speek"), "version": .string("1.0")])
-        metadata["io.modelcontextprotocol/clientCapabilities"] = .object([:])
+        metadata["io.modelcontextprotocol/clientCapabilities"] = capabilities
         fields["_meta"] = .object(metadata)
         return .object(fields)
+    }
+
+    /// Speek answers forms, links, and model requests (each shown in the notch first).
+    static let capabilities: MCPValue = .object([
+        "elicitation": .object(["form": .object([:]), "url": .object([:])]),
+        "sampling": .object([:])
+    ])
+
+    /// A request that may come back as `input_required` (tools/call, prompts/get, resources/read):
+    /// answers each question with `handler` and retries with the answers and the server's state.
+    static func call(_ transport: any MCPTransport, method: String, params: MCPValue, handler: MCPServerRequestHandler?) async throws -> MCPValue {
+        var params = params
+        for _ in 0..<10 {
+            let result = try await transport.request(method: method, params: params)
+            guard result["resultType"]?.string == "input_required" else { return result }
+            let requests = result["inputRequests"]?.object ?? [:]
+            guard requests.count <= 16, !requests.isEmpty || result["requestState"] != nil else { throw MCPError.invalidResponse }
+            var responses: [String: MCPValue] = [:]
+            for (key, request) in requests.sorted(by: { $0.key < $1.key }) {
+                guard let handler, let method = request["method"]?.string else { throw MCPError.capabilityRequired }
+                try Task.checkCancellation()
+                responses[key] = try await handler(method, request["params"] ?? .object([:]))
+            }
+            // Each retry is a new request that carries only this round's answers and state.
+            var fields = params.object ?? [:]
+            fields["inputResponses"] = responses.isEmpty ? nil : .object(responses)
+            fields["requestState"] = result["requestState"]?.string.map(MCPValue.string)
+            params = .object(fields)
+        }
+        throw MCPError.invalidResponse
     }
 
     static func discover(_ transport: any MCPTransport, usingHTTP: Bool) async throws -> MCPValue {
@@ -36,9 +66,8 @@ enum MCPProtocol {
             }
         }
         await transport.setProtocolVersion(legacy)
-        // Speek answers server questions (form and link requests) during a tool call.
-        let result = try await transport.request(method: "initialize", params: .object([
-            "protocolVersion": .string(legacy), "capabilities": .object(["elicitation": .object(["form": .object([:]), "url": .object([:])])]),
+                let result = try await transport.request(method: "initialize", params: .object([
+            "protocolVersion": .string(legacy), "capabilities": capabilities,
             "clientInfo": .object(["name": .string("Speek"), "version": .string("1.0")])
         ]))
         guard let version = result["protocolVersion"]?.string, legacyVersions.contains(version) else {

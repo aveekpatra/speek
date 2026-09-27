@@ -43,7 +43,7 @@ struct ComputerUseApprovalView: View {
         }
     }
     private func submit(_ request: ComputerUseApproval) {
-        let text = request.needsInput ? answer.trimmingCharacters(in: .whitespacesAndNewlines) : "Allow once"
+        let text = request.needsInput ? answer.trimmingCharacters(in: .whitespacesAndNewlines) : (request.coversTask ? "Allow this task" : "Allow once")
         guard !text.isEmpty else { return }
         computer.answerApproval(id: request.id, answer: text)
         answer = ""

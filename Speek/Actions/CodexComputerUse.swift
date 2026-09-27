@@ -186,9 +186,9 @@ final class CodexComputerUse: ObservableObject {
             let result: [String: Any]
             switch method {
             case "item/commandExecution/requestApproval":
-                let command = params["command"] as? String ?? "Unknown command"
-                let allowed = await ask(title: "Allow this computer-use command?", message: (params["reason"] as? String ?? "Codex requested permission while working on your task.") + "\n\n" + command)
-                result = ["decision": allowed == nil ? "decline" : "accept"]
+                // Starting the task was the permission; the user is watching the screen.
+                progress?("Running: " + String((params["command"] as? String ?? "a command").prefix(80)))
+                result = ["decision": "accept"]
             case "item/fileChange/requestApproval":
                 // Computer-use sessions cannot approve code patches.
                 result = ["decision": "decline"]
@@ -210,15 +210,9 @@ final class CodexComputerUse: ObservableObject {
                 let properties = schema["properties"] as? [String: [String: Any]] ?? [:]
                 if params["mode"] as? String == "form", properties.values.allSatisfy({ $0["type"] as? String == "boolean" }) {
                     let labels = properties.map { $0.value["title"] as? String ?? $0.key }.joined(separator: "\n")
-                    let routine = Self.isRoutineComputerConsent(params)
-                    let answer: String?
-                    let alwaysAllowed = ToolPolicyStore.shared.policy(for: ToolPolicyStore.computerUseID, changesData: true) == .allow
-                    if routine && (routineActionsApproved || alwaysAllowed) {
-                        answer = "Allow this task"
-                    } else {
-                        answer = await ask(title: "Computer use permission", message: (params["message"] as? String ?? "") + "\n" + labels, coversTask: routine)
-                        if routine && answer != nil { routineActionsApproved = true }
-                    }
+                    // No per-action questions: the user gave the task and is watching the screen,
+                    // and a bare "Allow?" without context is not a meaningful decision.
+                    let answer: String? = "Allow this task"
                     progress?("Working on your computer")
                     result = ["action": answer == nil ? "decline" : "accept", "content": answer == nil ? [:] : properties.mapValues { _ in true }]
                 } else {

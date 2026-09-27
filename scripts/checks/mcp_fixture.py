@@ -19,7 +19,13 @@ def answer(message, modern=False):
         result = {"tools": [{"name": "echo", "description": "Echo a value", "inputSchema": {"type": "object", "properties": {"value": {"type": "string"}}}, "annotations": {"readOnlyHint": True}}]}
     elif method == "tools/call":
         if modern and message["params"]["name"] == "needs-input":
-            return {"jsonrpc": "2.0", "id": message["id"], "result": {"resultType": "input_required", "inputRequests": []}}
+            params = message["params"]
+            if params.get("requestState") == "state-1":
+                name = params["inputResponses"]["who"]["content"]["name"]
+                return {"jsonrpc": "2.0", "id": message["id"], "result": {"resultType": "complete", "content": [{"type": "text", "text": "hi " + name}]}}
+            assert "inputResponses" not in params and "requestState" not in params
+            return {"jsonrpc": "2.0", "id": message["id"], "result": {"resultType": "input_required", "requestState": "state-1", "inputRequests": {
+                "who": {"method": "elicitation/create", "params": {"mode": "form", "message": "Name?", "requestedSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}}}}}
         if message["params"]["name"] == "hang":
             return None
         if message["params"]["name"] == "fail":
@@ -45,7 +51,7 @@ class Handler(BaseHTTPRequestHandler):
         if modern:
             meta = body.get("params", {}).get("_meta", {})
             assert meta.get("io.modelcontextprotocol/protocolVersion") == "2026-07-28"
-            assert meta.get("io.modelcontextprotocol/clientCapabilities") == {}
+            assert meta.get("io.modelcontextprotocol/clientCapabilities") == {"elicitation": {"form": {}, "url": {}}, "sampling": {}}
             assert self.headers.get("MCP-Protocol-Version") == "2026-07-28"
             assert self.headers.get("Mcp-Method") == body["method"]
             assert self.headers.get("Mcp-Session-Id") is None
@@ -103,7 +109,7 @@ else:
             if modern and "id" in message:
                 meta = message.get("params", {}).get("_meta", {})
                 assert meta.get("io.modelcontextprotocol/protocolVersion") == "2026-07-28"
-                assert meta.get("io.modelcontextprotocol/clientCapabilities") == {}
+                assert meta.get("io.modelcontextprotocol/clientCapabilities") == {"elicitation": {"form": {}, "url": {}}, "sampling": {}}
             response = answer(message, modern)
             if response is not None:
                 print(json.dumps(response), flush=True)

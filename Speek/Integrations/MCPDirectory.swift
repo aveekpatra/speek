@@ -1,7 +1,7 @@
 import Foundation
 
 /// Hosted MCP servers Speek can add in one step. Checked 2026-09-27 against each server's
-/// published OAuth metadata: Notion, Linear, and Composio allow dynamic client registration;
+/// published OAuth metadata: LexyOS allows dynamic registration and Aturno takes an aturno_live_ API key; Notion, Linear, and Composio allow dynamic client registration;
 /// GitHub accepts the GitHub CLI login as a bearer token; Gmail and Google Calendar need the
 /// user's own Google Cloud OAuth client; Outlook and Slack connect through Composio.
 struct MCPDirectoryEntry: Identifiable {
@@ -46,12 +46,17 @@ struct MCPDirectoryEntry: Identifiable {
     static let all: [MCPDirectoryEntry] = [
         MCPDirectoryEntry(id: "notion", name: "Notion", summary: "Search, read, create, and update pages and databases.",
                           endpoint: "https://mcp.notion.com/mcp", logo: "mcp-notion", access: .signIn),
+        MCPDirectoryEntry(id: "lexyos", name: "LexyOS", summary: "Your tasks and projects in LexyOS: find, create, and update.",
+                          endpoint: "https://www.lexyos.com/api/mcp", logo: "mcp-lexyos", access: .signIn),
+        MCPDirectoryEntry(id: "aturno", name: "Aturno", summary: "Czech, Slovak, and EU legal research, and company records from ARES.",
+                          endpoint: "https://app.aturno.ai/api/mcp", logo: "mcp-aturno",
+                          access: .token(label: "Aturno API key", help: URL(string: "https://app.aturno.ai/settings/mcp")!)),
         MCPDirectoryEntry(id: "linear", name: "Linear", summary: "Find, create, and update issues, projects, and comments.",
                           endpoint: "https://mcp.linear.app/mcp", logo: "mcp-linear", access: .signIn),
         MCPDirectoryEntry(id: "github", name: "GitHub", summary: "Repositories, issues, pull requests, and code search.",
                           endpoint: "https://api.githubcopilot.com/mcp/", logo: "mcp-github", access: .command("gh auth token", tool: "GitHub CLI")),
         composio,
-        MCPDirectoryEntry(id: "gmail", name: "Gmail", summary: "Search and read email, and write drafts.",
+        MCPDirectoryEntry(id: "gmail", name: "Gmail", summary: "Search, read, draft, send, label, and archive email.",
                           endpoint: "https://gmailmcp.googleapis.com/mcp/v1", logo: "mcp-gmail",
                           access: .ownClient(scopes: "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.modify",
                                              help: googleSetup)),

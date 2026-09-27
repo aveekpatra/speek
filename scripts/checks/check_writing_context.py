@@ -32,7 +32,12 @@ MAIN = '''import Foundation
   check(CorrectionLearner.learnedPair(before: "x iphone y", after: "x iPhone y", inserted: "iphone").map { $0.term } == "iPhone", "learns a casing fix")
   check(CorrectionLearner.learnedPair(before: "Earlier text. " + inserted, after: "Changed text. " + inserted, inserted: inserted) == nil, "ignores edits outside the dictation")
   check(CorrectionLearner.learnedPair(before: before, after: before + " and more", inserted: inserted) == nil, "ignores added text")
-  print("PASS: spacing, sentence capitalization, names kept, trailing space, nearby terms, misheard-name learning, casing fixes, edits and outside changes ignored")
+  let typedOn = CorrectionLearner.learnedPairs(before: before, after: "Notes: please ask Aturno about the launch. Also book the room.", inserted: inserted)
+  check(typedOn.map { $0.heard + "|" + $0.term } == ["a turn o|Aturno"], "learns a fix when the user keeps typing")
+  check(CorrectionLearner.learnedPairs(before: "I think their late", after: "I think there late", inserted: "I think their late").isEmpty, "ignores grammar swaps")
+  check(CorrectionLearner.learnedPairs(before: "hello there", after: "Hello there", inserted: "hello there").isEmpty, "ignores sentence capitals")
+  check(CorrectionLearner.learnedPairs(before: "see you in a week", after: "see you in Aveek", inserted: "see you in a week").first?.replaces == false, "ordinary words become a hint only")
+  print("PASS: spacing, sentence capitalization, names kept, trailing space, nearby terms, misheard-name learning, casing fixes, edits and outside changes ignored, typing on, grammar swaps, hint-only phrases")
  }
 }
 '''
