@@ -134,6 +134,7 @@ struct RichApprovalCard: View {
             footer.padding(.horizontal, 14).padding(.bottom, 12)
         }
         .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.accentColor.opacity(0.55), lineWidth: 1))
         .shadow(color: Color.accentColor.opacity(0.35), radius: 10)
         .onAppear(perform: load)
@@ -155,7 +156,9 @@ struct RichApprovalCard: View {
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         }
         .padding(.horizontal, 14).padding(.vertical, 9)
-        .background(Color.white.opacity(0.06))
+        // Square at the bottom, where it meets the fields; only the card's top corners are rounded.
+        .background(Color.white.opacity(0.06), in: UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 0,
+                                                                          bottomTrailingRadius: 0, topTrailingRadius: 16, style: .continuous))
     }
 
     @ViewBuilder private var content: some View {
