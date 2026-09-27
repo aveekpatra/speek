@@ -70,6 +70,7 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 
 ### Dictation
 - Hold-to-speak shortcut, a double-tap for hands-free, or a mouse button.
+- "Hey Speek" (or any name you choose) to start a request without touching the keyboard. It listens on your Mac and stops when you stop talking.
 - Raw, lightly cleaned up, or polished writing, in a style you choose.
 - Writing that adapts to the app you are in and to the text around your cursor.
 - Edit selected text by voice: select it, then say "make this shorter" or "translate to Czech".

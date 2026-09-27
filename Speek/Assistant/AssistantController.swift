@@ -104,6 +104,31 @@ final class AssistantController: ObservableObject {
     private var editSelection: EditSelection?
     private var voiceBundleID: String?
     private var meterSubscription: AnyCancellable?
+    private var wakeSubscription: AnyCancellable?
+    /// A request started by the wake phrase ends by itself when the user stops talking.
+    private var stopsOnSilence = false
+    private var heardSpeech = false
+    private var lastSpeech = Date.distantPast
+
+    private func wakeHeard() {
+        guard !recording else { return }
+        stopsOnSilence = true; heardSpeech = false; lastSpeech = Date()
+        toggleVoice(present: true, mode: .agent)
+    }
+
+    /// Ends the request after 1.4 s of quiet once the user has spoken, or cancels it when
+    /// nothing is said within 6 s. Levels are 0 (-60 dB) to 1 (0 dB).
+    private func checkSilence(_ level: Double) {
+        if level > 0.45 { heardSpeech = true; lastSpeech = Date() }
+        let quiet = Date().timeIntervalSince(lastSpeech)
+        if heardSpeech && quiet > 1.4 {
+            stopsOnSilence = false
+            toggleVoice()
+        } else if !heardSpeech && Date().timeIntervalSince(recordingStarted) > 6 {
+            stopsOnSilence = false
+            cancel()
+        }
+    }
     private var recordingPeak = 0.0
     private var recordingStarted = Date.distantPast
     private var recordingLimit: Task<Void, Never>?
@@ -186,7 +211,21 @@ final class AssistantController: ObservableObject {
         meterSubscription = recorder.$audioMeter.sink { [weak self] meter in
             guard let self, self.recording else { return }
             self.recordingPeak = max(self.recordingPeak, meter.peakPower)
+            if self.stopsOnSilence { self.checkSilence(meter.averagePower) }
         }
+        // "Hey <name>": listen while idle; pause while recording or reading a reply aloud.
+        WakeWordListener.shared.onWake = { [weak self] in self?.wakeHeard() }
+        wakeSubscription = $recording.combineLatest(playback.$playingMessageID.map { $0 != nil })
+            .removeDuplicates { $0 == $1 }
+            .sink { recording, speaking in
+                if recording || speaking { WakeWordListener.shared.stop() }
+                else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        guard !AssistantController.shared.recording else { return }
+                        WakeWordListener.shared.start()
+                    }
+                }
+            }
         configureShortcuts()
         observers.append(NotificationCenter.default.addObserver(forName: ShortcutStore.shortcutDidChange, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.configureShortcuts() }
@@ -430,6 +469,7 @@ final class AssistantController: ObservableObject {
             let capturedDuration = Date().timeIntervalSince(recordingStarted)
             recordingLimit?.cancel(); recordingLimit = nil
             recording = false; busy = true; phase = "Transcribing"
+            stopsOnSilence = false
             CircleGesture.shared.stop()
             SoundManager.shared.playStopSound()
             LiveTranscriptPreview.shared.stop()
@@ -966,6 +1006,7 @@ final class AssistantController: ObservableObject {
     }
 
     func cancel() {
+        stopsOnSilence = false
         LiveTranscriptPreview.shared.stop()
         CircleGesture.shared.stop()
         if let run = foreground { end(run); foreground = nil }

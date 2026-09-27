@@ -19,6 +19,9 @@ struct AssistantSettingsView: View {
     @ObservedObject private var policies = ToolPolicyStore.shared
     @AppStorage(CircleGesture.enabledKey) private var circleGesture = true
     @AppStorage(AssistantController.screenByDefaultKey) private var screenByDefault = true
+    @AppStorage(WakeWordListener.enabledKey) private var wakeEnabled = false
+    @AppStorage(WakeWordListener.nameKey) private var wakeName = "Speek"
+    @ObservedObject private var wake = WakeWordListener.shared
     @AppStorage("speek.dictation.doubleTapHandsFree") private var handsFree = false
     @AppStorage("speek.dictation.mouseButton") private var mouseButton = 0
     @AppStorage("speek.voice.recordingRecovery") private var recoveryEnabled = false
@@ -88,6 +91,19 @@ struct AssistantSettingsView: View {
                     })) {
                         ForEach(MouseTriggerMonitor.Button.allCases) { Text($0.title).tag($0) }
                     }.labelsHidden().id(mouseButton)
+                }
+            }
+            SettingsSection(title: "Voice activation") {
+                SettingsRow(title: "Hey " + (wakeName.trimmingCharacters(in: .whitespaces).isEmpty ? "Speek" : wakeName.trimmingCharacters(in: .whitespaces)), icon: "waveform.badge.mic",
+                            value: wake.problem ?? (wakeEnabled ? (wake.listening ? "Listening" : "Paused while Speek is busy") : nil),
+                            info: "Say the phrase to start a request, then say what you need; it ends when you stop talking. Listening happens on this Mac, and nothing is sent until you make a request. The microphone stays on while this is enabled.") {
+                    Toggle("Voice activation", isOn: $wakeEnabled).labelsHidden().toggleStyle(.switch)
+                        .onChange(of: wakeEnabled) { _, _ in WakeWordListener.shared.refresh() }
+                }
+                SettingsRowDivider(leading: 60)
+                SettingsRow(title: "Assistant name", icon: "person.wave.2", info: "The name after \"Hey\". Short names that are not common words work best.") {
+                    TextField("Speek", text: $wakeName).textFieldStyle(.roundedBorder).frame(width: 140)
+                        .onSubmit { WakeWordListener.shared.refresh() }
                 }
             }
             SettingsSection(title: "Context") {
