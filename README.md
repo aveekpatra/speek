@@ -28,6 +28,8 @@ Speek sits quietly in your Mac's notch. Hold a key and talk: it types what you s
 
 🎙️ **Write without typing.** Hold the shortcut, speak, let go. Your words land in whatever text field you are in: Mail, Slack, Notes, a browser, a terminal. Speek fits them into what is already there and can polish them into clean sentences.
 
+👋 **Just say its name.** "Hey Speek, what's on my calendar today?" Turn on voice activation and start a request without touching the keyboard. Call it whatever you like: pick a name, and Speek answers to it. Listening happens on your Mac, and it stops recording when you stop talking.
+
 💬 **Ask for things out loud.** "Reply to Tomas that Friday works." "What's on my calendar tomorrow?" "Play Faded by Alan Walker." "Unsubscribe me from this newsletter." Speek picks the right app or service, does it, and answers in the notch.
 
 👆 **Point at your screen.** Speek sees what you are looking at when you ask. To point at something specific, circle it with the pointer while you hold the shortcut. "This" then means exactly what you circled.
@@ -70,7 +72,7 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 
 ### Dictation
 - Hold-to-speak shortcut, a double-tap for hands-free, or a mouse button.
-- "Hey Speek" (or any name you choose) to start a request without touching the keyboard. It listens on your Mac and stops when you stop talking.
+- Voice activation: say "Hey Speek", or "Hey" and any name you choose, to start a request hands-free. Recognition runs on your Mac, it understands near-misses of the name, and it stops when you stop talking.
 - Raw, lightly cleaned up, or polished writing, in a style you choose.
 - Writing that adapts to the app you are in and to the text around your cursor.
 - Edit selected text by voice: select it, then say "make this shorter" or "translate to Czech".
@@ -122,7 +124,7 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 
 1. Open Speek and add your API key under **Models & Voice**.
 2. Allow Microphone and Accessibility when asked. Screen Recording and app access are requested when a feature first needs them.
-3. Hold the shortcut (Option-Space by default) and start talking.
+3. Hold the shortcut (Option-Space by default) and start talking. For hands-free, turn on **Voice activation** in Settings > General and say "Hey Speek".
 4. Turn on the apps and services you want under **Integrations**.
 
 ## For developers
