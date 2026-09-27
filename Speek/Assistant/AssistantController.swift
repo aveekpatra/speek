@@ -614,7 +614,8 @@ final class AssistantController: ObservableObject {
                     recording = true; phase = "Listening"
                     // The screen as it is when you start speaking, unless you circle something.
                     if voiceMode == .agent {
-                        CircleGesture.shared.start()
+                        // Not during a follow-up window: the pointer is free while Speek waits.
+                        if !keepOpen { CircleGesture.shared.start() }
                         if present { captureScreenForRequest() } else { pendingScreen = nil }
                     }
                     SoundManager.shared.playStartSound()
