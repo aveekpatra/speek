@@ -831,7 +831,7 @@ final class AssistantController: ObservableObject {
                     return
                 }
                 if call.tool == "computer.use" {
-                    enqueueComputerTask(for: run, call: call)
+                    enqueueComputerTask(for: run, call: call, memory: await AssistantMemory.shared.context(for: (call.arguments["task"]?.string ?? "") + " " + run.request))
                     return
                 }
                 if reviewNeeded {
@@ -884,7 +884,10 @@ final class AssistantController: ObservableObject {
             run.task = Task {
                 do {
                     let call = try RuntimeCall(target: action.target)
-                    if call.tool == "computer.use" { enqueueComputerTask(for: run, call: call); return }
+                    if call.tool == "computer.use" {
+                        enqueueComputerTask(for: run, call: call, memory: await AssistantMemory.shared.context(for: (call.arguments["task"]?.string ?? "") + " " + run.request))
+                        return
+                    }
                     run.steps += 1
                     if foreground === run { phase = action.title }
                     let result = try await execute(call, for: run, approved: true)
@@ -1007,7 +1010,7 @@ final class AssistantController: ObservableObject {
 
     /// Hands interface work to the computer-use agent with the main agent's own instruction,
     /// the target app, and everything found so far (it cannot see this conversation).
-    private func enqueueComputerTask(for run: AgentRun, call: RuntimeCall? = nil, announce: Bool = true) {
+    private func enqueueComputerTask(for run: AgentRun, call: RuntimeCall? = nil, memory: String = "", announce: Bool = true) {
         let task = call?.arguments["task"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines)
         let app = call?.arguments["app"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = (task?.isEmpty == false ? task! + "\n\nThe user's own words: " + run.request : run.request)
@@ -1023,7 +1026,9 @@ final class AssistantController: ObservableObject {
         ComputerTaskManager.shared.enqueue(request: request, sourceThreadID: sourceID, operation: { progress in
             try await CodexComputerUse.shared.run(
                 request: request, app: app?.isEmpty == false ? app : nil,
-                context: (captured?.text ?? "") + (found.isEmpty ? "" : "\nFound so far:\n" + found), image: captured?.image,
+                context: (captured?.text ?? "") + (found.isEmpty ? "" : "\nFound so far:\n" + found)
+                    + (memory.isEmpty ? "" : "\nWhat Speek remembers that may help (facts the user saved, past requests and results):\n" + memory),
+                image: captured?.image,
                 history: history, connection: selectedConnection, model: selectedModel, reasoning: selectedReasoning,
                 progress: progress,
                 presentApproval: { AssistantController.shared.presentApproval() })
@@ -1037,8 +1042,11 @@ final class AssistantController: ObservableObject {
             }
             if job.status == .completed { AssistantMemory.shared.recordEpisode(request: request, result: result) }
             if job.status != .cancelled {
+                // Stopped at a limit: offer to continue from where it stopped.
+                let stoppedAtLimit = job.status == .failed && result.contains("limit")
+                let continuation = stoppedAtLimit ? "Continue this task from where it stopped (it reached a time or action limit). First check the app's current state; do not redo finished steps.\n\nTask: " + request + "\n\nLast report: " + result : nil
                 self?.deliverTaskNotice(request: request, result: result, sourceID: sourceID,
-                                        succeeded: job.status == .completed, spoken: spoken)
+                                        succeeded: job.status == .completed, spoken: spoken, continuation: continuation, app: app)
             }
         })
         end(run)
@@ -1052,9 +1060,13 @@ final class AssistantController: ObservableObject {
         }
     }
 
-    private func deliverTaskNotice(request: String, result: String, sourceID: UUID?, succeeded: Bool, spoken: Bool = false) {
+    private var continuationApps: [UUID: String] = [:]
+
+    private func deliverTaskNotice(request: String, result: String, sourceID: UUID?, succeeded: Bool, spoken: Bool = false,
+                                   continuation: String? = nil, app: String? = nil) {
         let notice = BackgroundTaskNotice(request: request, result: result, sourceThreadID: sourceID,
-                                          succeeded: succeeded, spoken: spoken)
+                                          succeeded: succeeded, spoken: spoken, continuation: continuation)
+        if let app, continuation != nil { continuationApps[notice.id] = app }
         taskNotices.append(notice)
         unannouncedTaskIDs.append(notice.id)
         guard announcementWork == nil else { return }
@@ -1077,6 +1089,21 @@ final class AssistantController: ObservableObject {
                     self.speak(opening + QuickTalk.forSpeech(notice.result), followUp: notice.spoken)
                 }
             }
+        }
+    }
+
+    /// Picks a computer task back up after it stopped at a limit.
+    func continueTask(_ notice: BackgroundTaskNotice) {
+        guard let task = notice.continuation else { return }
+        dismissTaskNotice(notice.id)
+        let history = notice.sourceThreadID.flatMap { id in ActionThreadStore.shared.threads.first { $0.id == id }?.messages } ?? []
+        let run = AgentRun(request: task, threadID: notice.sourceThreadID, identity: conversationIdentity, history: history,
+                           connection: connection, modelID: modelID, reasoning: reasoningEffort, context: nil, images: [], attachmentText: "")
+        var arguments: [String: MCPValue] = ["task": .string(task)]
+        if let app = continuationApps.removeValue(forKey: notice.id) { arguments["app"] = .string(app) }
+        Task {
+            let memory = await AssistantMemory.shared.context(for: task)
+            enqueueComputerTask(for: run, call: RuntimeCall(tool: "computer.use", arguments: arguments), memory: memory, announce: false)
         }
     }
 

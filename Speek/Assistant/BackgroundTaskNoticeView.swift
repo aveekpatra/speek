@@ -9,6 +9,8 @@ struct BackgroundTaskNotice: Identifiable {
     let date = Date()
     /// Asked out loud: the result is announced out loud.
     var spoken = false
+    /// Set when the task stopped at a time or action limit: the task to run to continue it.
+    var continuation: String?
 }
 
 struct BackgroundTaskNoticeView: View {
@@ -25,6 +27,10 @@ struct BackgroundTaskNoticeView: View {
                         Text("+\(controller.taskNotices.count - 1)").font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 4)
+                    if notice.continuation != nil {
+                        Button("Continue") { controller.continueTask(notice) }
+                            .buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.accentColor)
+                    }
                     Button("View result") { controller.openTaskNotice(notice) }
                         .buttonStyle(.plain).font(.system(size: 12))
                         .disabled(controller.busy || controller.recording)

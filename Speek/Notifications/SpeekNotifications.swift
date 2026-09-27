@@ -15,9 +15,11 @@ final class SpeekNotifications: NSObject, UNUserNotificationCenterDelegate {
         let allow = UNNotificationAction(identifier: "allow", title: "Allow", options: [])
         let deny = UNNotificationAction(identifier: "deny", title: "Deny", options: [.destructive])
         let show = UNNotificationAction(identifier: "show", title: "Show", options: [.foreground])
+        let resume = UNNotificationAction(identifier: "continue", title: "Continue", options: [])
         center.setNotificationCategories([
             UNNotificationCategory(identifier: "approval", actions: [allow, deny], intentIdentifiers: []),
-            UNNotificationCategory(identifier: "done", actions: [show], intentIdentifiers: [])
+            UNNotificationCategory(identifier: "done", actions: [show], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "limit", actions: [resume, show], intentIdentifiers: [])
         ])
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
@@ -32,8 +34,8 @@ final class SpeekNotifications: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func taskFinished(_ notice: BackgroundTaskNotice) {
-        let title = (notice.succeeded ? "Done: " : "Couldn't finish: ") + String(notice.request.prefix(60))
-        post(id: "speek.task." + notice.id.uuidString, title: title, body: String(notice.result.prefix(220)), category: "done",
+        let title = (notice.continuation != nil ? "Paused: " : notice.succeeded ? "Done: " : "Couldn't finish: ") + String(notice.request.prefix(60))
+        post(id: "speek.task." + notice.id.uuidString, title: title, body: String(notice.result.prefix(220)), category: notice.continuation != nil ? "limit" : "done",
              info: ["notice": notice.id.uuidString])
     }
 
@@ -64,7 +66,7 @@ final class SpeekNotifications: NSObject, UNUserNotificationCenterDelegate {
             case ("approval", _): controller.presentApproval()
             default:
                 if let noticeID, let notice = controller.taskNotices.first(where: { $0.id.uuidString == noticeID }) {
-                    controller.openTaskNotice(notice)
+                    if action == "continue" { controller.continueTask(notice) } else { controller.openTaskNotice(notice) }
                 }
             }
         }

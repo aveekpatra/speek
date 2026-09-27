@@ -100,8 +100,8 @@ final class CodexComputerUse: ObservableObject {
             return try await withCheckedThrowingContinuation { continuation in
                 turnResult = continuation
                 timeout = Task { [weak self] in
-                    do { try await Task.sleep(nanoseconds: 600_000_000_000) } catch { return }
-                    self?.stop(error: self?.failure("Computer use reached its ten-minute limit. Check the app before continuing.") ?? CancellationError())
+                    do { try await Task.sleep(nanoseconds: 1_500_000_000_000) } catch { return }
+                    self?.stop(error: self?.failure("Computer use reached its 25-minute limit. Continue to pick up where it stopped.") ?? CancellationError())
                 }
                 Task {
                     do { _ = try await rpc.call("turn/start", params) }
@@ -171,7 +171,7 @@ final class CodexComputerUse: ObservableObject {
                     return
                 }
                 toolCount += 1
-                if toolCount > 200 { stop(error: failure("Computer use reached its action limit. Review the app before continuing.")); return }
+                if toolCount > 500 { stop(error: failure("Computer use reached its action limit. Continue to pick up where it stopped.")); return }
                 progress?(item["type"] as? String == "mcpToolCall" ? "Using computer controls" : "Running a command")
             }
         case "item/completed":
