@@ -109,7 +109,6 @@ final class AssistantController: ObservableObject {
     private var voiceBundleID: String?
     private var meterSubscription: AnyCancellable?
     private var wakeSubscription: AnyCancellable?
-    private var followUpSubscription: AnyCancellable?
     /// A request started by the wake phrase ends by itself when the user stops talking.
     private var stopsOnSilence = false
     private var heardSpeech = false
@@ -129,8 +128,7 @@ final class AssistantController: ObservableObject {
         if heardSpeech && quiet > 1.4 {
             stopsOnSilence = false
             toggleVoice()
-        } else if !heardSpeech && Date().timeIntervalSince(recordingStarted) > (followUp ? 5 : 6) {
-            followUp = false
+        } else if !heardSpeech && Date().timeIntervalSince(recordingStarted) > 6 {
             stopsOnSilence = false
             cancel()
         }
@@ -223,10 +221,6 @@ final class AssistantController: ObservableObject {
         }
         // "Hey <name>": listen while idle; pause while recording or reading a reply aloud.
         WakeWordListener.shared.onWake = { [weak self] in self?.wakeHeard() }
-        followUpSubscription = playback.$playingMessageID.removeDuplicates().dropFirst().sink { [weak self] playing in
-            guard playing == nil else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.startFollowUp() }
-        }
         wakeSubscription = $recording.combineLatest(playback.$playingMessageID.map { $0 != nil })
             .removeDuplicates { $0 == $1 }
             .sink { recording, speaking in
@@ -487,16 +481,6 @@ final class AssistantController: ObservableObject {
             recording = false; busy = true; phase = "Transcribing"
             stopsOnSilence = false
             CircleGesture.shared.stop()
-            // A follow-up is sent for transcription only if the on-device recognizer heard words,
-            // so background noise never costs a cloud request.
-            let wasFollowUp = followUp
-            followUp = false
-            let heardWords = !LiveTranscriptPreview.shared.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            if wasFollowUp && LiveTranscriptPreview.isEnabled && !heardWords {
-                recording = true; busy = false
-                cancel()
-                return
-            }
             SoundManager.shared.playStopSound()
             LiveTranscriptPreview.shared.stop()
             work = Task {
@@ -700,7 +684,7 @@ final class AssistantController: ObservableObject {
                     response = decision.text; phase = "Done"; busy = false
                     lastMessage = ActionMessage(role: .assistant, text: decision.text)
                     showResult()
-                    if shouldSpeak(spoken) { speak(decision.text, followUp: spoken) }
+                    if shouldSpeak(spoken) { speak(decision.text) }
                     return
                 }
                 acknowledgment = decision.text
@@ -718,7 +702,7 @@ final class AssistantController: ObservableObject {
         activeRuns.append(run); updateWorking()
         busy = true; phase = "Thinking"
         response = ""; statusLine = acknowledgment
-        if let acknowledgment, shouldSpeak(spoken) { speak(acknowledgment, followUp: false) }
+        if let acknowledgment, shouldSpeak(spoken) { speak(acknowledgment) }
         tuckWhileWorking()
         run.task = Task { await self.step(run) }
         work = run.task
@@ -779,24 +763,11 @@ final class AssistantController: ObservableObject {
         }
     }
 
-    /// After a spoken answer or question, the mic stays open briefly for a follow-up.
-    private var followUpArmed = false
-    private var followUp = false
-
-    private func speak(_ text: String, followUp: Bool) {
-        followUpArmed = followUp
+    /// Speaks a reply. The mic never reopens by itself afterwards: a follow-up starts with the
+    /// shortcut or the wake phrase, and continues the same conversation.
+    private func speak(_ text: String) {
         let message = ActionMessage(role: .assistant, text: QuickTalk.forSpeech(text))
         Task { await playback.toggle(message) }
-    }
-
-    private func startFollowUp() {
-        // Another line started speaking (the answer replacing an acknowledgment): wait for it.
-        guard playback.playingMessageID == nil else { return }
-        guard followUpArmed, !recording, !busy || proposal != nil else { followUpArmed = false; return }
-        followUpArmed = false
-        followUp = true
-        stopsOnSilence = true; heardSpeech = false; lastSpeech = Date()
-        toggleVoice(present: true, mode: .agent, keepOpen: true)
     }
 
     /// One model turn of a request, then its tool call, until it answers or needs approval.
@@ -839,7 +810,7 @@ final class AssistantController: ObservableObject {
                     if foreground === run {
                         // Waiting for approval is not working; it resumes in runProposal.
                         end(run)
-                        if run.spoken && shouldSpeak(true) { speak(QuickTalk.approvalLine(for: call, title: action.title), followUp: true) }
+                        if run.spoken && shouldSpeak(true) { speak(QuickTalk.approvalLine(for: call, title: action.title)) }
                         proposal = action; reviewError = nil
                         // The approval card shows the action; no separate reply text.
                         response = ""; statusLine = nil; phase = "Review action"; busy = false
@@ -1086,7 +1057,7 @@ final class AssistantController: ObservableObject {
                 SpeekNotifications.shared.taskFinished(notice)
                 if self.shouldSpeak(notice.spoken) {
                     let opening = notice.succeeded ? "Done. " : "I couldn't finish that. "
-                    self.speak(opening + QuickTalk.forSpeech(notice.result), followUp: notice.spoken)
+                    self.speak(opening + QuickTalk.forSpeech(notice.result))
                 }
             }
         }
@@ -1214,7 +1185,7 @@ final class AssistantController: ObservableObject {
     }
 
     func cancel() {
-        stopsOnSilence = false; followUp = false
+        stopsOnSilence = false
         LiveTranscriptPreview.shared.stop()
         CircleGesture.shared.stop()
         if let run = foreground { end(run); foreground = nil }
@@ -1259,7 +1230,7 @@ final class AssistantController: ObservableObject {
         response = text; phase = "Done"; resultCards = run.cards
         lastMessage = ActionMessage(role: .assistant, text: text)
         showResult()
-        if shouldSpeak(run.spoken) { speak(text, followUp: run.spoken) }
+        if shouldSpeak(run.spoken) { speak(text) }
     }
     private func fail(_ run: AgentRun, _ error: Error) {
         end(run)

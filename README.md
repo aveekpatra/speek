@@ -30,7 +30,7 @@ Speek sits quietly in your Mac's notch. Hold a key and talk: it types what you s
 
 👋 **Just say its name.** "Hey Speek, what's on my calendar today?" Turn on voice activation and start a request without touching the keyboard. Call it whatever you like: pick a name, and Speek answers to it. Listening happens on your Mac, and it stops recording when you stop talking.
 
-💬 **Talk, or ask for things.** Chat with it and get a spoken answer in about a second. Or ask it to do something: "Reply to Tomas that Friday works." "Add lunch with Tomas tomorrow at noon." "Play Faded by Alan Walker." It tells you what it is doing, does it, and answers. After it speaks, just keep talking: the mic stays open for a follow-up.
+💬 **Talk, or ask for things.** Chat with it and get a spoken answer in about a second. Or ask it to do something: "Reply to Tomas that Friday works." "Add lunch with Tomas tomorrow at noon." "Play Faded by Alan Walker." It tells you what it is doing, does it, and answers. To follow up, press the shortcut or say "Hey <name>": it picks up the same conversation.
 
 👆 **Point at your screen.** Speek sees what you are looking at when you ask. To point at something specific, circle it with the pointer while you hold the shortcut. "This" then means exactly what you circled.
 
@@ -99,7 +99,7 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 ### The assistant
 - A notch panel that stays out of your way, and a main window for longer conversations.
 - Quick replies: conversation and questions are answered directly in about a second, and tasks start with a short spoken acknowledgment.
-- Voice in, voice out: when you speak, Speek answers out loud (configurable), and the mic stays open a few seconds for a follow-up. The follow-up is checked on your Mac first, so silence costs nothing.
+- Voice in, voice out: when you speak, Speek answers out loud (configurable), and a follow-up by shortcut or wake phrase continues the conversation. Answers sound like a person: the result first, then the useful details.
 - Conversations start and continue on their own: a quick follow-up continues, a new topic later starts fresh.
 - Computer tasks that run in the background and report back, and approvals you answer right in the notch: an email, an event, a file change, or a song appears as a card you can edit before it goes.
 - Your screen with each request (you can turn it off), a circle gesture to point, and "look at my screen" on demand.
