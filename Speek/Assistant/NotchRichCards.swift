@@ -26,6 +26,13 @@ enum RichCard {
 
     static func key(_ candidates: [String], in arguments: [String: MCPValue]) -> String? { candidates.first { arguments[$0] != nil } }
 
+    /// The tool that sends what a draft tool would save, with the same arguments.
+    static func sendVariant(of tool: String) -> String? {
+        if tool == "mail.draft" { return "mail.send" }
+        if tool.hasSuffix(":create_draft") { return String(tool.dropLast("create_draft".count)) + "send_message" }
+        return nil
+    }
+
     static func detect(_ call: RuntimeCall) -> RichCard? {
         let args = call.arguments
         let name = call.tool.split(separator: ":").last.map(String.init)?.lowercased() ?? call.tool
@@ -157,6 +164,7 @@ struct RichApprovalCard: View {
             Spacer(minLength: 0)
             Menu {
                 Button("Cancel") { controller.cancelProposal() }
+                if sendTool != nil { Button("Save as Draft") { commit(); controller.runProposal() } }
                 Divider()
                 Button("Always allow " + (ActionRuntime.shared.tools.first { $0.id == call.tool }?.title ?? "this")) {
                     commit(); ToolPolicyStore.shared.set(.allow, for: call.tool); controller.runProposal()
@@ -260,7 +268,7 @@ struct RichApprovalCard: View {
     }
 
     private var primaryButton: some View {
-        Button { commit(); controller.runProposal() } label: {
+        Button { commit(sending: true); controller.runProposal() } label: {
             Text(primary).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                 .padding(.horizontal, 22).frame(height: 34)
                 .background(Color.accentColor, in: Capsule())
@@ -332,7 +340,7 @@ struct RichApprovalCard: View {
 
     private var title: String {
         switch card {
-        case .message(let message): return message.sends ? "New Message" : (message.to == nil ? "Reply" : "New Draft")
+        case .message(let message): return message.sends || sendTool != nil ? "New Message" : (message.to == nil ? "Reply" : "New Draft")
         case .event(let event): return event.updates ? "Change Event" : "New Event"
         case .file(let change):
             switch change.action {
@@ -349,7 +357,7 @@ struct RichApprovalCard: View {
 
     private var primary: String {
         switch card {
-        case .message(let message): return message.sends ? "Send" : "Save Draft"
+        case .message(let message): return message.sends || sendTool != nil ? "Send" : "Save Draft"
         case .event: return "Save"
         case .file(let change): return change.action == "trash" ? "Move to Trash" : change.action == "move" ? "Move" : change.action == "copy" ? "Copy" : "Save"
         case .music(let music): return music.queues ? "Add" : "Play"
@@ -417,8 +425,16 @@ struct RichApprovalCard: View {
         }
     }
 
-    /// Writes edited fields back into the proposal before it runs.
-    private func commit() {
+    /// A draft the user can see and edit in full is sent by the main button; saving it as a draft
+    /// stays in the menu. Nil when the source has no matching send tool (Apple Mail replies).
+    private var sendTool: String? {
+        guard case .message(let message) = card, !message.sends, let variant = RichCard.sendVariant(of: call.tool),
+              ActionRuntime.shared.tools.contains(where: { $0.id == variant }) else { return nil }
+        return variant
+    }
+
+    /// Writes edited fields back into the proposal before it runs; `sending` switches a draft to its send tool.
+    private func commit(sending: Bool = false) {
         var args = call.arguments
         switch card {
         case .message:
@@ -452,7 +468,7 @@ struct RichApprovalCard: View {
         case .music:
             break
         }
-        controller.updateReviewedArguments(args)
+        controller.updateReviewedArguments(args, tool: sending ? sendTool : nil)
     }
 
     private static func split(_ text: String) -> [String] {

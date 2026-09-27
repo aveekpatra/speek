@@ -1103,10 +1103,11 @@ final class AssistantController: ObservableObject {
         expanded = true; resize()
     }
 
-    func updateReviewedArguments(_ arguments: [String: MCPValue]) {
+    /// `tool`: run a different tool with the same arguments (a draft sent instead of saved).
+    func updateReviewedArguments(_ arguments: [String: MCPValue], tool: String? = nil) {
         guard let current = proposal, current.kind == .toolCall,
               let call = try? RuntimeCall(target: current.target) else { return }
-        let updated = RuntimeCall(tool: call.tool, arguments: arguments)
+        let updated = RuntimeCall(tool: tool ?? call.tool, arguments: arguments)
         proposal = ProposedAction(kind: .toolCall, title: current.title, target: updated.json, response: current.response)
     }
 

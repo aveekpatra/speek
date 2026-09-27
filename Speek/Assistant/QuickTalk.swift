@@ -77,7 +77,8 @@ enum QuickTalk {
             switch card {
             case .message(let message):
                 let who = message.to.flatMap { $0.split(separator: ",").first.map { " to " + $0.trimmingCharacters(in: .whitespaces) } } ?? ""
-                return message.sends ? "I wrote the message\(who). Should I send it?" : "I drafted it\(who). Want me to save the draft?"
+                let sends = message.sends || RichCard.sendVariant(of: call.tool) != nil
+                return sends ? "I wrote the message\(who). Should I send it?" : "I drafted it\(who). Want me to save the draft?"
             case .event(let event): return "Ready to add \(event.title.isEmpty ? "the event" : event.title). Should I save it?"
             case .file: return "Ready to change that file. Should I go ahead?"
             case .music: return "Want me to play it?"
