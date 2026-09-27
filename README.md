@@ -1,43 +1,92 @@
-# Speek
+<p align="center">
+  <img src="Speek/Assets.xcassets/AppIcon.appiconset/256-mac.png" width="96" alt="Speek icon">
+</p>
 
-Speek is a voice assistant for your Mac that lives in the notch. Hold a key and talk: it types what you say into any app, or it does what you ask, using your apps, your accounts, and what is on your screen.
+<h1 align="center">Speek</h1>
 
-<!-- Screenshots will be added here. -->
+<p align="center">
+  <b>Talk to your Mac. It listens, writes, and gets things done.</b><br>
+  A voice assistant that lives in the notch.
+</p>
 
-## What you can do with it
+<p align="center">
+  <a href="#what-it-does">What it does</a> &nbsp;|&nbsp;
+  <a href="#showcase">Showcase</a> &nbsp;|&nbsp;
+  <a href="#features">Features</a> &nbsp;|&nbsp;
+  <a href="#getting-started">Getting started</a> &nbsp;|&nbsp;
+  <a href="#acknowledgments">Acknowledgments</a>
+</p>
 
-**Write without typing.** Hold the shortcut, speak, let go. Your words appear in whatever text field you are in: Mail, Slack, Notes, a browser, a terminal. Speek fits the text into what is already there (spacing, capitals), formats it for the app you are in, and can polish it into clean sentences.
+<p align="center">
+  <img src="Screenshots/desktop-overview.png" width="860" alt="Speek on the desktop, with the notch and the main window">
+</p>
 
-**Ask for things out loud.** "Reply to Tomas that Friday works." "What's on my calendar tomorrow?" "Play Faded by Alan Walker." "Unsubscribe me from this newsletter." Speek works out what to do, uses the right app or service, and answers in the notch, or reads the answer aloud.
+Speek sits quietly in your Mac's notch. Hold a key and talk: it types what you say into any app, or it does what you ask, using your apps, your accounts, and whatever is on your screen. No switching windows, no copying and pasting, no hunting through menus.
 
-**Point at your screen.** Speek sees the screen you are looking at when you ask. To point at something specific, circle it with the pointer while you hold the shortcut: a stroke follows your pointer, and "this" means what you circled.
+<a id="what-it-does"></a>
+## What it does
 
-**Let it work while you keep going.** Ask something new while a task is still running and the first one keeps going in the background. When it finishes, a notice appears in the notch, and the result waits in its conversation.
+🎙️ **Write without typing.** Hold the shortcut, speak, let go. Your words land in whatever text field you are in: Mail, Slack, Notes, a browser, a terminal. Speek fits them into what is already there and can polish them into clean sentences.
 
-**Have it remember.** Say "remember my sister's name is Priya" or "remember I prefer meetings after 11". Speek keeps it and uses it when it matters. Say "forget ..." to remove something. Lock the things that should always be true.
+💬 **Ask for things out loud.** "Reply to Tomas that Friday works." "What's on my calendar tomorrow?" "Play Faded by Alan Walker." "Unsubscribe me from this newsletter." Speek picks the right app or service, does it, and answers in the notch.
 
+👆 **Point at your screen.** Speek sees what you are looking at when you ask. To point at something specific, circle it with the pointer while you hold the shortcut. "This" then means exactly what you circled.
+
+🧵 **Keep going while it works.** Ask something new while a task is still running, and the first one carries on in the background. When it is done, a notice appears in the notch and the result waits in its conversation.
+
+🧠 **It remembers.** Say "remember my sister's name is Priya" or "remember I prefer meetings after 11". Speek keeps it and uses it when it matters. Say "forget ..." to let it go.
+
+<a id="showcase"></a>
+## Showcase
+
+<p align="center">
+  <img src="Screenshots/notch-resting.png" width="420" alt="The resting notch">
+  <br><sub>At rest, Speek is part of the notch: the app you are in on the left, voice on the right.</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="Screenshots/notch-task-complete.png" alt="A finished background task in the notch"></td>
+    <td width="50%"><img src="Screenshots/chat-conversation.png" alt="A conversation in the main window"></td>
+  </tr>
+  <tr>
+    <td><sub>A background task reports back in the notch.</sub></td>
+    <td><sub>Every conversation is kept in the main window.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="Screenshots/integrations-plugins.png" alt="Plugins"></td>
+    <td><img src="Screenshots/integrations-native-apps.png" alt="Native apps"></td>
+  </tr>
+  <tr>
+    <td><sub>Plugins: Gmail, Calendar, GitHub, Notion, Linear, and more.</sub></td>
+    <td><sub>The Mac's own apps, each with its own permissions.</sub></td>
+  </tr>
+</table>
+
+More screenshots are in the [Screenshots](Screenshots) folder.
+
+<a id="features"></a>
 ## Features
 
 ### Dictation
 - Hold-to-speak shortcut, a double-tap for hands-free, or a mouse button.
-- Raw, light cleanup, or polished writing, with a writing style you choose.
-- Writing adapts to the app you are in and to the text around your cursor.
-- Edit selected text by voice: select, then say "make this shorter" or "translate to Czech".
+- Raw, lightly cleaned up, or polished writing, in a style you choose.
+- Writing that adapts to the app you are in and to the text around your cursor.
+- Edit selected text by voice: select it, then say "make this shorter" or "translate to Czech".
 - A live transcript while you speak.
-- Vocabulary for names and terms, including spoken shortcuts and bulk import.
-- Learns from your corrections: fix a misheard name right after dictating, and Speek remembers it, with Undo.
-- Several recognition languages.
-- Dictation history with one-click copy, and optional recovery of recordings that failed.
+- Vocabulary for names and terms, spoken shortcuts, and bulk import.
+- Learns from your corrections: fix a misheard name right after dictating and Speek remembers it, with Undo.
+- Several recognition languages, dictation history with one-click copy, and optional recovery of recordings that failed.
 
 ### The assistant
-- A notch panel that stays out of the way, and a main window for longer conversations.
-- Conversations start and continue on their own: a follow-up within a few minutes continues the conversation, a new topic later starts a new one.
+- A notch panel that stays out of your way, and a main window for longer conversations.
+- Conversations start and continue on their own: a quick follow-up continues, a new topic later starts fresh.
 - Background tasks that report back, and approvals you answer right in the notch.
-- Screen context with each request (can be turned off), a circle gesture to point, and "look at my screen" on demand.
-- Attach images, PDFs, and text files by dropping or pasting them into the notch.
+- Your screen with each request (you can turn it off), a circle gesture to point, and "look at my screen" on demand.
+- Images, PDFs, and text files: drop or paste them into the notch.
 - Answers you can copy, insert into the app you were using, or have read aloud.
-- Reusable prompts and schedules for recurring requests.
-- Choice of model and provider (OpenRouter, OpenAI, or a local Codex login).
+- Reusable prompts, and schedules for recurring requests.
+- Your choice of model and provider: OpenRouter, OpenAI, or a local Codex login.
 
 ### Your Mac and apps
 - **Mail and Messages:** search, read, draft, reply, send, file, and mark messages.
@@ -46,45 +95,43 @@ Speek is a voice assistant for your Mac that lives in the notch. Hold a key and 
 - **Music and Spotify:** play, pause, skip, search, playlists, and your library.
 - **Media keys and volume:** play, pause, and skip in whatever is playing, and set the volume.
 - **Files:** read and organize files in a working folder you choose.
-- **Computer use:** when no connected tool can do something, Speek operates the app on screen for you: clicking, typing, and navigating.
-- **Shell:** runs command-line tools you already use, such as the GitHub CLI.
+- **Computer use:** when no connected tool can do something, Speek works the app on screen for you, clicking, typing, and navigating.
+- **Shell:** the command-line tools you already use, such as the GitHub CLI.
 
 ### Connected services
 - Plugins through the Model Context Protocol, with one-click sign-in: Gmail, Google Calendar, GitHub, Notion, Linear, LexyOS, Aturno, and hundreds more through Composio.
-- Add any remote or local MCP server, and your own command-line tools.
+- Any remote or local MCP server, and your own command-line tools.
 - Skills: written instructions that teach Speek how to use a tool well.
-- Replies for coding assistants: when Claude Code or Codex finishes or needs you, Speek shows it and lets you answer by voice.
+- Coding assistants: when Claude Code or Codex finishes or needs you, Speek shows it and lets you answer by voice.
 
 ### Memory
-- Facts you ask it to remember, locked preferences that are always used, procedures for recurring work, and a history of past requests.
+- Facts you ask it to remember, locked preferences that always apply, procedures for recurring work, and a history of past requests.
 - Recall that understands meaning, not just matching words.
-- Everything is visible and editable in Memory.
+- Everything is visible and editable under Memory.
 
 ### Control and privacy
-- Choose per tool whether Speek asks first, always runs it, or never uses it.
-- Settings for saving history, and a pause for dictation in password fields.
+- For every tool, choose whether Speek asks first, just does it, or never uses it.
+- Control over saved history, and dictation pauses in password fields.
 - Plugin sign-ins and memory are stored on your Mac.
 
-## Requirements
-
-- macOS 26 on a Mac. Speek is built for the Mac only.
-- An OpenRouter or OpenAI API key for voice and the assistant. Computer use also needs Codex installed and signed in.
-- Permissions, asked for when a feature first needs them: Microphone, Accessibility, Screen Recording, and access to the apps you connect.
-
+<a id="getting-started"></a>
 ## Getting started
 
-1. Open Speek and go to **Models & Voice** to add your API key.
-2. Grant Microphone and Accessibility when asked.
-3. Hold the shortcut (Option-Space by default) and talk.
+**You need** a Mac running macOS 26, and an OpenRouter or OpenAI API key. Computer use also needs Codex installed and signed in. Speek is made for the Mac only.
+
+1. Open Speek and add your API key under **Models & Voice**.
+2. Allow Microphone and Accessibility when asked. Screen Recording and app access are requested when a feature first needs them.
+3. Hold the shortcut (Option-Space by default) and start talking.
 4. Turn on the apps and services you want under **Integrations**.
 
 ## For developers
 
-Speek builds with Xcode 26. `./scripts/dev-build.sh` builds, signs with the stable development identity, and installs to `/Applications/Speek.app`. Checks live in `scripts/checks/`. [Feature status](docs/FEATURE_STATUS.md) lists supported paths and known limits, and [PRD.md](PRD.md) describes current behavior.
+Speek builds with Xcode 26. `./scripts/dev-build.sh` builds, signs with the stable development identity, and installs to `/Applications/Speek.app`. Checks live in `scripts/checks/`. [Feature status](docs/FEATURE_STATUS.md) lists what is supported and known limits, and [PRD.md](PRD.md) describes current behavior.
 
+<a id="acknowledgments"></a>
 ## Acknowledgments
 
-Speek builds on the work of these open-source projects:
+Speek stands on the shoulders of these open-source projects:
 
 - [VoiceInk](https://github.com/Beingpax/VoiceInk) by Prakash Joshi Pax (GPL-3.0)
 - [Whisper Pro](https://github.com/ZdenekCulik/whisper-pro) by Zdenek Culik (GPL-3.0)
@@ -94,4 +141,4 @@ Speek builds on the work of these open-source projects:
 
 ## License
 
-Speek is free software under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+Speek is free software under the [GNU General Public License v3.0](LICENSE).
