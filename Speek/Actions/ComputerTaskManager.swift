@@ -8,6 +8,8 @@ struct ComputerTaskJob: Identifiable, Codable {
     let sourceThreadID: UUID?
     var status: Status = .queued
     var progress = "Queued"
+    /// Every step it reported, for looking back at how a task went (last 150).
+    var trail: [String]?
     var result: String?
     var createdAt = Date()
 }
@@ -85,7 +87,11 @@ final class ComputerTaskManager: ObservableObject {
         worker = Task { [self] in
             do {
                 let result = try await operation { [weak self] progress in
-                    self?.update(job.id) { if $0.status == .running { $0.progress = progress } }
+                    self?.update(job.id) { job in
+                        guard job.status == .running else { return }
+                        job.progress = progress
+                        if job.trail?.last != progress { job.trail = Array(((job.trail ?? []) + [progress]).suffix(150)) }
+                    }
                 }
                 try Task.checkCancellation()
                 update(job.id) { $0.status = .completed; $0.progress = "Completed"; $0.result = result }
