@@ -95,7 +95,7 @@ struct AssistantSettingsView: View {
             }
             SettingsSection(title: "Voice activation") {
                 SettingsRow(title: "Hey " + (wakeName.trimmingCharacters(in: .whitespaces).isEmpty ? "Speek" : wakeName.trimmingCharacters(in: .whitespaces)), icon: "waveform.badge.mic",
-                            value: wake.problem ?? (wakeEnabled ? (wake.listening ? "Listening" : "Paused while Speek is busy") : nil),
+                            value: wake.problem ?? (wakeEnabled ? (wake.listening ? "Listening" + (wake.lastHeard.map { ". Last heard: \"" + $0 + "\"" } ?? "") : "Paused while Speek is busy") : nil),
                             info: "Say the phrase to start a request, then say what you need; it ends when you stop talking. Listening happens on this Mac, and nothing is sent until you make a request. The microphone stays on while this is enabled.") {
                     Toggle("Voice activation", isOn: $wakeEnabled).labelsHidden().toggleStyle(.switch)
                         .onChange(of: wakeEnabled) { _, _ in WakeWordListener.shared.refresh() }
@@ -103,7 +103,12 @@ struct AssistantSettingsView: View {
                 SettingsRowDivider(leading: 60)
                 SettingsRow(title: "Assistant name", icon: "person.wave.2", info: "The name after \"Hey\". Short names that are not common words work best.") {
                     TextField("Speek", text: $wakeName).textFieldStyle(.roundedBorder).frame(width: 140)
-                        .onSubmit { WakeWordListener.shared.refresh() }
+                        // Apply the name as it is typed (after a short pause), not only on Return.
+                        .task(id: wakeName) {
+                            try? await Task.sleep(for: .milliseconds(700))
+                            guard !Task.isCancelled else { return }
+                            WakeWordListener.shared.refresh()
+                        }
                 }
             }
             SettingsSection(title: "Context") {

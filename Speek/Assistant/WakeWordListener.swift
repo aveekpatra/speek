@@ -22,6 +22,8 @@ final class WakeWordListener: ObservableObject {
     var onWake: (() -> Void)?
     @Published private(set) var listening = false
     @Published private(set) var problem: String?
+    /// The last thing heard that started with a greeting, so the user can see how the name is recognized.
+    @Published private(set) var lastHeard: String?
 
     private var engine: AVAudioEngine?
     private var analyzer: SpeechAnalyzer?
@@ -52,12 +54,18 @@ final class WakeWordListener: ObservableObject {
                 let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
                 let analyzer = SpeechAnalyzer(modules: [transcriber])
                 self.analyzer = analyzer
+                // Bias recognition toward the chosen name, which is often not a dictionary word.
+                let context = AnalysisContext()
+                context.contextualStrings[.general] = ["Hey " + name, "Hi " + name, "Okay " + name, name]
+                try? await analyzer.setContext(context)
                 try self.startMicrophone(converting: format, generation: current)
                 self.tasks.append(Task { [weak self] in
                     do {
                         for try await result in transcriber.results {
                             guard let self, current == self.generation else { return }
-                            if Self.matches(String(result.text.characters), name: name) {
+                            let heard = String(result.text.characters)
+                            if let phrase = Self.greetingPhrase(in: heard) { self.lastHeard = phrase }
+                            if Self.matches(heard, name: name) {
                                 self.stop()
                                 self.onWake?()
                                 return
@@ -131,8 +139,44 @@ final class WakeWordListener: ObservableObject {
             let one = words[index + 1]
             let two = index + 2 < words.count ? one + words[index + 2] : one
             if distance(one, target) <= tolerance || distance(two, target) <= tolerance { return true }
+            // Sounds the same ("Jervis" for "Jarvis", "Nova" for "Noah" does not): same Soundex code.
+            if target.count >= 3, soundex(one) == soundex(target) || soundex(two) == soundex(target) { return true }
         }
         return false
+    }
+
+    /// "hey jervis" from the recognized text: the greeting and the two words after it.
+    nonisolated static func greetingPhrase(in text: String) -> String? {
+        let words = text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        let greetings: Set<String> = ["hey", "hi", "hello", "okay", "ok", "yo", "hay"]
+        guard let index = words.lastIndex(where: greetings.contains), index + 1 < words.count else { return nil }
+        return words[index...min(index + 2, words.count - 1)].joined(separator: " ")
+    }
+
+    /// American Soundex: first letter plus three digits for the consonant sounds.
+    nonisolated static func soundex(_ word: String) -> String {
+        let letters = Array(word.uppercased().filter(\.isLetter))
+        guard let first = letters.first else { return "" }
+        func code(_ c: Character) -> Character? {
+            switch c {
+            case "B", "F", "P", "V": return "1"
+            case "C", "G", "J", "K", "Q", "S", "X", "Z": return "2"
+            case "D", "T": return "3"
+            case "L": return "4"
+            case "M", "N": return "5"
+            case "R": return "6"
+            default: return nil
+            }
+        }
+        var result = String(first)
+        var previous = code(first)
+        for c in letters.dropFirst() {
+            let current = code(c)
+            if let current, current != previous { result.append(current) }
+            if c != "H" && c != "W" { previous = current }
+            if result.count == 4 { break }
+        }
+        return result.padding(toLength: 4, withPad: "0", startingAt: 0)
     }
 
     nonisolated private static func distance(_ a: String, _ b: String) -> Int {
