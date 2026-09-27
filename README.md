@@ -84,7 +84,7 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 ### The assistant
 - A notch panel that stays out of your way, and a main window for longer conversations.
 - Conversations start and continue on their own: a quick follow-up continues, a new topic later starts fresh.
-- Background tasks that report back, and approvals you answer right in the notch.
+- Background tasks that report back, and approvals you answer right in the notch: an email, an event, a file change, or a song appears as a card you can edit before it goes.
 - Your screen with each request (you can turn it off), a circle gesture to point, and "look at my screen" on demand.
 - Images, PDFs, and text files: drop or paste them into the notch.
 - Answers you can copy, insert into the app you were using, or have read aloud.

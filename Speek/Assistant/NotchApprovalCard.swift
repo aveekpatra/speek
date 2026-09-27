@@ -12,7 +12,12 @@ struct NotchApprovalCard: View {
         if let request = computer.approval {
             computerCard(request)
         } else if let proposal = controller.proposal, let call = try? RuntimeCall(target: proposal.target) {
-            toolCard(proposal, call: call)
+            if let rich = RichCard.detect(call) {
+                RichApprovalCard(card: rich, call: call, source: ActionRuntime.shared.source(of: call.tool), controller: controller)
+                    .id(proposal.target)
+            } else {
+                toolCard(proposal, call: call)
+            }
         }
     }
 
@@ -118,6 +123,7 @@ struct NotchApprovalCard: View {
             return 88 + lines * 16 + (ComputerTaskManager.shared.currentJob == nil ? 0 : 16)
         }
         if let proposal = controller.proposal, let call = try? RuntimeCall(target: proposal.target) {
+            if let rich = RichCard.detect(call) { return RichApprovalCard.height(for: rich) }
             return 104 + min(4, call.arguments.count) * 16
         }
         return 0
