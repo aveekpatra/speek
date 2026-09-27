@@ -364,21 +364,29 @@ final class AssistantController: ObservableObject {
         }
     }
 
-    /// True when the frontmost app has a window covering the whole notch display, which is what
-    /// a full-screen app looks like in the window list (bounds need no screen-recording access).
+    /// True when the frontmost app's focused window is in macOS full screen on the notch display.
+    /// Read through Accessibility (AXFullScreen): window sizes alone cannot tell full screen from
+    /// a maximized window, since full-screen apps sit below the camera on notched displays.
     private func updateTucked() {
-        guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main,
-              let app = NSWorkspace.shared.frontmostApplication,
-              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
-            if tucked { tucked = false; resize() }
-            return
-        }
-        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        let full = windows.contains { info in
-            guard (info[kCGWindowOwnerPID as String] as? pid_t) == app.processIdentifier,
-                  (info[kCGWindowLayer as String] as? Int) == 0,
-                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat] else { return false }
-            return abs((bounds["Width"] ?? 0) - screen.frame.width) < 1 && abs((bounds["Height"] ?? 0) - screen.frame.height) < 1
+        var full = false
+        if trusted, let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }),
+           let app = NSWorkspace.shared.frontmostApplication,
+           app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            let element = AXUIElementCreateApplication(app.processIdentifier)
+            AXUIElementSetMessagingTimeout(element, 0.3)
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &value) == .success, let value {
+                let window = value as! AXUIElement
+                var flag: CFTypeRef?, sizeValue: CFTypeRef?
+                var size = CGSize.zero
+                if AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &flag) == .success,
+                   (flag as? Bool) == true,
+                   AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue) == .success,
+                   let sizeValue, AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) {
+                    // Full screen on this display, not on another one.
+                    full = abs(size.width - screen.frame.width) < 1
+                }
+            }
         }
         if full != tucked { tucked = full; resize() }
     }
