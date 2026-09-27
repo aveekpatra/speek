@@ -99,6 +99,7 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 - **Notes:** search, read, create, and add to notes.
 - **Music and Spotify:** play, pause, skip, search, playlists, and your library.
 - **Media keys and volume:** play, pause, and skip in whatever is playing, and set the volume.
+- **Weather and places:** "What's the weather?" uses your Mac's location and shows an interactive forecast card. "Coffee near me" shows the results on an Apple Maps card.
 - **Files:** read and organize files in a working folder you choose.
 - **Computer use:** when no connected tool can do something, Speek works the app on screen for you, clicking, typing, and navigating.
 - **Shell:** the command-line tools you already use, such as the GitHub CLI.

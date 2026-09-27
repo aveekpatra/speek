@@ -40,6 +40,7 @@ struct AssistantSurface: View {
         .onChange(of: controller.proposal != nil) { _, _ in controller.resize() }
         .onChange(of: controller.draft) { _, _ in controller.resize() }
         .onReceive(controller.attachments.$attachments) { _ in controller.resize() }
+        .onChange(of: controller.resultCards.count) { _, _ in controller.resize() }
         .onReceive(CorrectionLearner.shared.$notice) { _ in DispatchQueue.main.async { controller.resize() } }
         .onExitCommand { controller.collapse() }
     }
@@ -232,6 +233,7 @@ struct AssistantSurface: View {
             if !controller.response.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
+                        ForEach(controller.resultCards) { card in ResultCardView(card: card) }
                         if !controller.response.isEmpty {
                             AnswerMarkdown(text: controller.response).draggable(controller.response)
                         }

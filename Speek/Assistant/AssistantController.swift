@@ -45,6 +45,8 @@ final class AssistantController: ObservableObject {
     /// The request the notch's answer belongs to, and its circle screenshot if any.
     @Published private(set) var lastRequest = ""
     @Published private(set) var lastRequestImage: Data?
+    /// Cards shown with the current answer (weather, map).
+    @Published private(set) var resultCards: [ResultCard] = []
     /// When the current session last had a turn; after 10 minutes the next notch request starts fresh.
     private var lastActivity: Date?
     private var voiceFromNotch = true
@@ -377,7 +379,8 @@ final class AssistantController: ObservableObject {
         let bodyHeight = hasContent ? Int(min(180, max(24, measuredBody))) + 12 : 0
         // Session header, and the request the answer belongs to (up to two lines).
         let requestHeight = !lastRequest.isEmpty && (busy || hasContent) ? Int(min(34, textHeight(lastRequest, size: 12, spacing: 0))) + 12 : 0
-        let extras = 32 + requestHeight + (taskNotices.isEmpty ? 0 : 116) + (context == nil ? 0 : 44) + (taskStatus.isEmpty ? 0 : 44) + NotchApprovalCard.height(for: self) + (NotchApprovalCard.height(for: self) > 0 ? 12 : 0)
+        let cardsHeight = resultCards.reduce(0) { $0 + ResultCardView.height($1) + 12 }
+        let extras = 32 + requestHeight + cardsHeight + (taskNotices.isEmpty ? 0 : 116) + (context == nil ? 0 : 44) + (taskStatus.isEmpty ? 0 : 44) + NotchApprovalCard.height(for: self) + (NotchApprovalCard.height(for: self) > 0 ? 12 : 0)
             + NotchElicitationCard.height() + (NotchElicitationCard.height() > 0 ? 12 : 0) + (attachments.attachments.isEmpty && !attachments.isImporting ? 0 : 30)
         let draftLines = min(3, max(1, draft.count / 45 + draft.filter { $0 == "\n" }.count + 1))
         let recoveryBody = textHeight(dictationError, size: 12, spacing: 0)
@@ -667,7 +670,7 @@ final class AssistantController: ObservableObject {
             store.setReasoning(reasoningEffort, for: threadID!)
         }
         let history = AssistantMemory.shared.saveHistory ? (threadID.flatMap { savedID in store.threads.first { $0.id == savedID }?.messages } ?? transientHistory) : transientHistory
-        busy = true; phase = "Thinking"; response = ""
+        busy = true; phase = "Thinking"; response = ""; resultCards = []
         // A circle wins; otherwise the screenshot taken when the request started.
         let circled = context?.isRegion == true
         if context == nil, let screen = pendingScreen { context = await screen.value }
@@ -804,6 +807,11 @@ final class AssistantController: ObservableObject {
 
     /// Runs a tool for a request. Looking at the screen attaches a fresh screenshot to the request.
     private func execute(_ call: RuntimeCall, for run: AgentRun, approved: Bool) async throws -> String {
+        if PlacesTools.isTool(call.tool) {
+            let (text, card) = try await PlacesTools.execute(call)
+            if let card { run.cards.removeAll { $0.id == card.id }; run.cards.append(card) }
+            return text
+        }
         guard call.tool == ActionRuntime.screenToolID else { return try await ActionRuntime.shared.execute(call, approved: approved) }
         run.context = try await ScreenContext.shared.captureFocusedScreen()
         if foreground === run { lastRequestImage = run.context?.image }
@@ -1137,7 +1145,7 @@ final class AssistantController: ObservableObject {
             return
         }
         foreground = nil; busy = false
-        response = text; phase = "Done"
+        response = text; phase = "Done"; resultCards = run.cards
         lastMessage = ActionMessage(role: .assistant, text: text)
         if text.hasPrefix("Opened ") || text.hasPrefix("Remembered:") {
             dismissTask?.cancel()
@@ -1196,6 +1204,8 @@ final class AgentRun {
     var task: Task<Void, Never>?
     /// Said out loud: replies and questions are spoken back.
     var spoken = false
+    /// Cards produced by its tools, shown with the answer.
+    var cards: [ResultCard] = []
 
     init(request: String, threadID: UUID?, identity: UUID, history: [ActionMessage], connection: ActionConnection, modelID: String?,
          reasoning: String?, context: AssistantScreenContext?, images: [Data], attachmentText: String) {

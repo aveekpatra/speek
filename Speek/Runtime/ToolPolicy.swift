@@ -151,6 +151,8 @@ final class ToolPolicyStore: ObservableObject {
         }
         result.append(ToolPolicyGroup(id: "schedules", title: "Schedules", icon: .symbol("calendar.badge.clock"),
             tools: ScheduleTools.catalog.map { ToolPolicyEntry(id: $0.id, title: $0.title, summary: $0.summary, changesData: $0.requiresReview) }))
+        result.append(ToolPolicyGroup(id: "places", title: "Location and weather", icon: .symbol("location"),
+            tools: PlacesTools.catalog.map { ToolPolicyEntry(id: $0.id, title: $0.title, summary: $0.summary, changesData: $0.requiresReview) }))
         result.append(ToolPolicyGroup(id: "media", title: "Media keys", icon: .symbol("playpause"),
             tools: MediaTools.catalog.map { ToolPolicyEntry(id: $0.id, title: $0.title, summary: $0.summary, changesData: $0.requiresReview) }))
         result.append(ToolPolicyGroup(id: "web", title: "Web", icon: .symbol("globe"),
