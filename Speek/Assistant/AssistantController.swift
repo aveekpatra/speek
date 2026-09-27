@@ -177,6 +177,7 @@ final class AssistantController: ObservableObject {
         AgentUpdateCenter.shared.recorder = recorder
         CodexComputerUse.skillInstructions = { IntegrationStore.shared.enabledSkillInstructions(for: $0) }
         CircleGesture.shared.onCircle = { [weak self] captured in self?.context = captured }
+        SpeekNotifications.shared.start()
         // Meaning-based recall uses the embedding model of the provider Speek already uses.
         AssistantMemory.shared.setEmbedder(CloudMemoryEmbedder(credentials: {
             let provider = ActionCredentials.voiceProvider
@@ -508,7 +509,8 @@ final class AssistantController: ObservableObject {
                     let recoveryID = RecordingRecovery.shared.save(audioURL: url, appName: voiceAppName)
                     let text = try await CloudActionClient.transcribe(url, hints: voiceMode == .dictation ? (voiceSurrounding?.terms ?? []) : [])
                     try Task.checkCancellation()
-                    let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // Vocabulary corrections apply to requests too ("Eagle Light" saved as "Ego Lite").
+                    let transcript = DictationPipeline.applyCorrections(text.trimmingCharacters(in: .whitespacesAndNewlines), entries: DictationPipeline.vocabulary())
                     guard !transcript.isEmpty else { throw ActionClientError.requestFailed("No speech detected. Try speaking again.") }
                     if voiceMode == .dictation && replyingToAgent {
                         let processed = try await DictationPipeline.process(transcript: transcript, destination: DictationDestination(appName: voiceAppName, bundleIdentifier: voiceBundleID))
@@ -733,10 +735,36 @@ final class AssistantController: ObservableObject {
         resize(); panel?.orderFrontRegardless()
     }
 
-    /// Opens the notch to show what just arrived.
+    /// Opens the notch to show what just arrived, then folds it away after enough time to read.
     private func showResult() {
         dismissTask?.cancel()
         expanded = true; resize(); panel?.orderFrontRegardless()
+        scheduleAutoCollapse()
+    }
+
+    private var hovering = false
+
+    /// Pointer over the notch: it stays open; leaving it folds away shortly after.
+    func setHovering(_ inside: Bool) {
+        hovering = inside
+        if inside { dismissTask?.cancel() }
+        else if expanded && !response.isEmpty { scheduleAutoCollapse(after: 2.5) }
+    }
+
+    /// About 3.3 words a second of reading, 4 to 25 seconds; cards add time. Waits while Speek is
+    /// speaking, listening, asking for approval, or you are typing or pointing at it.
+    private func scheduleAutoCollapse(after seconds: Double? = nil) {
+        dismissTask?.cancel()
+        let words = Double(response.split(whereSeparator: \.isWhitespace).count)
+        let delay = seconds ?? min(25, max(4, 2.5 + words / 3.3 + (resultCards.isEmpty ? 0 : 8)))
+        dismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled, self.expanded else { return }
+            let waiting = self.recording || self.busy || self.playback.playingMessageID != nil
+            if self.hovering || self.proposal != nil || MCPElicitationCenter.shared.current != nil || !self.draft.isEmpty { return }
+            if waiting { self.scheduleAutoCollapse(after: 3); return }
+            self.expanded = false; self.resize(); self.panel?.resignKey(); self.panel?.acceptsKeyboard = false
+        }
     }
 
     // MARK: Talking back
@@ -802,7 +830,7 @@ final class AssistantController: ObservableObject {
                     return
                 }
                 if call.tool == "computer.use" {
-                    enqueueComputerTask(for: run)
+                    enqueueComputerTask(for: run, call: call)
                     return
                 }
                 if reviewNeeded {
@@ -847,6 +875,7 @@ final class AssistantController: ObservableObject {
     }
 
     func runProposal() {
+        SpeekNotifications.shared.approvalResolved()
         guard let action = proposal, let run = foreground, !busy else { return }
         if action.kind == .toolCall {
             busy = true; proposal = nil; run.proposal = nil; reviewError = nil
@@ -854,7 +883,7 @@ final class AssistantController: ObservableObject {
             run.task = Task {
                 do {
                     let call = try RuntimeCall(target: action.target)
-                    if call.tool == "computer.use" { enqueueComputerTask(for: run); return }
+                    if call.tool == "computer.use" { enqueueComputerTask(for: run, call: call); return }
                     run.steps += 1
                     if foreground === run { phase = action.title }
                     let result = try await execute(call, for: run, approved: true)
@@ -975,8 +1004,14 @@ final class AssistantController: ObservableObject {
         enqueueComputerTask(for: run, announce: false)
     }
 
-    private func enqueueComputerTask(for run: AgentRun, announce: Bool = true) {
-        let request = run.request, captured = run.context, history = run.history
+    /// Hands interface work to the computer-use agent with the main agent's own instruction,
+    /// the target app, and everything found so far (it cannot see this conversation).
+    private func enqueueComputerTask(for run: AgentRun, call: RuntimeCall? = nil, announce: Bool = true) {
+        let task = call?.arguments["task"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let app = call?.arguments["app"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = (task?.isEmpty == false ? task! + "\n\nThe user's own words: " + run.request : run.request)
+        let captured = run.context, history = run.history
+        let found = run.evidence.suffix(6).map { String($0.prefix(3000)) }.joined(separator: "\n")
         let spoken = run.spoken
         let sourceID = run.threadID
         let identity = run.identity
@@ -986,7 +1021,8 @@ final class AssistantController: ObservableObject {
         let selectedReasoning = run.reasoning
         ComputerTaskManager.shared.enqueue(request: request, sourceThreadID: sourceID, operation: { progress in
             try await CodexComputerUse.shared.run(
-                request: request, context: captured?.text ?? "", image: captured?.image,
+                request: request, app: app?.isEmpty == false ? app : nil,
+                context: (captured?.text ?? "") + (found.isEmpty ? "" : "\nFound so far:\n" + found), image: captured?.image,
                 history: history, connection: selectedConnection, model: selectedModel, reasoning: selectedReasoning,
                 progress: progress,
                 presentApproval: { AssistantController.shared.presentApproval() })
@@ -1009,10 +1045,9 @@ final class AssistantController: ObservableObject {
         append("Computer task queued. You can keep dictating or start another request.", role: .assistant, to: run)
         if foreground === run {
             foreground = nil; busy = false; statusLine = nil
-            response = "Working on it in the background. You can keep going."
-            phase = "Ready"
-            showResult()
-            if shouldSpeak(spoken) { speak("That will take a minute. I'll do it in the background and let you know.", followUp: false) }
+            // Quiet until it finishes: the acknowledgment already said what is happening.
+            response = ""; phase = "Ready"
+            expanded = false; resize()
         }
     }
 
@@ -1034,15 +1069,12 @@ final class AssistantController: ObservableObject {
                 }
                 let id = self.unannouncedTaskIDs.removeFirst()
                 guard let notice = self.taskNotices.first(where: { $0.id == id }) else { continue }
-                self.dismissTask?.cancel()
-                self.surfaceMode = .agent
-                self.expanded = true
-                self.resize()
-                self.panel?.orderFrontRegardless()
+                // A real notification; the notch shows the notice when opened, without popping open.
+                SpeekNotifications.shared.taskFinished(notice)
                 if self.shouldSpeak(notice.spoken) {
                     let opening = notice.succeeded ? "Done. " : "I couldn't finish that. "
                     self.speak(opening + QuickTalk.forSpeech(notice.result), followUp: notice.spoken)
-                } else { NSSound(named: "Glass")?.play() }
+                }
             }
         }
     }
@@ -1057,6 +1089,12 @@ final class AssistantController: ObservableObject {
     /// if it is already frontmost, the request is answered there instead.
     func presentApproval() {
         guard proposal != nil || CodexComputerUse.shared.approval != nil || MCPElicitationCenter.shared.current != nil else { approvalDeferred = false; return }
+        if let proposal {
+            let call = try? RuntimeCall(target: proposal.target)
+            SpeekNotifications.shared.approvalNeeded(QuickTalk.approvalLine(for: call, title: proposal.title), detail: nil)
+        } else if let question = MCPElicitationCenter.shared.current {
+            SpeekNotifications.shared.approvalNeeded(question.plugin + " asks: " + question.message, detail: nil)
+        }
         if recording { approvalDeferred = true; return }
         approvalDeferred = false
         if SpeekMainWindow.shared.isFrontmost { return }
@@ -1113,6 +1151,7 @@ final class AssistantController: ObservableObject {
 
     func cancelProposal() {
         statusLine = nil
+        SpeekNotifications.shared.approvalResolved()
         if let run = foreground { end(run) }
         proposal = nil; reviewError = nil; foreground = nil
         response = "Cancelled."; phase = "Ready"
@@ -1192,14 +1231,6 @@ final class AssistantController: ObservableObject {
         response = text; phase = "Done"; resultCards = run.cards
         lastMessage = ActionMessage(role: .assistant, text: text)
         showResult()
-        if text.hasPrefix("Opened ") || text.hasPrefix("Remembered:") {
-            dismissTask?.cancel()
-            dismissTask = Task {
-                try? await Task.sleep(for: .seconds(4))
-                guard !Task.isCancelled, !busy, !recording else { return }
-                expanded = false; resize(); panel?.resignKey()
-            }
-        }
         if shouldSpeak(run.spoken) { speak(text, followUp: run.spoken) }
     }
     private func fail(_ run: AgentRun, _ error: Error) {

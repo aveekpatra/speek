@@ -84,7 +84,7 @@ final class ActionRuntime: ObservableObject {
                         schema: (try? JSONSerialization.jsonObject(with: JSONEncoder().encode($0.inputSchema))) as? [String: Any] ?? [:], requiresReview: true)
         }
         if CodexConnection.binary != nil {
-            result.append(RuntimeTool(id: "computer.use", title: "Use your computer", summary: "Operate a native Mac app or the user's browser by clicking, typing, and navigating. Last resort: use only when no connected tool can do the task, or the request is about what is on screen and no tool can handle it faster. Starts an interactive Codex agent.", schema: Self.schema([:], required: []), requiresReview: true))
+            result.append(RuntimeTool(id: "computer.use", title: "Use your computer", summary: "Hand interface work to a computer-use agent that clicks, types, and navigates in a Mac app or browser, in the background. It cannot see this conversation: write task as a complete instruction (the goal, the exact app by its real name, what to click or fill, facts you already found, and what counts as done). Set app when the work stays inside one app, so it controls only that app instead of the whole screen; leave it out only when the task spans apps. Resolve misheard names from the skills and apps you know (for example \"Eagle Light\" is the Ego Lite browser).", schema: Self.schema(["task": ["type": "string"], "app": ["type": "string"]], required: ["task"]), requiresReview: true))
         }
         result += WorkspaceTools.catalog + ScheduleTools.catalog + [ShellTool.tool]
         result += Self.memoryTools + MediaTools.catalog + PlacesTools.catalog

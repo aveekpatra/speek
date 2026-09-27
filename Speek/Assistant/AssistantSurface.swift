@@ -43,6 +43,7 @@ struct AssistantSurface: View {
         .onChange(of: controller.resultCards.count) { _, _ in controller.resize() }
         .onReceive(CorrectionLearner.shared.$notice) { _ in DispatchQueue.main.async { controller.resize() } }
         .onExitCommand { controller.collapse() }
+        .onHover { controller.setHovering($0) }
     }
 
     private var outline: NotchOutline {
