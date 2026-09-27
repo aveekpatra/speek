@@ -36,8 +36,9 @@ enum MCPProtocol {
             }
         }
         await transport.setProtocolVersion(legacy)
+        // Speek answers server questions (form and link requests) during a tool call.
         let result = try await transport.request(method: "initialize", params: .object([
-            "protocolVersion": .string(legacy), "capabilities": .object([:]),
+            "protocolVersion": .string(legacy), "capabilities": .object(["elicitation": .object(["form": .object([:]), "url": .object([:])])]),
             "clientInfo": .object(["name": .string("Speek"), "version": .string("1.0")])
         ]))
         guard let version = result["protocolVersion"]?.string, legacyVersions.contains(version) else {

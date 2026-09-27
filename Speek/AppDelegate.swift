@@ -3,6 +3,27 @@ import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     weak var menuBarManager: MenuBarManager?
+    /// Set whenever a speek:// URL arrives; the "reopen" Launch Services sends with it must not show the window.
+    private var lastURLOpen = Date.distantPast
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        UserDefaults.standard.register(defaults: ["isPauseMediaEnabled": true])
+        // Take speek:// URLs (coding assistant hooks) before SwiftUI can open a window for them.
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleGetURL(_:with:)),
+                                                     forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+    }
+
+    @objc private func handleGetURL(_ event: NSAppleEventDescriptor, with reply: NSAppleEventDescriptor) {
+        guard let string = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
+              let url = URL(string: string) else { return }
+        lastURLOpen = Date()
+        MainActor.assumeIsolated { _ = AgentUpdateCenter.shared.handle(url: url) }
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        lastURLOpen = Date()
+        for url in urls { _ = AgentUpdateCenter.shared.handle(url: url) }
+    }
     func applicationDidFinishLaunching(_ notification: Notification) {
         let defaults = UserDefaults.standard
         if !defaults.bool(forKey: "speek.models.september2026") {
@@ -16,15 +37,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defaults.set(true, forKey: "speek.models.september2026")
         }
         AssistantController.shared.start(showControl: true)
+        AgentEventListener.shared.start()
         SpeekMainWindow.shared.show()
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if Date().timeIntervalSince(lastURLOpen) < 1.5 { return false }
         SpeekMainWindow.shared.show()
         return false
     }
     func applicationWillTerminate(_ notification: Notification) {
         TaskScheduler.shared.stop()
-        CodingTaskManager.shared.cancelAll()
         AssistantController.shared.stopPresentation()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

@@ -5,26 +5,15 @@ import Sparkle
 @main
 struct SpeekApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var updater = UpdaterViewModel()
     var body: some Scene {
-        MenuBarExtra("Speek", systemImage: "waveform") {
-            Button("Open Speek") { SpeekMainWindow.shared.show() }
-            Button("Speak") { AssistantController.shared.toggleVoice() }
-            Button("Type a request") { AssistantController.shared.show(typing: true) }
-            Button("Circle screen context") { AssistantController.shared.circleContext() }
-            Divider()
-            Button("Settings...") { AssistantSettingsWindow.shared.show() }
-                .keyboardShortcut(",", modifiers: .command)
-            Divider()
-            Button("Quit Speek") { NSApp.terminate(nil) }
-                .keyboardShortcut("q", modifiers: .command)
+        MenuBarExtra {
+            StatusMenuContent(updater: updater)
+        } label: {
+            StatusItemIcon()
         }
         .menuBarExtraStyle(.menu)
-        .commands {
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings...") { SpeekMainWindow.shared.showSettings() }
-                    .keyboardShortcut(",", modifiers: .command)
-            }
-        }
+        .commands { SpeekCommands(updater: updater) }
     }
 }
 

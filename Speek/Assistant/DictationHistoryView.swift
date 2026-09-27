@@ -119,3 +119,30 @@ struct HistoryPausedNotice: View {
         }.padding(12).settingsSurface()
     }
 }
+
+/// The last few dictations, one click to copy. Covers "the paste failed, give me what I said".
+struct RecentDictationsMenu: View {
+    @ObservedObject private var history = DictationHistory.shared
+    @ObservedObject private var learner = CorrectionLearner.shared
+
+    var body: some View {
+        if let learned = learner.lastLearned {
+            Button("Undo Learned \"" + learned.term + "\"") { learner.undoLast() }
+        }
+        Menu("Recent Dictations") {
+            let recent = history.entries.sorted { $0.date > $1.date }.prefix(5)
+            if recent.isEmpty { Text("No saved dictations") }
+            ForEach(Array(recent)) { entry in
+                Button(label(entry)) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(entry.text, forType: .string)
+                }
+            }
+        }
+    }
+
+    private func label(_ entry: DictationHistoryEntry) -> String {
+        let text = entry.text.replacingOccurrences(of: "\n", with: " ")
+        return (text.count > 48 ? String(text.prefix(48)) + "..." : text) + (entry.appName.isEmpty ? "" : "  (" + entry.appName + ")")
+    }
+}

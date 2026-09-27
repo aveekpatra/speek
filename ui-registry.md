@@ -313,11 +313,9 @@ Verified the running compact and expanded layouts with Computer Use; the collaps
 - Resting mode icons: waveform for dictation, sparkle for agent. Resting app artwork is 17 points and mode symbol uses 13-point type, a 1-point increase. Keep the 32-point hit areas, vertical offsets, and notch dimensions unchanged.
 
 
-## Integration requests and activity
-- Codex and Claude Code are opt-in integrations under Local tools. Coding history has one sidebar destination, the Coding tasks subpage.
-- A user request opens a compact review sheet for the integration, project, request and permissions. Ongoing work and results belong on the Coding tasks subpage.
-- Integration switches report enabled state separately from CLI installation. Installation does not imply authenticated or connected.
-- New settings use the existing page background, settingsSurface groups, 13-point labels and compact flat action buttons. Controls align right at intrinsic width; descriptions wrap before controls.
+## Coding assistant hooks
+- Claude Code and Codex connect by hooks under Integrations > Local tools (switch per agent, brand marks). Speek never runs coding tasks. The reply panel (`AgentUpdateCenter`) is the only coding UI.
+- New settings use the existing page background, settingsSurface groups, 13-point labels and compact flat action buttons.
 
 ## Computer-use permissions
 
@@ -343,9 +341,7 @@ Verified the running compact and expanded layouts with Computer Use; the collaps
 
 - Task sidebar destinations use 15-point regular system labels, 15-point icons in an
   18-point column, 10-point icon/text spacing and 10-point vertical padding.
-- Activity and schedules, Dictation history, and Coding tasks are distinct chat-area
-  subpages. Keep the task sidebar visible and highlight only the selected destination.
-  Coding history belongs only in Coding tasks; Activity has Jobs and Schedules tabs.
+- Dictation history is a chat-area subpage opened from menus; the task sidebar stays visible.
 
 - Apply the same 15-point sidebar label size to New task, destinations, search and
   recent chats. Section headings use 13 points. Keep regular weight for rows.
@@ -356,3 +352,18 @@ Verified the running compact and expanded layouts with Computer Use; the collaps
 - Local tools: Coding assistants as a grouped list (brand marks, switches), then Command-line tools as a tile grid.
 - Plugins (MCP) and Skills: tile grid, adaptive 230 to 420 points, fixed 184-point tiles so rows align. Tile: 44-point glyph, 14-point semibold name, two-line subtitle, status bottom-left, primary control bottom-right (switch or Connect/Manage), overflow menu top-right shown on hover. Tapping the tile opens details.
 - Empty shelves show one placeholder tile of the same size, not a floating message. The add action stays beside the section header.
+
+## Sidebar and menus (2026-09-27)
+- Task sidebar: New task, Scheduled (only when non-empty; rows match chat rows, trailing next-run time or "Review", hover menu), Recents. No other destinations; do not re-add Activity, Coding tasks, or Dictation history here.
+- Main menu: Speek (About, Check for Updates, Settings), File (New Task Cmd-N, New Schedule Opt-Cmd-N), Edit (+ Find Chats Shift-Cmd-F), View (Tasks..Integrations Cmd-1..4, Dictation History Cmd-Y), Voice, Window, Help (Speek Help, Release Notes, Report an Issue). Components in `Speek/Assistant/SpeekMenus.swift`.
+- Status item: waveform when idle, waveform.circle.fill while listening, waveform.badge.exclamationmark when something waits (coding assistant, permission, scheduled review). Menu order: status line, voice actions, recent dictations, waiting items (only when present), app destinations, updates and quit.
+
+## Approvals (2026-09-27)
+- Permission requests appear in the expanded notch (`NotchApprovalCard`), never by opening the main window. If the main window is already frontmost, the request is answered there. A request that arrives while recording waits until dictation ends.
+- Card: hand.raised.fill + tool title, up to four argument or message lines, then Deny, Always Allow, Allow (Allow is the default action). Tool calls add "Edit..." for the full form in the main window. Computer-use routine consent says "Allow Task"; sensitive consent has no Always Allow.
+- Approval choices sit next to the tool wherever it is shown (user rule: never a separate approvals page). Native apps and Built-in rows expand with a trailing chevron to list their tools, each with a `ToolPolicyMenu` (Default / Ask / Always allow / Never); collapsed rows show a summary such as "Asks before 2 of 5 actions". MCP and command-line detail sheets put the menu on each tool and "Set All" beside the tool heading. Shell is a row in Local tools. The two defaults (reads, changes) live in Settings > Privacy > Approvals. Never hides the tool from the agent.
+
+## Tools and skills (2026-09-27)
+- Tool priority in the agent prompt: connected tools first (native apps, MCP, command-line tools, files, shell.run), computer use last.
+- `shell.run` runs in the login shell (zsh -l) in the working folder or home, 60-second limit, 20,000-character output cap. Its approval menu is the Shell row in Integrations > Local tools, default Ask.
+- Browser choice: the browser the user names, otherwise the default browser. Ego Browser is an imported Speek skill (Integrations > Skills), not a built-in rule; skills never override the app the user named.

@@ -9,8 +9,11 @@ enum VoiceInputMode: String, CaseIterable {
 struct VoiceTarget {
     let pid: pid_t
     let element: AXUIElement
+    /// A text view in Speek's own windows; dictation is inserted directly instead of pasted.
+    weak var localTextView: NSTextView?
 
     func isStillFocused() -> Bool {
+        if let localTextView { return NSApp.keyWindow?.firstResponder === localTextView }
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return false }
         var value: CFTypeRef?
         let root = AXUIElementCreateApplication(pid)
@@ -30,6 +33,9 @@ final class VoiceFocus: ObservableObject {
     @Published private(set) var secure = false
     @Published var override: VoiceInputMode = .automatic
     private(set) var target: VoiceTarget?
+    /// The last text field in another app, for inserting an answer back where you were working.
+    private(set) var lastExternalTarget: VoiceTarget?
+    @Published private(set) var lastExternalAppName: String?
     private var timer: Timer?
     private var pid: pid_t = 0
 
@@ -66,9 +72,9 @@ final class VoiceFocus: ObservableObject {
     }
 
     func refresh() {
-        guard let app = NSWorkspace.shared.frontmostApplication,
-              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
-            clearTarget()
+        guard let app = NSWorkspace.shared.frontmostApplication else { clearTarget(); return }
+        if app.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+            refreshOwnWindow()
             return
         }
         let appRoot = AXUIElementCreateApplication(app.processIdentifier)
@@ -122,7 +128,23 @@ final class VoiceFocus: ObservableObject {
                                  editable: editable as? Bool, selectedTextWritable: selectedTextSettable.boolValue,
                                  selectionWritable: rangeSettable.boolValue) {
             detectedMode = .dictation
+            lastExternalTarget = target
+            if lastExternalAppName != appName { lastExternalAppName = appName }
         }
+    }
+
+    /// Speek's own text fields (composer, Create Prompt, editors) accept dictation too.
+    /// The notch panel is excluded: speaking there is an agent request.
+    private func refreshOwnWindow() {
+        guard let window = NSApp.keyWindow, !(window is AssistantPanel),
+              let textView = window.firstResponder as? NSTextView, textView.isEditable else { clearTarget(); return }
+        pid = ProcessInfo.processInfo.processIdentifier
+        appName = "Speek"
+        appIcon = NSApplication.shared.applicationIconImage
+        permissionMissing = !AXIsProcessTrusted()
+        secure = (textView.delegate as? NSSecureTextField) != nil
+        target = secure ? nil : VoiceTarget(pid: pid, element: AXUIElementCreateApplication(pid), localTextView: textView)
+        detectedMode = secure ? .agent : .dictation
     }
 
     nonisolated static func acceptsDictation(role: String, enabled: Bool, secure: Bool, editable: Bool?,

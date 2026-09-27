@@ -4,20 +4,20 @@ import AppKit
 @MainActor
 final class SpeekMainWindow: ObservableObject {
     @Published var section: ShellSection = .tasks
-    enum TaskPage { case chat, history, activity, coding }
+    enum TaskPage { case chat, history }
     @Published var taskPage: TaskPage = .chat
-    @Published var showingCodingTasks = false
-    func showActivity() { section = .tasks; taskPage = .activity; show() }
-    var codingRequest = ""
-    var codingSource: UUID?
-    var codingImages: [Data] = []
-    var codingContext: String?
-    var codingConnection = ActionConnection.localCodex
-    var codingModel: String?
-    var codingReasoning: String?
-    func showCodingTasks() { showingCodingTasks = true; show() }
+    func showDictationHistory() { section = .tasks; taskPage = .history; show() }
+    func showSection(_ target: ShellSection) { section = target; if target == .tasks { taskPage = .chat }; show() }
+    /// Menu commands the shell performs with its own state. Each bump runs the command once.
+    @Published private(set) var newTaskRequests = 0
+    @Published private(set) var newScheduleRequests = 0
+    @Published private(set) var findRequests = 0
+    func requestNewTask() { section = .tasks; show(); newTaskRequests += 1 }
+    func requestNewSchedule() { section = .tasks; show(); newScheduleRequests += 1 }
+    func requestFindChats() { section = .tasks; taskPage = .chat; show(); findRequests += 1 }
     static let shared = SpeekMainWindow()
     private var window: NSWindow?
+    var isFrontmost: Bool { NSApp.isActive && (window?.isKeyWindow ?? false) && (window?.isVisible ?? false) }
     @Published var settingsTab = "General"
     func showSettings(tab: String = "General") {
         settingsTab = tab
@@ -91,6 +91,13 @@ struct SpeekMainShell: View {
     @State private var showingArchive = false
     @State private var hoveredThread: UUID?
     @State private var deletingThread: ActionThread?
+    @ObservedObject private var scheduler = TaskScheduler.shared
+    @State private var scheduleSheet: ScheduleSheet?
+    @State private var hoveredSchedule: UUID?
+    private enum ScheduleSheet: Identifiable {
+        case new(String), edit(TaskSchedule)
+        var id: String { switch self { case .new: return "new"; case .edit(let s): return s.id.uuidString } }
+    }
     @FocusState private var composerFocused: Bool
     private let canvas = Color(white: 0.092)
     private let muted = Color(white: 0.53)
@@ -105,8 +112,6 @@ struct SpeekMainShell: View {
                         switch navigation.taskPage {
                         case .chat: taskContent
                         case .history: DictationHistoryView()
-                        case .activity: ActivityCenterView()
-                        case .coding: CodingTaskHistoryView()
                         }
                     }
                     else if section == .integrations { IntegrationsShellView() }
@@ -143,8 +148,14 @@ struct SpeekMainShell: View {
                 PromptLibraryView { prompt in assistant.draft = prompt; showingPrompts = false; composerFocused = true }
             }.frame(minWidth: 680, idealWidth: 820, minHeight: 560)
         }
-        .sheet(isPresented: $navigation.showingCodingTasks) {
-            CodingTaskReviewView(initialRequest: navigation.codingRequest, initialDirectory: UserDefaults.standard.string(forKey: "speek.actions.projectFolder") ?? "", sourceThreadID: navigation.codingSource, images: navigation.codingImages, contextText: navigation.codingContext, initialConnection: navigation.codingConnection, initialModel: navigation.codingModel, initialReasoning: navigation.codingReasoning)
+        .onChange(of: navigation.newTaskRequests) { _, _ in newTask() }
+        .onChange(of: navigation.newScheduleRequests) { _, _ in scheduleSheet = .new("") }
+        .onChange(of: navigation.findRequests) { _, _ in searching = true }
+        .sheet(item: $scheduleSheet) { item in
+            switch item {
+            case .new(let request): ScheduleEditorSheet(schedule: nil, initialRequest: request)
+            case .edit(let schedule): ScheduleEditorSheet(schedule: schedule)
+            }
         }
         .onAppear {
             let initialSection = section
@@ -191,19 +202,71 @@ struct SpeekMainShell: View {
         }.buttonStyle(ShellHoverButton()).help(item.rawValue).accessibilityLabel(item.rawValue)
     }
 
-    private func sidebarDestination(_ title: String, icon: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: icon).font(.system(size: 15)).frame(width: 18)
-                Text(title).font(.system(size: 15)).lineLimit(1)
-                Spacer(minLength: 0)
+    /// Appears only when something is scheduled or waiting for review, so an idle Speek stays quiet.
+    @ViewBuilder private var scheduledSection: some View {
+        let due = scheduler.jobs.filter { $0.status == .awaitingReview }.sorted { $0.updatedAt > $1.updatedAt }
+        let upcoming = scheduler.schedules.sorted { ($0.paused ? 1 : 0, $0.nextRun) < ($1.paused ? 1 : 0, $1.nextRun) }
+        if !due.isEmpty || !upcoming.isEmpty {
+            HStack {
+                Text("Scheduled").font(.system(size: 13, weight: .medium)).foregroundStyle(muted)
+                Spacer()
+                Button { scheduleSheet = .new("") } label: {
+                    Image(systemName: "plus").foregroundStyle(.white).frame(width: 24, height: 24).contentShape(Rectangle())
+                }.buttonStyle(.plain).help("New schedule")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12).padding(.vertical, 10).contentShape(Rectangle())
-        }.buttonStyle(ShellHoverButton())
-            .background(selected ? Color.white.opacity(0.065) : .clear, in: RoundedRectangle(cornerRadius: 8))
-            .accessibilityAddTraits(selected ? .isSelected : [])
-            .padding(.horizontal, 9)
+            .padding(.leading, 20).padding(.trailing, 9).padding(.top, 18).padding(.bottom, 4)
+            VStack(spacing: 3) {
+                ForEach(due) { job in
+                    scheduledRow(job.id, icon: "bell.badge.fill", title: job.title, trailing: "Review", dim: false) {
+                        _ = scheduler.reviewJob(job.id)
+                    } menu: {
+                        Button("Review") { _ = scheduler.reviewJob(job.id) }
+                        Button("Skip", role: .destructive) { scheduler.deleteJob(job.id) }
+                    }
+                }
+                ForEach(upcoming.prefix(5)) { schedule in
+                    scheduledRow(schedule.id, icon: "calendar", title: schedule.title,
+                                 trailing: schedule.paused ? "Paused" : shortRunTime(schedule.nextRun), dim: schedule.paused) {
+                        scheduleSheet = .edit(schedule)
+                    } menu: {
+                        Button("Edit") { scheduleSheet = .edit(schedule) }
+                        Button(schedule.paused ? "Resume" : "Pause") { scheduler.setSchedulePaused(schedule.id, paused: !schedule.paused) }
+                        Divider()
+                        Button("Delete", role: .destructive) { scheduler.deleteSchedule(schedule.id) }
+                    }
+                }
+            }.padding(.horizontal, 9)
+        }
+    }
+
+    private func scheduledRow<Items: View>(_ id: UUID, icon: String, title: String, trailing: String, dim: Bool,
+                                           open: @escaping () -> Void, @ViewBuilder menu: () -> Items) -> some View {
+        HStack(spacing: 0) {
+            Button(action: open) {
+                HStack(spacing: 10) {
+                    Image(systemName: icon).font(.system(size: 15)).foregroundStyle(.white).frame(width: 18)
+                    Text(title).font(.system(size: 15)).lineLimit(1)
+                    Spacer(minLength: 6)
+                    if hoveredSchedule != id { Text(trailing).font(.system(size: 12)).foregroundStyle(muted).lineLimit(1) }
+                }.padding(.leading, 11).padding(.trailing, hoveredSchedule == id ? 0 : 11)
+                    .padding(.vertical, 10).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            if hoveredSchedule == id {
+                Menu { menu() } label: { Image(systemName: "ellipsis").foregroundStyle(.white).frame(width: 26, height: 30) }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Schedule actions").padding(.trailing, 4)
+            }
+        }
+        .opacity(dim ? 0.55 : 1)
+        .contentShape(Rectangle()).onHover { hoveredSchedule = $0 ? id : nil }
+        .contextMenu { menu() }
+    }
+
+    private func shortRunTime(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return date.formatted(date: .omitted, time: .shortened) }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
+        if let days = calendar.dateComponents([.day], from: Date(), to: date).day, days < 7 { return date.formatted(.dateTime.weekday(.abbreviated)) }
+        return date.formatted(.dateTime.month(.abbreviated).day())
     }
 
     private var taskSidebar: some View {
@@ -224,10 +287,7 @@ struct SpeekMainShell: View {
                     .padding(.horizontal, 12).padding(.vertical, 10).contentShape(Rectangle())
             }.buttonStyle(ShellHoverButton())
                 .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 8)).padding(.horizontal, 9)
-            sidebarDestination("Activity and schedules", icon: "clock", selected: navigation.taskPage == .activity) { navigation.showActivity() }
-                .padding(.top, 6)
-            sidebarDestination("Dictation history", icon: "waveform", selected: navigation.taskPage == .history) { navigation.taskPage = .history }
-            sidebarDestination("Coding tasks", icon: "terminal", selected: navigation.taskPage == .coding) { navigation.taskPage = .coding }
+            scheduledSection
             if searching {
                 TextField("Find a task", text: $search).textFieldStyle(.plain).font(.system(size: 15))
                     .padding(9).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
@@ -366,12 +426,7 @@ struct SpeekMainShell: View {
                     VStack(alignment: .leading, spacing: 28) {
                         if !assistant.visibleMessages.isEmpty {
                             ForEach(assistant.visibleMessages) { message in
-                                VStack(alignment: .leading, spacing: 9) {
-                                    Text(message.role == .user ? "You" : "Speek")
-                                        .font(.system(size: 11, weight: .medium)).foregroundStyle(muted)
-                                    Text((try? AttributedString(markdown: message.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(message.text)).font(.system(size: 14)).lineSpacing(5)
-                                        .foregroundStyle(.white.opacity(0.86)).textSelection(.enabled)
-                                }.frame(maxWidth: .infinity, alignment: .leading).id(message.id)
+                                ChatMessageRow(message: message, muted: muted).id(message.id)
                             }
                         } else {
                             VStack(alignment: .leading, spacing: 10) {
@@ -427,16 +482,19 @@ struct SpeekMainShell: View {
                                 Label("Circle screen context", systemImage: "lasso")
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(8).contentShape(Rectangle())
                             }
+                            Button { contextMenuPresented = false; assistant.markUpScreen() } label: {
+                                Label("Mark up screen", systemImage: "pencil.tip.crop.circle")
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(8).contentShape(Rectangle())
+                            }
                             Button { contextMenuPresented = false; assistant.attachments.chooseFiles() } label: {
                                 Label("Attach files", systemImage: "paperclip").frame(maxWidth: .infinity, alignment: .leading).padding(8)
                             }
                             Button {
-                                let request = assistant.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                                TaskScheduler.shared.enqueue(title: String(request.prefix(80)), request: request, connection: assistant.connection, modelID: assistant.modelID, reasoningEffort: assistant.reasoningEffort)
-                                assistant.draft = ""; contextMenuPresented = false; navigation.showActivity()
+                                contextMenuPresented = false
+                                scheduleSheet = .new(assistant.draft.trimmingCharacters(in: .whitespacesAndNewlines))
                             } label: {
-                                Label("Run in background", systemImage: "clock.arrow.circlepath").frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                            }.disabled(assistant.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !assistant.attachments.attachments.isEmpty || assistant.busy)
+                                Label("Schedule", systemImage: "calendar.badge.clock").frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                            }
                             Button { contextMenuPresented = false; showingCreatePrompt = true } label: {
                                 Label("Create prompt", systemImage: "text.badge.plus").frame(maxWidth: .infinity, alignment: .leading).padding(8)
                             }.disabled(assistant.busy || assistant.recording || assistant.attachments.isImporting)
@@ -514,3 +572,42 @@ private struct ShellFrostedMaterial: NSViewRepresentable {
     func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
+
+/// One chat message. Answers can be copied (hover) or dragged into another app.
+private struct ChatMessageRow: View {
+    let message: ActionMessage
+    let muted: Color
+    @State private var hovered = false
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Text(message.role == .user ? "You" : "Speek").font(.system(size: 11, weight: .medium)).foregroundStyle(muted)
+                if message.role == .assistant {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        copied = NSPasteboard.general.setString(message.text, forType: .string)
+                    } label: {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.system(size: 11)).foregroundStyle(.white)
+                            .frame(width: 20, height: 16).contentShape(Rectangle())
+                    }.buttonStyle(.plain).help("Copy").accessibilityLabel(copied ? "Copied" : "Copy answer")
+                        .opacity(hovered || copied ? 1 : 0)
+                    InsertAnswerButton(text: message.text).opacity(hovered ? 1 : 0)
+                }
+            }
+            Group {
+                if message.role == .assistant {
+                    AnswerMarkdown(text: message.text)
+                } else {
+                    Text(message.text).font(.system(size: 14)).lineSpacing(5)
+                        .foregroundStyle(.white.opacity(0.86)).textSelection(.enabled)
+                }
+            }
+            .draggable(message.text)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { hovered = $0; if !$0 { copied = false } }
+    }
+}

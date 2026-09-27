@@ -50,6 +50,20 @@ struct ComputerTaskChecks {
         for _ in 0..<1000 where completed.count < 5 { await Task.yield() }
         precondition(completed.filter { $0.id == running }.count == 1)
         precondition(completed.last?.result == "Still usable")
-        print("PASS: independent foreground work, serial desktop queue, source routing, queued/running cancellation, queue recovery")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("speek-jobs-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let persisted = ComputerTaskManager(file: file)
+        let source2 = UUID()
+        _ = persisted.enqueue(request: "Finished", sourceThreadID: nil, operation: { _ in "Done" }, completed: { _ in })
+        for _ in 0..<200 where persisted.jobs.first?.status != .completed { await Task.yield() }
+        _ = persisted.enqueue(request: "Mid-flight", sourceThreadID: source2, operation: { _ in
+            await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+            return "never"
+        }, completed: { _ in })
+        for _ in 0..<200 where persisted.jobs.last?.status != .running { await Task.yield() }
+        let relaunched = ComputerTaskManager(file: file)
+        precondition(relaunched.jobs.count == 2 && relaunched.jobs[0].status == .completed, "completed job not restored")
+        precondition(relaunched.jobs[1].status == .interrupted && relaunched.jobs[1].sourceThreadID == source2 && relaunched.jobs[1].request == "Mid-flight", "running job not restored as interrupted")
+        print("PASS: independent foreground work, serial desktop queue, source routing, queued/running cancellation, queue recovery, restart persistence as interrupted")
     }
 }

@@ -27,11 +27,13 @@ extension IntegrationSectionHeader where Action == EmptyView {
 /// Equal-height tile for user-added integrations. Tap opens details; the menu appears on hover.
 struct IntegrationTile<Control: View, MenuItems: View>: View {
     let symbol: String
+    var asset: String? = nil
     let title: String
     let subtitle: String
     let status: String
     var statusSymbol = "circle"
     var busy = false
+    var showsMenu = true
     let open: () -> Void
     @ViewBuilder var control: Control
     @ViewBuilder var menu: MenuItems
@@ -44,12 +46,14 @@ struct IntegrationTile<Control: View, MenuItems: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
-                IntegrationGlyph(symbol: symbol)
+                IntegrationGlyph(symbol: symbol, asset: asset)
                 Spacer(minLength: 8)
-                Menu { menu } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28).contentShape(Rectangle()) }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                    .help(title + " actions").accessibilityLabel(title + " actions")
-                    .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
+                if showsMenu {
+                    Menu { menu } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28).contentShape(Rectangle()) }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        .help(title + " actions").accessibilityLabel(title + " actions")
+                        .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
+                }
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
@@ -99,9 +103,18 @@ struct IntegrationEmptyTile: View {
 
 struct IntegrationGlyph: View {
     let symbol: String
+    /// A brand mark from the asset catalog, used instead of the symbol when present.
+    var asset: String? = nil
     var body: some View {
-        Image(systemName: symbol).font(.system(size: 22)).foregroundStyle(.white)
-            .frame(width: 44, height: 44).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        Group {
+            if let asset {
+                Image(asset).resizable().renderingMode(.template).scaledToFit().frame(width: 22, height: 22)
+            } else {
+                Image(systemName: symbol).font(.system(size: 22))
+            }
+        }
+        .foregroundStyle(.white)
+        .frame(width: 44, height: 44).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 

@@ -11,6 +11,12 @@ enum ActionConnection { case localCodex }
 enum AgentDefaults { static func model(for connection: ActionConnection) -> String { "test-model" } }
 enum ActionRole: String { case user, assistant }
 struct ActionMessage { let role: ActionRole; let text: String }
+enum ToolPolicy { case ask, allow, never }
+@MainActor final class ToolPolicyStore {
+ static let shared = ToolPolicyStore(); static let computerUseID = "computer.use"
+ var computerUse: ToolPolicy = .ask
+ func policy(for toolID: String, changesData: Bool) -> ToolPolicy { computerUse }
+}
 enum CodexConnection {
  static var binary: String? { CommandLine.arguments[1] }
  static func environment(for connection: ActionConnection) throws -> [String:String] { ProcessInfo.processInfo.environment }
@@ -19,6 +25,13 @@ enum CodexConnection {
 MAIN = '''import Foundation
 @main struct Checks {
  @MainActor static func main() async throws {
+  let chrome = BrowserGuard(request: "Open LinkedIn in this browser and go to my company page", defaultBrowser: "Google Chrome")
+  precondition(chrome.allowed == ["Chrome"], "default browser should be the only one allowed")
+  precondition(chrome.violation(in: #"{"arguments":"await cua.getApp(\"Safari\")"}"#) == "Safari", "other browser not blocked")
+  precondition(chrome.violation(in: #"open -a "Google Chrome" https://linkedin.com"#) == nil, "allowed browser blocked")
+  precondition(chrome.violation(in: "searching the archive for operation notes") == nil, "false positive on ordinary words")
+  let ego = BrowserGuard(request: "Use Ego browser to check my inbox", defaultBrowser: "Safari")
+  precondition(ego.allowed == ["Ego"] && ego.violation(in: #"cua.getApp(\"Safari\")"#) == "Safari" && ego.violation(in: "ego-browser nodejs -e x") == nil, "named browser handling")
   let rpc = ComputerUseRPC()
   var events = 0
   rpc.event = { message in if message["method"] as? String == "test/event" { events += 1 } }
@@ -44,7 +57,14 @@ MAIN = '''import Foundation
    precondition(result == "Verified fixture result")
   }
   precondition(prompts == 4, "Routine permissions repeated, sensitive permissions skipped, or approval leaked across tasks")
-  print("PASS: split JSONL, events, errors, cancellation, process exit, task consent reuse, sensitive consent, consent reset")
+  ToolPolicyStore.shared.computerUse = .allow
+  let allowed = try await CodexComputerUse.shared.run(request: "Fixture task", context: "", image: nil, history: [], connection: .localCodex, model: "test-model", reasoning: nil, progress: { _ in }, presentApproval: {
+   prompts += 1
+   let request = CodexComputerUse.shared.approval!
+   CodexComputerUse.shared.answerApproval(id: request.id, answer: "Allowed in isolated fixture")
+  })
+  precondition(allowed == "Verified fixture result" && prompts == 5, "Always allow must skip routine consent and still ask for sensitive actions")
+  print("PASS: split JSONL, events, errors, cancellation, process exit, task consent reuse, sensitive consent, consent reset, always-allow policy, browser guard")
  }
 }
 '''

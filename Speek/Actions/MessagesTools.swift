@@ -62,7 +62,9 @@ final class MessagesDatabase {
         let sql = """
         SELECT m.ROWID AS messageID, c.guid AS conversationID, COALESCE(h.id,'') AS sender,
         substr(COALESCE(m.text,''),1,8000) AS text, CASE WHEN m.text IS NULL THEN 'false' ELSE 'true' END AS textAvailable,
-        m.date AS date, m.is_from_me AS fromMe, m.is_read AS isRead
+        m.date AS date, m.is_from_me AS fromMe, m.is_read AS isRead,
+        COALESCE((SELECT group_concat(COALESCE(a.transfer_name, a.filename), ', ') FROM message_attachment_join maj JOIN attachment a ON a.ROWID=maj.attachment_id WHERE maj.message_id=m.ROWID),'') AS attachments,
+        COALESCE((SELECT group_concat(a.filename, char(10)) FROM message_attachment_join maj JOIN attachment a ON a.ROWID=maj.attachment_id WHERE maj.message_id=m.ROWID),'') AS attachmentPaths
         FROM message m JOIN chat_message_join j ON j.message_id=m.ROWID JOIN chat c ON c.ROWID=j.chat_id
         LEFT JOIN handle h ON h.ROWID=m.handle_id
         WHERE \(predicates.joined(separator: " AND ")) ORDER BY m.date DESC LIMIT ?
@@ -70,7 +72,12 @@ final class MessagesDatabase {
         var result = try rows(database, sql: sql, bindings: bindings).map { value -> [String: String] in
             var value = value
             value["date"] = date(value["date"])
-            if value["textAvailable"] == "false" { value["text"] = "Message text is unavailable in the readable database fields. Open Messages to view it." }
+            if value["textAvailable"] == "false" {
+                value["text"] = value["attachments"]?.isEmpty == false ? "Attachment only: " + (value["attachments"] ?? "")
+                    : "Message text is unavailable in the readable database fields. Open Messages to view it."
+            }
+            // Attachment paths use ~; expand them so they can be opened.
+            value["attachmentPaths"] = value["attachmentPaths"].map { ($0 as NSString).expandingTildeInPath.replacingOccurrences(of: "\n~", with: "\n" + NSHomeDirectory()) }
             return value
         }
         if operation == "messages.conversation" { result.reverse() }
@@ -134,9 +141,10 @@ final class MessagesTools {
         return [
             tool("messages.recent", "List recent iMessage conversations. Requires explicit history access and Full Disk Access.", fields: ["limit": limit]),
             tool("messages.conversation", "Read recent messages from an exact conversationID. Rich text may be unavailable; never marks messages read.", fields: ["conversationID": ["type": "string"], "limit": limit], required: ["conversationID"]),
-            tool("messages.search", "Search readable iMessage plain text only, not attachments or private attributed-body archives.", fields: ["query": ["type": "string"], "limit": limit], required: ["query"]),
+            tool("messages.search", "Search readable iMessage plain text. Results list attachment names and file paths; attachment contents are not searched.", fields: ["query": ["type": "string"], "limit": limit], required: ["query"]),
             tool("messages.unread", "Read unread incoming iMessages without marking them read. Rich text may be unavailable.", fields: ["limit": limit]),
-            tool("messages.send", "Send one iMessage only after reviewing the exact recipient and body. Recipient must be a user-confirmed international phone number or email address, never a guessed contact name or group ID.", fields: ["recipient": ["type": "string"], "body": ["type": "string", "maxLength": 16000]], required: ["recipient", "body"], write: true)
+            tool("messages.send", "Send one iMessage only after reviewing the exact recipient and body. Recipient must be a user-confirmed international phone number or email address, never a guessed contact name or group ID.", fields: ["recipient": ["type": "string"], "body": ["type": "string", "maxLength": 16000]], required: ["recipient", "body"], write: true),
+            tool("messages.send_file", "Send one file (photo, PDF, document) as an iMessage after review. Same recipient rules as messages.send. The path must be an existing file under 100 MB.", fields: ["recipient": ["type": "string"], "path": ["type": "string"]], required: ["recipient", "path"], write: true)
         ]
     }()
     var isInstalled: Bool { NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.MobileSMS") != nil }
@@ -168,12 +176,25 @@ final class MessagesTools {
             let database = MessagesDatabase(url: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Messages/chat.db"))
             return try database.read(operation: name, query: args.query, conversationID: args.conversationID, limit: args.limit ?? 20)
         }
-        guard let target = args.recipient, Self.isValidRecipient(target), let body = args.body,
-              !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, body.count <= 16000 else { throw failure("Use one exact international phone number or email and a message between 1 and 16000 characters.") }
+        let target: String, body: String, handler: String
+        if name == "messages.send_file" {
+            guard let recipient = args.recipient, Self.isValidRecipient(recipient) else { throw failure("Use one exact international phone number or email address.") }
+            let path = ((args.path ?? "") as NSString).expandingTildeInPath
+            var isDirectory: ObjCBool = false
+            guard path.hasPrefix("/"), FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue,
+                  let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? NSNumber, size.intValue <= 100_000_000 else {
+                throw failure("Choose an existing file under 100 MB by its full path.")
+            }
+            target = recipient; body = path; handler = "speeksendfile"
+        } else {
+            guard let recipient = args.recipient, Self.isValidRecipient(recipient), let text = args.body,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 16000 else { throw failure("Use one exact international phone number or email and a message between 1 and 16000 characters.") }
+            target = recipient; body = text; handler = "speeksend"
+        }
         try permission(prompt: false)
         guard let script = NSAppleScript(source: Self.sendScript) else { throw failure("Could not prepare Messages.") }
         let event = NSAppleEventDescriptor(eventClass: AEEventClass(kASAppleScriptSuite), eventID: AEEventID(kASSubroutineEvent), targetDescriptor: nil, returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
-        event.setParam(NSAppleEventDescriptor(string: "speeksend"), forKeyword: AEKeyword(keyASSubroutineName))
+        event.setParam(NSAppleEventDescriptor(string: handler), forKeyword: AEKeyword(keyASSubroutineName))
         let arguments = NSAppleEventDescriptor.list()
         arguments.insert(NSAppleEventDescriptor(string: target), at: 1); arguments.insert(NSAppleEventDescriptor(string: body), at: 2)
         let direct = NSAppleEventDescriptor.list(); direct.insert(arguments, at: 1)
@@ -181,13 +202,13 @@ final class MessagesTools {
         var error: NSDictionary?
         _ = script.executeAppleEvent(event, error: &error)
         if let error { throw failure(error[NSAppleScript.errorMessage] as? String ?? "Messages could not submit this message.") }
-        return .init(summary: "Submitted to Messages. Delivery is not confirmed.", items: [["recipient": target, "body": body]])
+        return .init(summary: "Submitted to Messages. Delivery is not confirmed.", items: [[name == "messages.send_file" ? "file" : "body": body, "recipient": target]])
     }
     static func isValidRecipient(_ value: String) -> Bool {
         guard value.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil else { return false }
         return value.range(of: #"^\+[1-9][0-9]{6,14}$"#, options: .regularExpression) != nil || value.range(of: #"^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$"#, options: .regularExpression) != nil
     }
-    private struct Arguments: Decodable { var query: String?; var conversationID: String?; var limit: Int?; var recipient: String?; var body: String? }
+    private struct Arguments: Decodable { var query: String?; var conversationID: String?; var limit: Int?; var recipient: String?; var body: String?; var path: String? }
     private func permission(prompt: Bool) throws {
         let target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.MobileSMS")
         let result = AEDeterminePermissionToAutomateTarget(target.aeDesc, AEEventClass(typeWildCard), AEEventID(typeWildCard), prompt)
@@ -207,5 +228,18 @@ final class MessagesTools {
             end tell
         end timeout
     end speeksend
+
+    on speeksendfile(a)
+        with timeout of 60 seconds
+            tell application id "com.apple.MobileSMS"
+                set availableAccounts to every account whose service type is iMessage and enabled is true
+                if (count availableAccounts) is not 1 then error "Choose exactly one enabled iMessage account in Messages before sending."
+                set targetAccount to item 1 of availableAccounts
+                if connection status of targetAccount is not connected then error "Sign in to iMessage before sending."
+                set targetParticipant to participant (item 1 of a) of targetAccount
+                send (POSIX file (item 2 of a)) to targetParticipant
+            end tell
+        end timeout
+    end speeksendfile
     """#
 }

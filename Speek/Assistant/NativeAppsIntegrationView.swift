@@ -14,14 +14,22 @@ struct NativeAppsIntegrationView: View {
     @State private var messagesSending = false
     @State private var busy: String?
     @State private var errors: [String: String] = [:]
+    @State private var expanded: Set<String> = []
+    @ObservedObject private var policies = ToolPolicyStore.shared
+
+    private func isOpen(_ key: String) -> Binding<Bool> {
+        Binding(get: { expanded.contains(key) }, set: { open in if open { expanded.insert(key) } else { expanded.remove(key) } })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             SettingsSection(title: "Communication", info: "Sending always waits for your review of the exact recipient and message.") {
                 appRow(.mail)
                 SettingsRowDivider(leading: 60)
-                SettingsRow(title: "Read messages", image: AppIcon.image(for: "com.apple.MobileSMS"), value: errors["messages.history"],
-                            info: "Recent conversations, search, and unread messages. Needs Full Disk Access for Speek and a restart after granting it. Search covers plain text only.") {
+                let readTools = messagesHistory ? policies.tools(inGroup: "messages").filter { !$0.changesData } : []
+                SettingsRow(title: "Read messages", image: AppIcon.image(for: "com.apple.MobileSMS"), value: errors["messages.history"] ?? policies.summary(readTools),
+                            info: "Recent conversations, search, and unread messages. Needs Full Disk Access for Speek and a restart after granting it. Search covers plain text only.",
+                            expanded: readTools.isEmpty ? nil : isOpen("messages.read")) {
                     HStack(spacing: 10) {
                         if messagesHistory {
                             Button("Full Disk Access") { openPrivacyPane("Privacy_AllFiles") }.buttonStyle(SpeekActionButtonStyle())
@@ -32,13 +40,17 @@ struct NativeAppsIntegrationView: View {
                         })).labelsHidden().toggleStyle(.switch).disabled(!MessagesTools.shared.isInstalled)
                     }
                 }
+                if expanded.contains("messages.read") && !readTools.isEmpty { ToolPolicyRows(tools: readTools) }
                 SettingsRowDivider(leading: 60)
-                SettingsRow(title: "Send iMessages", image: AppIcon.image(for: "com.apple.MobileSMS"), value: errors["messages.send"],
-                            info: "One recipient at a time, by exact phone number or email. Speek never guesses a recipient from a contact name.") {
+                let sendTools = messagesSending ? policies.tools(inGroup: "messages").filter(\.changesData) : []
+                SettingsRow(title: "Send iMessages", image: AppIcon.image(for: "com.apple.MobileSMS"), value: errors["messages.send"] ?? policies.summary(sendTools),
+                            info: "One recipient at a time, by exact phone number or email. Speek never guesses a recipient from a contact name.",
+                            expanded: sendTools.isEmpty ? nil : isOpen("messages.send")) {
                     busySwitch("messages.send", title: "Send iMessages", isOn: messagesSending, enabled: MessagesTools.shared.isInstalled) { on in
                         if on { try await MessagesTools.shared.connectSending() } else { MessagesTools.shared.disableSending() }
                     }
                 }
+                if expanded.contains("messages.send") && !sendTools.isEmpty { ToolPolicyRows(tools: sendTools) }
             }
             SettingsSection(title: "Organization", info: "Speek reads these when you ask. Every change waits for your approval.") {
                 organizerRow(.calendar, bundleID: "com.apple.iCal")
@@ -54,34 +66,57 @@ struct NativeAppsIntegrationView: View {
             }
             SettingsSection(title: "Files") {
                 SettingsRow(title: "Working folder", image: AppIcon.image(for: "com.apple.finder"), value: folder.isEmpty ? "Not set" : folder,
-                            info: "File tools stay inside this folder. Coding tasks start here unless you choose another project.") {
+                            info: "File tools stay inside this folder. Coding tasks start here unless you choose another project.",
+                            expanded: isOpen("files")) {
                     Button(folder.isEmpty ? "Choose folder" : "Change") {
                         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
                         if panel.runModal() == .OK { folder = panel.url?.path ?? "" }
                     }.buttonStyle(SpeekActionButtonStyle())
                 }
+                if expanded.contains("files") { ToolPolicyRows(tools: policies.tools(inGroup: "files")) }
+            }
+            SettingsSection(title: "Built-in", info: "Capabilities Speek always has. Choose when each one asks first.") {
+                if CodexConnection.binary != nil {
+                    SettingsRow(title: "Computer use", icon: "cursorarrow.rays",
+                                info: "Clicking, typing, and navigating in apps and the browser for a task you asked for. Ask covers the whole task after one approval. Sensitive actions always ask.") {
+                        ToolPolicyMenu(toolID: ToolPolicyStore.computerUseID, changesData: true, title: "Computer use")
+                    }
+                    SettingsRowDivider(leading: 60)
+                }
+                let web = policies.tools(inGroup: "web")
+                SettingsRow(title: "Web search", icon: "globe", value: policies.summary(web), expanded: isOpen("web")) { EmptyView() }
+                if expanded.contains("web") { ToolPolicyRows(tools: web) }
+                SettingsRowDivider(leading: 60)
+                let schedules = policies.tools(inGroup: "schedules")
+                SettingsRow(title: "Schedules", icon: "calendar.badge.clock", value: policies.summary(schedules), expanded: isOpen("schedules")) { EmptyView() }
+                if expanded.contains("schedules") { ToolPolicyRows(tools: schedules) }
             }
         }
         .onAppear(perform: refresh)
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
 
-    private func appRow(_ service: NativeAppService) -> some View {
+    @ViewBuilder private func appRow(_ service: NativeAppService) -> some View {
         let installed = NativeAppTools.shared.isInstalled(service)
-        return SettingsRow(title: service.title, icon: service.symbol, image: AppIcon.image(for: service.bundleID),
-                           value: installed ? errors[service.rawValue] : "Not installed", info: detail(service)) {
+        let tools = apps.contains(service) ? policies.tools(inGroup: service.rawValue) : []
+        SettingsRow(title: service.title, icon: service.symbol, image: AppIcon.image(for: service.bundleID),
+                    value: installed ? (errors[service.rawValue] ?? policies.summary(tools)) : "Not installed", info: detail(service),
+                    expanded: tools.isEmpty ? nil : isOpen(service.rawValue)) {
             busySwitch(service.rawValue, title: service.title, isOn: apps.contains(service), enabled: installed) { on in
                 if on { try await NativeAppTools.shared.connect(service) } else { NativeAppTools.shared.disconnect(service) }
             }
         }
+        if expanded.contains(service.rawValue) && !tools.isEmpty { ToolPolicyRows(tools: tools) }
     }
 
-    private func organizerRow(_ service: OrganizerService, bundleID: String) -> some View {
+    @ViewBuilder private func organizerRow(_ service: OrganizerService, bundleID: String) -> some View {
         let status = organizer[service]
         let denied = status == .denied || status == .restricted
-        return SettingsRow(title: service.title, icon: service == .calendar ? "calendar" : "list.bullet.rectangle", image: AppIcon.image(for: bundleID),
-                           value: denied ? "Access is off in System Settings" : errors[service.rawValue],
-                           info: service == .calendar ? "Find availability and manage events." : "Find, create, and complete reminders.") {
+        let tools = status == .fullAccess && organizerEnabled.contains(service) ? policies.tools(inGroup: service.rawValue) : []
+        SettingsRow(title: service.title, icon: service == .calendar ? "calendar" : "list.bullet.rectangle", image: AppIcon.image(for: bundleID),
+                    value: denied ? "Access is off in System Settings" : (errors[service.rawValue] ?? policies.summary(tools)),
+                    info: service == .calendar ? "Find availability and manage events." : "Find, create, and complete reminders.",
+                    expanded: tools.isEmpty ? nil : isOpen(service.rawValue)) {
             if denied {
                 Button("Open System Settings") { openPrivacyPane(service == .calendar ? "Privacy_Calendars" : "Privacy_Reminders") }
                     .buttonStyle(SpeekActionButtonStyle())
@@ -94,6 +129,7 @@ struct NativeAppsIntegrationView: View {
                 }
             }
         }
+        if expanded.contains(service.rawValue) && !tools.isEmpty { ToolPolicyRows(tools: tools) }
     }
 
     /// A switch that shows progress while macOS asks for access, and keeps its state on failure.

@@ -4,6 +4,7 @@ private struct VocabularyDraft: Codable, Identifiable {
     var id = UUID()
     var term: String
     var heardAs: String
+    var learned: Bool? = nil
 }
 
 /// Add and edit forms open as sheets so the page never reflows around an inline editor.
@@ -73,6 +74,11 @@ struct MemoryShellView: View {
             InfoButton(text: description, subject: selected)
             Spacer(minLength: 16)
             SpeekSearchField(prompt: "Search " + selected.lowercased(), text: $query)
+            if selected == "Vocabulary" {
+                Button { importVocabulary() } label: { Label("Import", systemImage: "square.and.arrow.down") }
+                    .buttonStyle(SpeekActionButtonStyle()).fixedSize()
+                    .help("Import a text or CSV file: one term per line, or \"heard as, write as\" pairs")
+            }
             if let add = addAction {
                 Button(action: add.action) { Label(add.title, systemImage: "plus") }
                     .buttonStyle(SpeekActionButtonStyle()).fixedSize()
@@ -202,6 +208,11 @@ struct MemoryShellView: View {
                             Image(systemName: "arrow.right").font(.system(size: 11, weight: .medium)).foregroundStyle(.white)
                         }
                         Text(word.term).font(.system(size: 13, weight: .medium)).lineLimit(3).textSelection(.enabled)
+                        if word.learned == true {
+                            Text("Learned").font(.system(size: 10, weight: .medium)).foregroundStyle(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 2).background(.white.opacity(0.12), in: Capsule())
+                                .help("Saved automatically from a correction you made after dictating")
+                        }
                     }
                 } actions: {
                     HoverRowActions(visible: hovered == word.id, subject: word.term) {
@@ -209,6 +220,45 @@ struct MemoryShellView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: Import
+
+
+    private func importVocabulary() {
+        let panel = NSOpenPanel()
+        panel.title = "Import vocabulary"
+        panel.allowedContentTypes = [.plainText, .commaSeparatedText, .tabSeparatedText]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url, let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        var entries = vocabulary
+        var added = 0
+        for pair in Self.parseVocabulary(text) {
+            let exists = pair.heardAs.isEmpty
+                ? entries.contains { $0.heardAs.isEmpty && $0.term.caseInsensitiveCompare(pair.term) == .orderedSame }
+                : entries.contains { $0.heardAs.caseInsensitiveCompare(pair.heardAs) == .orderedSame }
+            guard !exists else { continue }
+            entries.append(VocabularyDraft(term: pair.term, heardAs: pair.heardAs)); added += 1
+        }
+        vocabularyData = (try? JSONEncoder().encode(entries)) ?? vocabularyData
+        let alert = NSAlert()
+        alert.messageText = added == 0 ? "Nothing new to import" : "Imported \(added) \(added == 1 ? "entry" : "entries")"
+        alert.informativeText = added == 0 ? "Every entry in the file is already in your vocabulary." : ""
+        alert.runModal()
+    }
+
+    /// One term per line, or "heard as, write as" (comma, tab, "=>", or "->"). Lines starting with # are ignored.
+    static func parseVocabulary(_ text: String) -> [(term: String, heardAs: String)] {
+        text.components(separatedBy: .newlines).compactMap { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return nil }
+            for separator in ["=>", "->", "\t", ","] {
+                let parts = trimmed.components(separatedBy: separator).map { $0.trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "\""))) }
+                if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty, parts[1].count <= 400 { return (parts[1], parts[0]) }
+            }
+            let term = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            return term.count <= 400 ? (term, "") : nil
         }
     }
 

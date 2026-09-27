@@ -30,7 +30,10 @@ struct SettingsRow<Control: View>: View {
     var asset: String? = nil
     var value: String? = nil
     var info: String? = nil
+    /// When set, the row expands to show more (such as its tools) with a trailing chevron.
+    var expanded: Binding<Bool>? = nil
     @ViewBuilder var control: Control
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 12) {
@@ -53,8 +56,22 @@ struct SettingsRow<Control: View>: View {
             }
             Spacer(minLength: 24)
             control.fixedSize()
+            if let expanded {
+                Button { toggle(expanded) } label: {
+                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .medium)).foregroundStyle(.white)
+                        .rotationEffect(.degrees(expanded.wrappedValue ? 90 : 0)).frame(width: 20, height: 28).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityLabel(expanded.wrappedValue ? "Hide tools" : "Show tools")
+            }
         }
         .padding(16)
+        .contentShape(Rectangle())
+        .onTapGesture { if let expanded { toggle(expanded) } }
+    }
+}
+
+extension SettingsRow {
+    private func toggle(_ binding: Binding<Bool>) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { binding.wrappedValue.toggle() }
     }
 }
 

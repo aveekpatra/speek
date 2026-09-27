@@ -39,6 +39,7 @@ struct AssistantSurface: View {
         .onChange(of: controller.pendingDictation) { _, _ in controller.resize() }
         .onChange(of: controller.proposal != nil) { _, _ in controller.resize() }
         .onChange(of: controller.draft) { _, _ in controller.resize() }
+        .onReceive(controller.attachments.$attachments) { _ in controller.resize() }
         .onExitCommand { controller.collapse() }
     }
 
@@ -106,6 +107,9 @@ struct AssistantSurface: View {
                         Button("Recovered dictation") { controller.showRecoveredDictation() }
                             .disabled(controller.busy || controller.recording)
                     }
+                    Divider()
+                    RecentDictationsMenu()
+                    Button("Dictation history...") { SpeekMainWindow.shared.showDictationHistory() }
                     Divider()
                     Button("Open Speek") { SpeekMainWindow.shared.show() }
                     Button("Settings") { AssistantSettingsWindow.shared.show() }
@@ -183,12 +187,13 @@ struct AssistantSurface: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         if !controller.response.isEmpty {
-                            Text(controller.response).font(.system(size: 14)).lineSpacing(4)
-                                .textSelection(.enabled)
+                            AnswerMarkdown(text: controller.response).draggable(controller.response)
                         }
                         if let message = controller.lastMessage, message.text == controller.response {
-                            HStack {
+                            HStack(spacing: 4) {
                                 Spacer()
+                                CopyAnswerButton(text: message.text)
+                                InsertAnswerButton(text: message.text)
                                 NotchResponsePlayback(playback: controller.playback, message: message)
                             }
                         }
@@ -198,25 +203,23 @@ struct AssistantSurface: View {
                 .padding(.horizontal, 4)
             }
 
-            if controller.proposal != nil {
-                HStack {
-                    Spacer()
-                    Button("Review action") { SpeekMainWindow.shared.section = .tasks; SpeekMainWindow.shared.show() }
-                        .buttonStyle(SpeekActionButtonStyle())
-                }.frame(height: 32)
-            }
+            NotchApprovalCard(controller: controller)
+            NotchElicitationCard()
 
             if controller.response.isEmpty {
                 Spacer(minLength: 0)
             }
 
             VStack(spacing: 6) {
+                NotchAttachmentStrip(store: controller.attachments)
                 TextField("Ask Speek...", text: $controller.draft, axis: .vertical)
                     .textFieldStyle(.plain).font(.system(size: 13)).lineLimit(1...3)
                     .focused($typing).onSubmit { controller.submit() }
                     .padding(.horizontal, 6).padding(.top, 6)
                 HStack(spacing: 4) {
                     iconButton("lasso", help: "Circle screen context") { controller.circleContext() }
+                        .disabled(controller.busy || controller.recording)
+                    iconButton("pencil.tip.crop.circle", help: "Mark up the screen") { controller.markUpScreen() }
                         .disabled(controller.busy || controller.recording)
                     Spacer(minLength: 0)
                     AssistantModelPicker(assistant: controller) {
@@ -237,6 +240,10 @@ struct AssistantSurface: View {
             }
             .padding(6)
             .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            // Drop files or images on the composer to attach them.
+            .dropDestination(for: URL.self) { urls, _ in
+                controller.attachments.add(urls: urls.filter(\.isFileURL)); return !urls.isEmpty
+            }
         }
         .frame(maxHeight: .infinity, alignment: .bottom)
         .padding(12)
@@ -293,6 +300,7 @@ private struct VoicePill: View {
     @ObservedObject var controller: AssistantController
     @ObservedObject var recorder: Recorder
     @ObservedObject private var focus = VoiceFocus.shared
+    @ObservedObject private var live = LiveTranscriptPreview.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var active: Bool { controller.recording || controller.busy }
@@ -315,22 +323,40 @@ private struct VoicePill: View {
             .frame(width: 28, height: 28)
             .help(active ? controller.voiceAppName : focus.appName)
 
-            Menu {
-                Picker("Voice mode", selection: $focus.override) {
-                    ForEach(VoiceInputMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            if controller.recording && !live.text.isEmpty {
+                // The newest words stay pinned to the trailing edge and the line scrolls
+                // left as you speak; older words fade out at the leading edge.
+                // The text sits in an overlay so its full width never feeds back into the pill's
+                // (and the notch window's) size; only the visible slice is drawn.
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: 28)
+                    .overlay(alignment: .trailing) {
+                        Text(live.text).font(.system(size: 11, weight: .medium)).foregroundStyle(.white)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: live.text)
+                    }
+                    .clipped()
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .white, location: 0.18)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .accessibilityElement().accessibilityLabel("Live transcript: " + live.text)
+            } else {
+                Menu {
+                    Picker("Voice mode", selection: $focus.override) {
+                        ForEach(VoiceInputMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    Divider()
+                    Button("Open Speek") { SpeekMainWindow.shared.show() }
+                    Button("Type a request") { controller.show(typing: true) }
+                } label: {
+                    Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                        .foregroundStyle(.white)
                 }
-                Divider()
-                Button("Open Speek") { SpeekMainWindow.shared.show() }
-                Button("Type a request") { controller.show(typing: true) }
-            } label: {
-                Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
-                    .foregroundStyle(.white)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .frame(maxWidth: .infinity, minHeight: 28)
+                .help(active ? controller.voiceMode.rawValue : "Voice mode for " + focus.appName)
+                .disabled(active)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(maxWidth: .infinity, minHeight: 28)
-            .help(active ? controller.voiceMode.rawValue : "Voice mode for " + focus.appName)
-            .disabled(active)
 
             if controller.recording {
                 HStack(alignment: .center, spacing: 2) {
@@ -439,6 +465,32 @@ private struct NotchOutline: Shape {
                           control1: CGPoint(x: left, y: top + shoulder * (1 - k)),
                           control2: CGPoint(x: rect.minX + shoulder * k, y: top))
             path.closeSubpath()
+        }
+    }
+}
+
+/// Attached files in the notch composer, each removable.
+private struct NotchAttachmentStrip: View {
+    @ObservedObject var store: ComposerAttachmentStore
+
+    var body: some View {
+        if !store.attachments.isEmpty || store.isImporting {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(store.attachments) { item in
+                        HStack(spacing: 4) {
+                            Image(systemName: item.kind == .image ? "photo" : "doc.text").font(.system(size: 10))
+                            Text(item.name).font(.system(size: 11)).lineLimit(1).frame(maxWidth: 120)
+                            Button { store.remove(id: item.id) } label: { Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)) }
+                                .buttonStyle(.plain).accessibilityLabel("Remove " + item.name)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8).frame(height: 24)
+                        .background(.white.opacity(0.1), in: Capsule())
+                    }
+                    if store.isImporting { ProgressView().controlSize(.mini) }
+                }.padding(.horizontal, 6).padding(.top, 6)
+            }.frame(height: 30)
         }
     }
 }

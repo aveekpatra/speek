@@ -3,7 +3,7 @@ import Foundation
  @MainActor static func main() async throws {
    let client=OpenRouterActionClient.shared
    let job=BackgroundJob(title:"test",request:"test",status:.running,providerRaw:"openRouter",modelID:"stable")
-   for kind: ProposedActionKind in [.openApp,.openWebsite,.codexTask,.remember] {
+   for kind: ProposedActionKind in [.openApp,.openWebsite,.remember] {
      client.proposals=[.init(kind:kind,title:"write",target:"x",response:"")]
      do { _ = try await BackgroundAgentRunner.run(job); assertionFailure() } catch is BackgroundActionNeedsReview {}
    }

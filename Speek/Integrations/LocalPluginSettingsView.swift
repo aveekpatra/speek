@@ -122,13 +122,20 @@ private struct LocalPluginDetail: View {
                         Toggle("Enable plugin", isOn: Binding(get: { plugin.enabled }, set: { enabled in perform { try store.setEnabled(id: id, enabled: enabled) } }))
                             .font(.system(size: 13)).toggleStyle(.switch).controlSize(.small)
                         if !plugin.manifest.tools.isEmpty {
-                            Text("Tools").font(.system(size: 13, weight: .semibold))
+                            HStack(spacing: 6) {
+                                Text("Tools").font(.system(size: 13, weight: .semibold))
+                                InfoButton(text: "Choose when Speek asks before using each tool. Never hides the tool from Speek.", subject: "Tools")
+                                Spacer(minLength: 8)
+                                ToolPolicySetAllMenu(tools: plugin.manifest.tools.map { ToolPolicyEntry(id: "cli:" + plugin.id.uuidString + ":" + $0.name, title: $0.title ?? $0.name, summary: $0.description, changesData: true) })
+                            }
                             VStack(alignment: .leading, spacing: 14) {
                                 ForEach(plugin.manifest.tools) { tool in
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Toggle(tool.title ?? tool.name, isOn: Binding(get: { !plugin.disabledTools.contains(tool.name) }, set: { enabled in
-                                            perform { try store.setToolEnabled(pluginID: id, name: tool.name, enabled: enabled) }
-                                        })).font(.system(size: 13, weight: .medium)).toggleStyle(.switch).controlSize(.small)
+                                        HStack(spacing: 12) {
+                                            Text(tool.title ?? tool.name).font(.system(size: 13, weight: .medium))
+                                            Spacer(minLength: 8)
+                                            ToolPolicyMenu(toolID: "cli:" + plugin.id.uuidString + ":" + tool.name, changesData: true, title: tool.title ?? tool.name)
+                                        }
                                         Text(tool.description).font(.system(size: 12)).foregroundStyle(.secondary)
                                         DisclosureGroup("Input fields and arguments") {
                                             Text(tool.inputSchema.jsonString + "\n\n" + tool.arguments.joined(separator: "\n"))

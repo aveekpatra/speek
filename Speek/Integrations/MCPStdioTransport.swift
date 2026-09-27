@@ -13,6 +13,9 @@ actor MCPStdioTransport: MCPTransport {
     private var version = MCPProtocol.legacy
     private var started = false
     private var closed = false
+    private var serverRequestHandler: MCPServerRequestHandler?
+
+    func setServerRequestHandler(_ handler: MCPServerRequestHandler?) async { serverRequestHandler = handler }
 
     init(executable: String, arguments: [String], workingDirectory: String, environment: [String: String]) throws {
         guard executable.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: executable) else {
@@ -85,6 +88,8 @@ actor MCPStdioTransport: MCPTransport {
         try write(.object(["jsonrpc": .string("2.0"), "method": .string(method), "params": MCPProtocol.parameters(params, version: version)]))
     }
 
+    private func writeResponse(_ value: MCPValue) throws { try write(value) }
+
     private func write(_ value: MCPValue) throws {
         guard !closed, process.isRunning else { throw MCPError.disconnected }
         var data = try JSONEncoder().encode(value)
@@ -112,10 +117,12 @@ actor MCPStdioTransport: MCPTransport {
             }
             if let method = value["method"]?.string, let requestID = value["id"] {
                 guard version != MCPProtocol.current else { terminated(); return }
-                let response: MCPValue = method == "ping"
-                    ? .object(["jsonrpc": .string("2.0"), "id": requestID, "result": .object([:])])
-                    : .object(["jsonrpc": .string("2.0"), "id": requestID, "error": .object(["code": .number(-32601), "message": .string("Client capability not supported")])])
-                try? write(response)
+                let handler = serverRequestHandler
+                let params = value["params"] ?? .object([:])
+                Task { [weak self] in
+                    let response = await mcpServerResponse(id: requestID, method: method, params: params, handler: handler)
+                    try? await self?.writeResponse(response)
+                }
             } else if let id = value["id"]?.string, pending[id] != nil {
                 do {
                     guard let result = try mcpResult(from: line, matching: .string(id)) else { throw MCPError.invalidResponse }

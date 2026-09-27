@@ -17,6 +17,22 @@ actor MCPHTTPTransport: MCPTransport {
     private var version = "2025-06-18"
     private var toolHeaderBindings: [String: [MCPHeaderBinding]] = [:]
     private var closed = false
+    private var serverRequestHandler: MCPServerRequestHandler?
+
+    func setServerRequestHandler(_ handler: MCPServerRequestHandler?) async { serverRequestHandler = handler }
+
+    /// A request the server sent on the response stream; the answer is POSTed back.
+    private func answerServerRequest(_ event: String) {
+        guard let message = try? JSONDecoder().decode(MCPValue.self, from: Data(event.utf8)),
+              let method = message["method"]?.string, let requestID = message["id"] else { return }
+        let handler = serverRequestHandler
+        let params = message["params"] ?? .object([:])
+        Task {
+            let response = await mcpServerResponse(id: requestID, method: method, params: params, handler: handler)
+            guard let request = try? self.makeRequest(response) else { return }
+            _ = try? await self.session.data(for: request)
+        }
+    }
     private let maximumBytes = 8 * 1024 * 1024
 
     init(endpoint: URL, token: String = "", session: URLSession? = nil) {
@@ -99,7 +115,10 @@ actor MCPHTTPTransport: MCPTransport {
                 guard let line = String(data: lineData, encoding: .utf8) else { throw MCPError.invalidResponse }
                 lineData.removeAll(keepingCapacity: true)
                 if line.isEmpty {
-                    if !eventData.isEmpty, let result = try mcpResult(from: Data(eventData.utf8), matching: id) { return result }
+                    if !eventData.isEmpty {
+                        answerServerRequest(eventData)
+                        if let result = try mcpResult(from: Data(eventData.utf8), matching: id) { return result }
+                    }
                     eventData = ""
                 } else if line.hasPrefix("data:") {
                     if !eventData.isEmpty { eventData += "\n" }

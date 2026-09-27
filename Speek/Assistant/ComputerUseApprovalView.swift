@@ -67,6 +67,10 @@ struct ComputerTaskListView: View {
                             }.frame(maxWidth: .infinity, alignment: .leading)
                             if job.status == .queued || job.status == .running {
                                 Button("Cancel") { tasks.cancel(job.id) }.buttonStyle(SpeekActionButtonStyle())
+                            } else if job.status == .interrupted {
+                                Button("Retry") { AssistantController.shared.retryComputerTask(job) }.buttonStyle(SpeekActionButtonStyle())
+                                Button { tasks.dismiss(job.id) } label: { Image(systemName: "xmark") }
+                                    .buttonStyle(.plain).help("Dismiss task")
                             } else {
                                 Button { tasks.dismiss(job.id) } label: { Image(systemName: "xmark") }
                                     .buttonStyle(.plain).help("Dismiss task")

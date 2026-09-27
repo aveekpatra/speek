@@ -18,6 +18,8 @@ struct DictationVocabularyEntry: Codable, Identifiable {
     var id = UUID()
     var term: String
     var heardAs: String
+    /// Saved automatically from a correction the user made after dictating.
+    var learned: Bool? = nil
 }
 
 struct DictationDestination {
@@ -37,7 +39,7 @@ struct EditSelection {
     let range: CFRange
 
     @MainActor static func capture(target: VoiceTarget) -> EditSelection? {
-        guard target.isStillFocused() else { return nil }
+        guard target.localTextView == nil, target.isStillFocused() else { return nil }
         var role: CFTypeRef?
         AXUIElementCopyAttributeValue(target.element, kAXSubroleAttribute as CFString, &role)
         guard (role as? String) != "AXSecureTextField" else { return nil }
@@ -86,7 +88,7 @@ enum DictationPipeline {
         return result as String
     }
 
-    static func process(transcript: String, destination: DictationDestination,
+    static func process(transcript: String, destination: DictationDestination, surrounding: SurroundingText? = nil,
                         defaults: UserDefaults = .standard, completion: Completion? = nil) async throws -> DictationResult {
         try Task.checkCancellation()
         let entries = vocabulary(defaults: defaults)
@@ -104,8 +106,10 @@ enum DictationPipeline {
         \(mode == .polished && contextual ? "Adapt formatting to the destination: concise for messaging, paragraphs for email, and readable structure for notes. Do not invent missing details." : "Do not adapt wording based on the destination.")
         Writing preference: \(mode == .polished ? style : "Preserve original style").
         Preferred spellings, only where the intended term matches: \(entries.prefix(150).map(\.term).joined(separator: ", "))
+        \(surrounding?.before.isEmpty == false ? "Text already before the cursor is given for continuity only. Never repeat or rewrite it. Match its language and tone, and if it ends mid-sentence, continue that sentence without a capital or a greeting." : "")
         """
-        let input = "Destination: \(contextual ? destination.appName : "Not provided")\nDictation:\n\(transcript)"
+        let preceding = surrounding.map { String($0.before.suffix(400)) } ?? ""
+        let input = "Destination: \(contextual ? destination.appName : "Not provided")\n" + (preceding.isEmpty ? "" : "Text before the cursor:\n\(preceding)\n") + "Dictation:\n\(transcript)"
         do {
             let output = try await (completion ?? complete)(system, input)
             try Task.checkCancellation()

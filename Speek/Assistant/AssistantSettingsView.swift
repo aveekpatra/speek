@@ -16,8 +16,10 @@ struct AssistantSettingsView: View {
     @ObservedObject private var permissions = PermissionsCenter.shared
     @ObservedObject private var memory = AssistantMemory.shared
     @ObservedObject private var recovery = RecordingRecovery.shared
+    @ObservedObject private var policies = ToolPolicyStore.shared
     @AppStorage("speek.assistant.useFocusedContext") private var focusedContext = true
     @AppStorage("speek.dictation.doubleTapHandsFree") private var handsFree = false
+    @AppStorage("speek.dictation.mouseButton") private var mouseButton = 0
     @AppStorage("speek.voice.recordingRecovery") private var recoveryEnabled = false
     @State private var loginEnabled = SMAppService.mainApp.status == .enabled
     @State private var settingsError: String?
@@ -76,6 +78,16 @@ struct AssistantSettingsView: View {
                 SettingsRow(title: "Double-tap for hands-free", icon: "hand.tap.fill", info: "Double-tap the shortcut to keep recording. Press it again to finish.") {
                     Toggle("Double-tap for hands-free", isOn: $handsFree).labelsHidden().toggleStyle(.switch)
                 }
+                SettingsRowDivider(leading: 60)
+                SettingsRow(title: "Mouse button", icon: "computermouse.fill", info: "Hold a mouse button to speak, like the shortcut. The button stops doing its usual action while it is assigned here.") {
+                    Picker("Mouse button", selection: Binding(get: { MouseTriggerMonitor.selected }, set: { button in
+                        UserDefaults.standard.set(button.rawValue, forKey: MouseTriggerMonitor.defaultsKey)
+                        mouseButton = button.rawValue
+                        AssistantController.shared.reloadMouseTrigger()
+                    })) {
+                        ForEach(MouseTriggerMonitor.Button.allCases) { Text($0.title).tag($0) }
+                    }.labelsHidden().id(mouseButton)
+                }
             }
             SettingsSection(title: "Context") {
                 SettingsRow(title: "Screen context", icon: "viewfinder", info: "Include the screen and selected text in agent requests.") {
@@ -105,6 +117,11 @@ struct AssistantSettingsView: View {
         VStack(alignment: .leading, spacing: 28) {
             VoiceCaptureSettingsView(isRecording: AssistantController.shared.recording)
             DictationSettingsView()
+            SettingsSection(title: "History") {
+                SettingsRow(title: "Dictation history", info: "Search, copy, and export past dictations, with totals and time saved. Recent dictations are also in the notch and menu bar menus.") {
+                    Button("Open") { SpeekMainWindow.shared.showDictationHistory() }.buttonStyle(SpeekActionButtonStyle())
+                }
+            }
         }
     }
 
@@ -113,6 +130,21 @@ struct AssistantSettingsView: View {
             SettingsSection(title: "History") {
                 SettingsRow(title: "Save history on this Mac", icon: "clock.arrow.circlepath", info: "Saves chats, completed requests, and the latest 500 dictations. Turning it off stops saving and recalling past events. Existing entries are kept.") {
                     Toggle("Save history on this Mac", isOn: $memory.saveHistory).labelsHidden().toggleStyle(.switch)
+                }
+            }
+            SettingsSection(title: "Approvals", info: "When Speek asks before using a tool. Each integration can override these per tool in Integrations.") {
+                SettingsRow(title: "Actions that only read", icon: "eye.fill") {
+                    Picker("Actions that only read", selection: $policies.readDefault) {
+                        Text(ToolPolicy.allow.title).tag(ToolPolicy.allow)
+                        Text(ToolPolicy.ask.title).tag(ToolPolicy.ask)
+                    }.labelsHidden()
+                }
+                SettingsRowDivider(leading: 60)
+                SettingsRow(title: "Actions that change things", icon: "pencil.and.outline", info: "Sending, creating, editing, deleting, opening, running commands, and controlling apps.") {
+                    Picker("Actions that change things", selection: $policies.changeDefault) {
+                        Text(ToolPolicy.ask.title).tag(ToolPolicy.ask)
+                        Text(ToolPolicy.allow.title).tag(ToolPolicy.allow)
+                    }.labelsHidden()
                 }
             }
             SettingsSection(title: "Recording recovery") {

@@ -20,6 +20,10 @@ import AppKit
         INSERT INTO message VALUES (NULL,800000010000000000,0,0,1,'iMessage');
         INSERT INTO message VALUES ('SMS only',800000020000000000,0,0,1,'SMS');
         INSERT INTO chat_message_join VALUES (1,1),(1,2),(1,3);
+        CREATE TABLE attachment (filename TEXT,transfer_name TEXT);
+        CREATE TABLE message_attachment_join (message_id INTEGER,attachment_id INTEGER);
+        INSERT INTO attachment VALUES ('~/Library/Messages/Attachments/ab/photo.jpg','photo.jpg');
+        INSERT INTO message_attachment_join VALUES (2,1);
         """
         assert(sqlite3_exec(db,schema,nil,nil,nil) == SQLITE_OK); sqlite3_close(db)
         let original = try Data(contentsOf:url)
@@ -29,6 +33,8 @@ import AppKit
         let conversation = try store.read(operation:"messages.conversation",conversationID:"iMessage;-;+12025550123")
         assert(conversation.items.count == 2); assert(conversation.items[0]["text"] == "Hello world")
         assert(conversation.items[1]["textAvailable"] == "false")
+        assert(conversation.items[1]["attachments"] == "photo.jpg" && conversation.items[1]["text"] == "Attachment only: photo.jpg")
+        assert(conversation.items[1]["attachmentPaths"] == NSHomeDirectory() + "/Library/Messages/Attachments/ab/photo.jpg")
         let search = try store.read(operation:"messages.search",query:"hello")
         assert(search.items.count == 1)
         let injected = try store.read(operation:"messages.search",query:"' OR 1=1 --")

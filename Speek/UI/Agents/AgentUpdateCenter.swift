@@ -142,15 +142,13 @@ final class AgentUpdateCenter: ObservableObject {
         pending.first { $0.id == selectedID } ?? pending.last
     }
 
-    /// Set by the app at launch so the panel can mirror recording state.
-    weak var engine: SpeekEngine? {
-        didSet {
-            stateObserver = engine?.$recordingState
-                .receive(on: RunLoop.main)
-                .sink { [weak self] state in self?.recordingState = state }
-        }
+    /// Set by `AssistantController` so the panel can show live input levels.
+    weak var recorder: Recorder?
+
+    /// Mirrors the assistant's recording state so the panel shows listening and transcribing.
+    func setRecordingState(_ state: RecordingState) {
+        if recordingState != state { recordingState = state }
     }
-    var recorder: Recorder? { engine?.recorder }
 
     var isShowingPanel: Bool { !pending.isEmpty }
     /// Mirrors the panel's key status for the view: recording state is shown in the
@@ -169,7 +167,6 @@ final class AgentUpdateCenter: ObservableObject {
 
     private var panel: AgentReplyPanel?
     private var keyMonitor: Any?
-    private var stateObserver: AnyCancellable?
     private var visibilityWatchdog: Timer?
     private let logger = Logger(subsystem: "com.aveekpatra.speek", category: "AgentUpdateCenter")
 
@@ -185,14 +182,14 @@ final class AgentUpdateCenter: ObservableObject {
             receive(update)
             return true
         case "record":
-            NotificationCenter.default.post(name: .toggleRecorderPanel, object: nil)
+            AssistantController.shared.toggleVoice()
             return true
         case "agent-window":
             goToAgentWindow()
             return true
         case "settings":
-            NotificationCenter.default.post(name: .speekNavigate, object: nil, userInfo: ["page": SpeekPage.configuration.rawValue])
-            NSApp.activate(ignoringOtherApps: true)
+            SpeekMainWindow.shared.section = .integrations
+            SpeekMainWindow.shared.show()
             return true
         default:
             return false
@@ -210,6 +207,8 @@ final class AgentUpdateCenter: ObservableObject {
             return
         }
         if case .other = update.kind { return }
+        // A queued event whose hook already gave up (its reply pipe is gone) has nothing to answer.
+        if let path = update.replyPath, !FileManager.default.fileExists(atPath: path) { return }
         let isSnoozed = snoozedUntil.map { $0 > Date() } ?? false
         var isNewSession = true
         // One entry per session: a newer event for the same session replaces the old one.
@@ -385,7 +384,7 @@ final class AgentUpdateCenter: ObservableObject {
     }
 
     func replyByVoice() {
-        NotificationCenter.default.post(name: .toggleRecorderPanel, object: nil)
+        AssistantController.shared.toggleVoice()
     }
 
     func openTerminal() {

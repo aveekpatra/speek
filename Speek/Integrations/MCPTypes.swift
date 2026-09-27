@@ -51,6 +51,17 @@ struct MCPPlugin: Codable, Identifiable, Equatable, Sendable {
     var workingDirectory: String = ""
     var enabled = false
     var disabledTools: Set<String> = []
+    /// Set when the plugin was added from the directory; used for its logo.
+    var directoryID: String?
+    /// A command whose output is the bearer token, run in the login shell at connect time
+    /// (for example `gh auth token`), so Speek never keeps its own copy.
+    var tokenCommand: String?
+    /// A pre-registered OAuth client for servers that do not allow dynamic registration.
+    /// Installed-app client secrets are not confidential (Google treats them as public).
+    var oauthClientID: String?
+    var oauthClientSecret: String?
+    /// Space-separated scopes to request instead of everything the server advertises.
+    var oauthScopes: String?
 }
 
 struct IntegrationTool: Identifiable, Equatable, Sendable {
@@ -61,6 +72,24 @@ struct IntegrationTool: Identifiable, Equatable, Sendable {
     let inputSchema: MCPValue
     let readOnly: Bool
     var id: String { pluginID.uuidString + ":" + name }
+}
+
+struct MCPPromptInfo: Identifiable, Sendable {
+    struct Argument: Sendable { let name: String; let detail: String?; let required: Bool }
+    let pluginID: UUID
+    let name: String
+    let title: String
+    let detail: String?
+    let arguments: [Argument]
+    var id: String { pluginID.uuidString + ":" + name }
+}
+
+struct MCPResourceInfo: Identifiable, Sendable {
+    let uri: String
+    let name: String
+    let detail: String?
+    let mimeType: String?
+    var id: String { uri }
 }
 
 struct IntegrationToolResult: Sendable {
@@ -101,7 +130,12 @@ enum MCPError: LocalizedError {
     }
 }
 
+/// Answers a request the server sends back mid-call (for example `elicitation/create`).
+/// Returns the JSON-RPC `result`; throwing replies with an error.
+typealias MCPServerRequestHandler = @Sendable (_ method: String, _ params: MCPValue) async throws -> MCPValue
+
 protocol MCPTransport: AnyObject, Sendable {
+    func setServerRequestHandler(_ handler: MCPServerRequestHandler?) async
     func request(method: String, params: MCPValue) async throws -> MCPValue
     func notify(method: String, params: MCPValue) async throws
     func setProtocolVersion(_ version: String) async
@@ -111,6 +145,17 @@ protocol MCPTransport: AnyObject, Sendable {
 
 extension MCPTransport {
     func setToolSchemas(_ tools: [IntegrationTool]) async throws {}
+    func setServerRequestHandler(_ handler: MCPServerRequestHandler?) async {}
+}
+
+/// The JSON-RPC response to a server-initiated request.
+func mcpServerResponse(id: MCPValue, method: String, params: MCPValue, handler: MCPServerRequestHandler?) async -> MCPValue {
+    if method == "ping" { return .object(["jsonrpc": .string("2.0"), "id": id, "result": .object([:])]) }
+    guard let handler else {
+        return .object(["jsonrpc": .string("2.0"), "id": id, "error": .object(["code": .number(-32601), "message": .string("Client capability not supported")])])
+    }
+    do { return .object(["jsonrpc": .string("2.0"), "id": id, "result": try await handler(method, params)]) }
+    catch { return .object(["jsonrpc": .string("2.0"), "id": id, "error": .object(["code": .number(-32601), "message": .string(error.localizedDescription)])]) }
 }
 
 func mcpResult(from data: Data, matching id: MCPValue) throws -> MCPValue? {

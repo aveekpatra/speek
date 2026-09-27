@@ -1,6 +1,8 @@
+import AppKit
 import Foundation
 import ApplicationServices
-struct VoiceTarget { let element: AXUIElement; func isStillFocused() -> Bool { true } }
+struct VoiceTarget { let element: AXUIElement; var localTextView: NSTextView? = nil; func isStillFocused() -> Bool { true } }
+struct SurroundingText { let before: String; let after: String }
 enum ActionCloudProvider { case openAI, openRouter }
 enum ActionCredentials { static let voiceProvider = ActionCloudProvider.openRouter; static func key(for: ActionCloudProvider) -> String? { nil } }
 enum ActionConnection { case openRouter }

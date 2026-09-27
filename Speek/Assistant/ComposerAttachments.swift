@@ -110,6 +110,14 @@ final class ComposerAttachmentStore: ObservableObject {
     }
 
     func remove(id: UUID) { attachments.removeAll { $0.id == id } }
+
+    /// Attaches text that is not a file, such as a plugin resource.
+    func addText(name: String, text: String) {
+        guard attachments.count < Self.countLimit else { error = ComposerAttachmentError.tooMany.localizedDescription; return }
+        attachments.append(ComposerAttachment(id: UUID(), name: name, kind: .text, byteCount: text.utf8.count,
+                                              extractedText: String(text.prefix(40_000)), imageData: nil, previewData: nil,
+                                              isTruncated: text.count > 40_000, note: nil))
+    }
     func clear() {
         generation = UUID()
         importTask?.cancel()

@@ -25,12 +25,15 @@ Read `docs/FEATURE_STATUS.md` for implementation boundaries. Its early navigatio
 
 ## 2. Product and business decisions: preserve these
 
+- [x] 2026-09-27: Approvals happen in the notch, not the main window. Tool policies (Ask / Always allow / Never; defaults reads=allow, changes=ask in Settings > Privacy) are set inline on each integration and tool, never on a separate page, and apply to native apps, Messages, files, schedules, web, computer use, MCP and command-line tools, including scheduled background runs. Sensitive computer-use consent and task questions always ask.
+- [x] 2026-09-27: Speek is invisible-first and not a coding app. Coding tasks, the Activity page, and "Run in background" were removed. Coding assistants connect by hooks only (reply panel). Dictation history left the sidebar (notch/menu bar/Settings entry points). Schedules live in a sidebar group shown only when needed; reminders go to Apple Reminders.
+
 - [x] macOS ONLY, deliberately. Windows, Android, iPhone and cross-platform work are not missing features. Do not propose or implement them for this task.
 - [x] Personal-use-first, intended to be open source. The owner is not operating a paid hosted assistant service and does not intend to fund other users' LLM subscriptions.
 - [x] Users bring their own Codex installation/account and optional API credentials. Missing local Codex is an explicit dependency/setup state, not a reason to build a new computer-use engine now.
 - [x] Build computer use on Codex for now. A provider-independent runtime was considered and deferred to avoid duplicating Mac automation infrastructure before the core product works.
 - [x] The central promise is voice-to-action inside real apps and authenticated websites. Opening an app or describing a screenshot is not completion of an interaction task.
-- [x] Use Ego Browser and its installed skill for browser automation. Reuse the user's signed-in browser context.
+- [x] 2026-09-27 (supersedes the Ego-only rule): browser work uses the browser the user names, otherwise the default browser. Ego Browser is an optional Speek skill used when asked for. The only standing browser rule: never the Codex in-app browser or an embedded browser.
 - [x] Do not add an embedded browser, Codex in-app browser, Playwright/CDP fallback, or browser automation through native CUA. The owner's reason is practical authentication and separation of the browser from the coding environment.
 - [x] Models & Voice owns accounts/providers, default task provider/model/reasoning, and audio models/voices. Integrations owns MCP servers, native app adapters, local CLIs/hooks and skills. These are different concepts and different screens.
 - [x] Default provider/model/reasoning are explicit and persistent for new chats. Existing chats retain their snapshots. Do not silently upgrade a simple task to Astra or switch billing providers.
@@ -86,10 +89,10 @@ Read `docs/FEATURE_STATUS.md` for implementation boundaries. Its early navigatio
 - [x] 19-minute warning and finish at 20 minutes; oversized audio chunking.
 - [x] Clipboard/paste delivery path and retained text when insertion cannot safely happen.
 - [x] Opt-in local recovery audio: maximum five recordings/100 MB, 24-hour expiry, retry with Copy, remove on successful delivery. Cleanup after time away occurs on relaunch.
-- [ ] Enabled-language sets and robust automatic multilingual handling. Do not promise an exact language count across providers without checking capabilities.
-- [ ] Configurable mouse-button triggers and full shortcut termination/reset behavior.
-- [ ] Warm-capture behavior, consistent start/stop/error cues and media ducking/restoration.
-- [ ] Live partial transcripts. Current recording transcription is not continuous streaming.
+- [x] Enabled-language sets (primary first; one = forced, several = hinted, OpenAI gets all) with an on-device language check that retries once in a spoken language when detection misfires.
+- [x] Mouse-button trigger (middle, back, forward) through the same hold/double-tap state machine; the assigned button is consumed.
+- [x] Start/stop sound cues (Settings > Dictation > Sound cues) and a pause-media toggle (default on). Warm capture not implemented.
+- [x] Live transcript in the notch pill from Apple SpeechAnalyzer on this Mac (display only; inserted text still comes from the cloud model). Toggle: Settings > Dictation > Live transcript.
 - [ ] Verify long-recording chunk continuity, quota/timeouts, device unplugging and startup/release races.
 - [ ] Verify dictation during active computer clicking. Asynchronous execution releases Speek's busy flag but does not isolate OS focus. Preserve target checks and recovery; never paste into a different app after focus changes.
 
@@ -100,9 +103,9 @@ Read `docs/FEATURE_STATUS.md` for implementation boundaries. Its early navigatio
 - [x] Persisted phrase replacements and vocabulary entries applied locally.
 - [x] Bounded supported vocabulary hints for OpenAI; supported language field for OpenRouter. Do not claim OpenRouter's ignored generic prompt field tunes recognition.
 - [x] Spoken rewriting of a captured selection; replace only if the original selection is still valid.
-- [ ] Surrounding-text and visible specialist-term adaptation before transcription.
-- [ ] Automatic vocabulary learning from explicit corrections, with review and undo.
-- [ ] Bulk dictionary import and AI-assisted onboarding suggestions.
+- [x] Surrounding text: joins dictation into existing text (spacing, capitalization; dictionary-guarded lowercasing), gives polish continuity, and sends nearby names/terms as transcription hints (OpenAI).
+- [x] Learns from corrections made within 90 s of a dictation (small, similar-spelling or casing fixes inside the dictated text); "Learned" badge in Vocabulary; Undo in notch and menu bar menus; toggle in Settings > Dictation.
+- [x] Bulk vocabulary import (text/CSV: terms or "heard as, write as" pairs). AI onboarding suggestions not implemented.
 - [ ] Dictionary updates learned from Edit Mode corrections.
 - [ ] Full output-quality evaluation for punctuation, grammar, lists, number formatting, filler removal and false starts. These rely on models; source code alone is not accuracy proof.
 - [ ] Cross-device dictionary sync is deferred for the personal local Mac scope unless the owner requests it.
@@ -116,16 +119,16 @@ Read `docs/FEATURE_STATUS.md` for implementation boundaries. Its early navigatio
 - [x] Attachment limits: eight files, 10 MB each, 30 MB total, bounded extracted text.
 - [x] Local prompt library with search, favorites, variables, editing and deletion.
 - [x] Create Prompt with editable context, numbered image previews, refinement, undo and insertion into the draft.
-- [ ] Cursor-position context and gesture annotation: point, circle trails, underline and retained marks.
+- [x] Pointer context (what is under the pointer, plus a red ring on the screenshot) and a Mark Up Screen mode (free strokes, Return attaches, Delete removes the last stroke).
 - [ ] Explicit pinned context across follow-ups, with clear removal and freshness semantics.
-- [ ] Complete drag/paste attachment behavior at the notch and context drag-out.
-- [ ] Create Prompt voice invocation, annotation editing and exported prompt/image bundles.
+- [x] Drop files on the notch composer (removable chips); answers can be dragged out and copied (hover). Pasting images into the notch is not implemented.
+- [x] Dictation works in Speek's own text fields (including Create Prompt), inserted directly. Prompt/image bundle export not implemented.
 - [ ] Changed instructions for running jobs, editable queued follow-ups and coherent interruption handling. Do not confuse cancellation with conversational barge-in.
 - [x] Public web search results with URLs and bounded HTTPS page reads.
 - [ ] Reliable extraction for JS-heavy pages through the approved browser path where needed.
 - [ ] Image/YouTube previews, weather, maps/nearby places, stocks/charts and other structured answers.
 - [x] Open apps, URLs and configured-folder files.
-- [ ] Complete explicit browser/profile targeting. Preserve Ego as the browser automation choice.
+- [ ] Complete explicit browser/profile targeting (named browser, otherwise default browser).
 - [x] Typed tool catalog, schema validation, bounded tool/result loop and editable consequential-action review.
 - [ ] General persistent per-tool confirmation settings and resumable approval cards, beyond current task-local CUA consent.
 - [ ] Broader multi-app workflow verification: research -> draft -> review -> action -> follow-up. A successful tool call is not automatically successful delivery.
@@ -134,7 +137,7 @@ Read `docs/FEATURE_STATUS.md` for implementation boundaries. Its early navigatio
 
 - [x] `CodexComputerUse` launches a real native Codex App Server and discovers `cua_repl.js`.
 - [x] It strips inherited embedding-chat CODEX transport identity, keeps the user's proper login environment, validates model/reasoning and starts an ephemeral read-only turn.
-- [x] Native apps use granular CUA tools. Browser work receives the installed Ego skill and explicit Ego-only instructions.
+- [x] Native apps use granular CUA tools. Browser work uses the named or default browser; relevant enabled Speek skills (such as Ego Browser) are passed to the turn as optional tools.
 - [x] Visible inline permissions above the composer, task identification, serialized requests and one-task reuse of low-risk consent.
 - [x] Cancellation, process-exit handling, RPC timeout, tool-call limits and five-minute execution bound.
 - [x] `ComputerTaskManager` snapshots request/context/model/provider/reasoning/source chat and owns the queue independently of the recorder.
@@ -144,10 +147,10 @@ Read `docs/FEATURE_STATUS.md` for implementation boundaries. Its early navigatio
 - [x] Completion announcement waits for idle voice/foreground state, honors spoken replies, otherwise plays a sound.
 - [ ] Verify completion delivery with different current chats, deleted/archived source chats, history disabled, multiple completions, failed tasks and an active dictation recovery.
 - [ ] Verify completion audio, mute/read-aloud preferences, TTS failure and multiple queued announcements. Avoid notification spam or speaking over the user.
-- [ ] Persist computer-job records/interrupted states. Current computer queue/notice records are session-only; saved chat results persist. Do not blindly replay interrupted UI actions.
+- [x] Computer jobs persist (Application Support/Speek/computer-jobs.json, last 50). Jobs running at quit return as Interrupted with Retry; nothing replays automatically.
 - [ ] Improve shared-desktop focus coordination if live tests show interference with dictation. Do not falsely label UI control as isolated background computation.
 - [ ] Expose pending consent reliably if it arrived during recording and could not bring the window forward.
-- [ ] Audit browser restriction enforcement. Current Ego-only behavior relies on agent instructions, not a hard capability firewall.
+- [x] BrowserGuard enforces browser choice in code: tool calls or commands that target a known browser other than the named/default one stop the task.
 - [ ] Respect the installed CUA plugin's app restrictions, including ChatGPT itself. Do not bypass them or promise arbitrary-app success.
 - [ ] OpenRouter and the isolated ChatGPT profile do not currently execute native computer-use turns. Clearly explain the local Codex requirement; do not silently switch accounts.
 - [ ] No independent Mac computer-use backend is requested now. This is a deliberate dependency choice, not a parity blocker to 'solve' by rewriting the runtime.
@@ -159,21 +162,21 @@ Generic browser/computer use or a user-supplied MCP server is not the same as a 
 ### Existing native adapters
 
 - [x] iMessage: recent conversations, conversation reading, text search, unread messages and reviewed send to exact phone/email.
-- [ ] iMessage: richer attributed bodies/attachments, schema compatibility and live send/delivery verification. History needs Full Disk Access; sending needs sign-in and Automation permission.
+- [x] iMessage: attachment names and paths in results; send a file (reviewed). Attributed-body text is still not decoded.
 - [x] Apple Mail: bounded recent Inbox search/read, draft, reviewed single-recipient send and reply draft.
-- [ ] Apple Mail: explicit unread parity, full mailbox/content search, mailbox moves and complete reply behavior. Current search is limited to the latest 200 Inbox messages.
+- [x] Apple Mail: search all inboxes or a named mailbox by subject/sender/body, unread filter, mailbox list with unread counts, move, mark read/unread/flag, read/reply by account|mailbox|id.
 - [x] Reminders: lists, search, create, complete/reopen and delete.
 - [ ] Reminders: live EventKit verification and advanced recurrence/editor coverage if required. Core listed actions already exist.
 - [x] Finder/file tools: configured-folder listing, filename search, reads/info/recent/open, create file/folder, copy, move/rename, append and Trash.
 - [ ] Finder: save attached files through a reviewed destination and broader user-authorized locations. Retain symlink/path/size boundaries; do not remove them for convenience.
 - [x] Notes: bounded title search, plain-text read/create/append.
-- [ ] Notes: folders, comprehensive note listing/search and rich content behavior.
+- [x] Notes: folder list, title and body search in all folders or one, create in a named folder.
 - [x] Apple Calendar: calendars, search/schedule, available intervals and create/update/delete.
 - [ ] Apple Calendar: disposable-record testing, all-day/timezone edge cases and recurring-event semantics. Availability is for accessible calendars, not arbitrary attendee availability. Creation does not send invitations.
 - [x] Spotify: current playback/status, play/pause, next/previous and volume.
-- [ ] Spotify: content search/play selection, shuffle/repeat/seek, queue, library/playlists and remote-device playback.
+- [x] Spotify: play by URI or open.spotify.com link (found via web search), shuffle and repeat. Queue, library and remote devices need the Spotify Web API (not implemented).
 - [x] Apple Music: current playback/status, play/pause, next/previous and volume.
-- [ ] Apple Music: search, queue, favorites, library/playlists and live rich controls.
+- [x] Apple Music: play a library song, album, artist, or playlist; list playlists; shuffle and repeat. No queue API in AppleScript.
 
 ### Missing dedicated service integrations
 
@@ -212,7 +215,8 @@ Choose direct authenticated APIs or explicitly supported MCP connectors based on
 ## 8. Integration platform checklist
 
 - [x] Local stdio/remote HTTP MCP connections, discovery, enable/disable, schemas, reviewed execution and saved credentials in Keychain.
-- [ ] Managed OAuth login/refresh/revocation, resources/prompts browsing, elicitation UI and sampling support where applicable.
+- [x] MCP OAuth 2.1 (2026-09-27): resource and server metadata discovery, dynamic client registration, pre-registered clients (Google), PKCE, loopback redirect, Keychain storage, refresh, sign-out; token commands such as `gh auth token`. Directory: Notion, Linear, Composio (sign-in), GitHub (GitHub CLI login), Gmail and Google Calendar (own Google Cloud client, project `speek-509900`, in production), Outlook and Slack (through Composio). Check: `scripts/checks/check_mcp_oauth.py`.
+- [x] MCP resources (agent list/read tools, attach from plugin detail), prompts (use from plugin detail), elicitation (form and HTTPS link questions in the notch, 2025 protocol). Sampling not supported. Google OAuth app published to production on 2026-09-27 (unverified; privacy policy at github.com/aveekpatra/speek/blob/main/PRIVACY.md).
 - [ ] Real-server reconnection, authorization failure and capability compatibility tests beyond fixtures.
 - [x] Validated local CLI manifests, direct executable invocation, bounded output/time and explicit enablement.
 - [x] Imported local skills with enable/disable and context inclusion.
@@ -238,8 +242,8 @@ Choose direct authenticated APIs or explicitly supported MCP connectors based on
 - [ ] Verify Space transitions, fullscreen, short errors, large results, Reduce Motion and Reduce Transparency. Avoid changing the accepted shape while fixing state bugs.
 - [ ] VoiceOS's side notch is not implemented. Treat it as a possible design choice, not automatic permission to add another floating UI; owner wants low distraction.
 - [ ] Complete appearance/material/layout preferences only if useful within the owner's chosen notch design. An always-visible floating bar was specifically rejected as distracting.
-- [ ] Structured maps, thumbnails, charts, statistics, lists, countdowns and live media widgets.
-- [ ] Draft-specific insert actions, rich links/attachments and file drag-out/Open With.
+- [ ] Answers render full Markdown (headings, lists, tables, code). Maps, media, and widgets are part of the next Assistant pass.
+- [x] Answer actions: copy, insert into the last text field used in another app, drag out.
 - [x] Chat pin/archive/delete and reopening; dictation search/copy/delete/clear/export.
 - [x] Dictation totals, words, recorded time and estimated time saved; local maximum 500 entries.
 - [ ] Speaking-speed insights and configurable session-reset timing.

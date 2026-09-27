@@ -54,7 +54,7 @@ enum BackgroundAgentRunner {
                 guard seen.insert(call.json).inserted else { throw ActionClientError.requestFailed("The agent repeated a search. Open this request in chat to continue.") }
                 let result = try await ActionRuntime.shared.execute(call, approved: false)
                 evidence.append("Web search: \(proposal.target)\nResult: \(String(result.prefix(24000)))")
-            case .openWebsite, .openApp, .codexTask, .remember:
+            case .openWebsite, .openApp, .remember:
                 throw try BackgroundActionNeedsReview(request: job.request, proposal: proposal, evidence: evidence)
             }
         }

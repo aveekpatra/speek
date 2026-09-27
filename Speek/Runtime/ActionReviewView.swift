@@ -50,7 +50,11 @@ struct ActionReviewView: View {
             HStack(spacing: 10) {
                 Spacer()
                 Button("Cancel") { assistant.cancelProposal() }.buttonStyle(SpeekActionButtonStyle())
-                Button(proposal.kind == .codexTask ? "Review task" : "Approve action") { approve() }.buttonStyle(SpeekActionButtonStyle())
+                if let call {
+                    Button("Always Allow") { ToolPolicyStore.shared.set(.allow, for: call.tool); approve() }
+                        .buttonStyle(SpeekActionButtonStyle()).help("Run now and stop asking for this tool")
+                }
+                Button("Approve action") { approve() }.buttonStyle(SpeekActionButtonStyle())
             }
         }.padding(18).settingsSurface()
             .onAppear { loadValues() }

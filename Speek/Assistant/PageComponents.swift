@@ -18,7 +18,7 @@ struct PillTabs: View {
                         .contentShape(Capsule())
                 }.buttonStyle(.plain).accessibilityAddTraits(selection == item ? .isSelected : [])
             }
-        }.padding(4).frame(maxWidth: 420).background(.black.opacity(0.14), in: Capsule())
+        }.padding(4).frame(maxWidth: CGFloat(items.count) * 105).background(.black.opacity(0.14), in: Capsule())
     }
 }
 

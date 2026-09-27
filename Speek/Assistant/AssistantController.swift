@@ -37,7 +37,16 @@ final class AssistantController: ObservableObject {
     private var announcementWork: Task<Void, Never>?
     private var unannouncedTaskIDs: [UUID] = []
     @Published private(set) var fileTaskRunning = false
-    private var codingSubscription: AnyCancellable?
+    private var computerJobsSubscription: AnyCancellable?
+    private var agentReplySubscription: AnyCancellable?
+    private var approvalSubscription: AnyCancellable?
+    private let mouseTrigger = MouseTriggerMonitor()
+    /// A permission arrived while recording; show it in the notch once dictation ends.
+    private var approvalDeferred = false
+    /// Dictation started while a coding assistant's reply panel had focus: the text goes there.
+    private var replyingToAgent = false
+    /// Text around the cursor when dictation started.
+    private var voiceSurrounding: SurroundingText?
     private var computerSubscription: AnyCancellable?
     private var taskThreadID: UUID?
     private var proposalImage: Data?
@@ -97,26 +106,28 @@ final class AssistantController: ObservableObject {
         ShortcutStore.seedShortcut(.key(keyCode: 49, modifierFlags: [.option]), for: .primaryRecording)
         VoiceFocus.shared.start()
         _ = RecordingRecovery.shared
-        codingSubscription = CodingTaskManager.shared.$jobs.combineLatest(ComputerTaskManager.shared.$jobs)
-            .sink { [weak self] coding, computer in
+        computerJobsSubscription = ComputerTaskManager.shared.$jobs
+            .sink { [weak self] computer in
                 guard let self else { return }
-                let count = coding.filter { $0.status == .queued || $0.status == .running }.count
-                    + computer.filter { $0.status == .queued || $0.status == .running }.count
+                let count = computer.filter { $0.status == .queued || $0.status == .running }.count
                 self.fileTaskRunning = count > 0
                 self.taskStatus = count > 0 ? "\(count) background task\(count == 1 ? "" : "s")" : ""
             }
-        computerSubscription = CodexComputerUse.shared.$approval.sink { [weak self] request in
-            if request != nil { self?.taskStatus = "Computer task needs permission" }
-        }
-        CodingTaskManager.shared.onCompleted = { [weak self] job in
-            guard let self else { return }
-            let result = job.result ?? job.error ?? "Task stopped."
-            if let id = job.sourceThreadID, AssistantMemory.shared.saveHistory {
-                ActionThreadStore.shared.append(result, role: .assistant, to: id)
+        agentReplySubscription = $recording.combineLatest($busy, $phase)
+            .sink { recording, busy, phase in
+                AgentUpdateCenter.shared.setRecordingState(recording ? .recording : (busy && phase == "Transcribing") ? .transcribing : .idle)
             }
-            if job.status == .completed { AssistantMemory.shared.recordEpisode(request: job.request, result: result) }
-            self.deliverTaskNotice(request: job.request, result: result, sourceID: job.sourceThreadID,
-                                   succeeded: job.status == .completed)
+        AgentUpdateCenter.shared.recorder = recorder
+        CodexComputerUse.skillInstructions = { IntegrationStore.shared.enabledSkillInstructions(for: $0) }
+        MCPElicitationCenter.shared.present = { AssistantController.shared.presentApproval() }
+        MCPElicitationCenter.shared.dismissed = { AssistantController.shared.resize() }
+        computerSubscription = CodexComputerUse.shared.$approval.receive(on: RunLoop.main).sink { [weak self] request in
+            guard let self else { return }
+            if request != nil { self.taskStatus = "Computer task needs permission"; self.presentApproval() } else { self.resize() }
+        }
+        approvalSubscription = $recording.removeDuplicates().dropFirst().sink { [weak self] recording in
+            guard let self, !recording, self.approvalDeferred else { return }
+            DispatchQueue.main.async { self.presentApproval() }
         }
         Task { await IntegrationStore.shared.restoreEnabledConnections() }
         TaskScheduler.shared.onReviewRequest = { [weak self] job in
@@ -169,7 +180,10 @@ final class AssistantController: ObservableObject {
         window.hidesOnDeactivate = false
         window.appearance = NSAppearance(named: .darkAqua)
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: AssistantSurface(controller: self))
+        let hosting = NSHostingView(rootView: AssistantSurface(controller: self))
+        // resize() owns the notch's frame; content must never grow or shrink the window.
+        hosting.sizingOptions = []
+        window.contentView = hosting
         panel = window
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.resize() }
@@ -208,6 +222,23 @@ final class AssistantController: ObservableObject {
             Task { @MainActor in
                 guard let self, self.holdToSpeak.isEngaged else { return }
                 self.cancel()
+            }
+        })
+        reloadMouseTrigger()
+    }
+
+    /// Re-reads the mouse button choice; called at launch and when the setting changes.
+    func reloadMouseTrigger() {
+        mouseTrigger.start(button: MouseTriggerMonitor.selected, onPress: { [weak self] time in
+            Task { @MainActor in
+                guard let self, self.holdToSpeak.isEngaged || (!self.busy && !self.recording) else { return }
+                self.shortcutReleaseTask?.cancel()
+                self.handleShortcut(self.holdToSpeak.press(at: time, enabled: UserDefaults.standard.bool(forKey: "speek.dictation.doubleTapHandsFree")))
+            }
+        }, onRelease: { [weak self] time in
+            Task { @MainActor in
+                guard let self else { return }
+                self.handleShortcut(self.holdToSpeak.release(at: time))
             }
         })
     }
@@ -252,7 +283,8 @@ final class AssistantController: ObservableObject {
         let measuredBody = textHeight(response, size: 14, spacing: 4)
             + (lastMessage?.text == response && !response.isEmpty ? 40 : 0)
         let bodyHeight = hasContent ? Int(min(180, max(24, measuredBody))) + 12 : 0
-        let extras = (taskNotices.isEmpty ? 0 : 116) + (context == nil ? 0 : 44) + (taskStatus.isEmpty ? 0 : 44) + (proposal == nil ? 0 : 44)
+        let extras = (taskNotices.isEmpty ? 0 : 116) + (context == nil ? 0 : 44) + (taskStatus.isEmpty ? 0 : 44) + NotchApprovalCard.height(for: self) + (NotchApprovalCard.height(for: self) > 0 ? 12 : 0)
+            + NotchElicitationCard.height() + (NotchElicitationCard.height() > 0 ? 12 : 0) + (attachments.attachments.isEmpty && !attachments.isImporting ? 0 : 30)
         let draftLines = min(3, max(1, draft.count / 45 + draft.filter { $0 == "\n" }.count + 1))
         let recoveryBody = textHeight(dictationError, size: 12, spacing: 0)
             + textHeight(pendingDictation, size: 14, spacing: 4)
@@ -340,6 +372,8 @@ final class AssistantController: ObservableObject {
             let capturedDuration = Date().timeIntervalSince(recordingStarted)
             recordingLimit?.cancel(); recordingLimit = nil
             recording = false; busy = true; phase = "Transcribing"
+            SoundManager.shared.playStopSound()
+            LiveTranscriptPreview.shared.stop()
             work = Task {
                 await recorder.stopRecording()
                 guard let url = audioURL else { busy = false; return }
@@ -349,11 +383,20 @@ final class AssistantController: ObservableObject {
                         throw ActionClientError.requestFailed("No microphone audio detected. Check your input device and try again.")
                     }
                     let recoveryID = RecordingRecovery.shared.save(audioURL: url, appName: voiceAppName)
-                    let text = try await CloudActionClient.transcribe(url)
+                    let text = try await CloudActionClient.transcribe(url, hints: voiceMode == .dictation ? (voiceSurrounding?.terms ?? []) : [])
                     try Task.checkCancellation()
                     let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !transcript.isEmpty else { throw ActionClientError.requestFailed("No speech detected. Try speaking again.") }
-                    if voiceMode == .dictation {
+                    if voiceMode == .dictation && replyingToAgent {
+                        let processed = try await DictationPipeline.process(transcript: transcript, destination: DictationDestination(appName: voiceAppName, bundleIdentifier: voiceBundleID))
+                        try Task.checkCancellation()
+                        AgentUpdateCenter.shared.insertTranscript(processed.text)
+                        DictationHistory.shared.record(text: processed.text, duration: capturedDuration, appName: voiceAppName)
+                        if let recoveryID { RecordingRecovery.shared.complete(recoveryID) }
+                        pendingDictation = ""
+                        busy = false; phase = "Inserted"
+                        expanded = false; resize()
+                    } else if voiceMode == .dictation {
                         pendingDictation = transcript
                         guard let target = voiceTarget else { throw ActionClientError.requestFailed("The text field is unavailable. Your dictation is ready to copy.") }
                         let output: String
@@ -362,17 +405,24 @@ final class AssistantController: ObservableObject {
                             pendingDictation = output
                             guard selection.isStillValid() else { throw ActionClientError.requestFailed("The selected text changed. Your edit is ready to copy.") }
                         } else {
-                            let processed = try await DictationPipeline.process(transcript: transcript, destination: DictationDestination(appName: voiceAppName, bundleIdentifier: voiceBundleID))
-                            output = processed.text
+                            let processed = try await DictationPipeline.process(transcript: transcript, destination: DictationDestination(appName: voiceAppName, bundleIdentifier: voiceBundleID), surrounding: voiceSurrounding)
+                            output = voiceSurrounding?.joined(processed.text, preferredTerms: Set(DictationPipeline.vocabulary().map(\.term))) ?? processed.text
                             if let warning = processed.warning { dictationError = warning }
                         }
                         let hooked = await LocalPluginStore.shared.processDictation(text: output, appBundleID: voiceBundleID)
                         if !hooked.warnings.isEmpty { dictationError = hooked.warnings.joined(separator: "\n") }
                         pendingDictation = hooked.text
-                        let result = await CursorPaster.pasteDictation(hooked.text, target: target, validateSelection: { self.editSelection?.isStillValid() ?? true })
-                        try Task.checkCancellation()
-                        guard result.didPostPasteCommand else { throw ActionClientError.requestFailed("Focus changed. Your dictation is ready to copy.") }
+                        if let textView = target.localTextView {
+                            // Speek's own field: insert directly rather than simulating a paste.
+                            guard target.isStillFocused() else { throw ActionClientError.requestFailed("Focus changed. Your dictation is ready to copy.") }
+                            textView.insertText(hooked.text, replacementRange: textView.selectedRange())
+                        } else {
+                            let result = await CursorPaster.pasteDictation(hooked.text, target: target, validateSelection: { self.editSelection?.isStillValid() ?? true })
+                            try Task.checkCancellation()
+                            guard result.didPostPasteCommand else { throw ActionClientError.requestFailed("Focus changed. Your dictation is ready to copy.") }
+                        }
                         DictationHistory.shared.record(text: hooked.text, duration: capturedDuration, appName: voiceAppName)
+                        if editSelection == nil { CorrectionLearner.shared.watch(target: target, inserted: hooked.text) }
                         if let recoveryID { RecordingRecovery.shared.complete(recoveryID) }
                         pendingDictation = ""
                         busy = false; phase = "Inserted"
@@ -388,7 +438,8 @@ final class AssistantController: ObservableObject {
         } else {
             let focus = VoiceFocus.shared
             focus.refresh()
-            voiceMode = mode ?? (present ? focus.mode : .agent)
+            replyingToAgent = present && AgentUpdateCenter.shared.isCapturingDictation
+            voiceMode = replyingToAgent ? .dictation : mode ?? (present ? focus.mode : .agent)
             surfaceMode = voiceMode
             playback.stop()
             if voiceMode == .dictation { pendingDictation = ""; dictationError = "" }
@@ -403,9 +454,11 @@ final class AssistantController: ObservableObject {
                 surfaceMode = .dictation
                 fail(ActionClientError.requestFailed("Dictation is paused in password fields.")); return
             }
-            voiceTarget = voiceMode == .dictation ? focus.target : nil
+            voiceTarget = voiceMode == .dictation && !replyingToAgent ? focus.target : nil
             editSelection = UserDefaults.standard.bool(forKey: "speek.dictation.editSelectedText") ? voiceTarget.flatMap { EditSelection.capture(target: $0) } : nil
-            if voiceMode == .dictation && voiceTarget == nil {
+            voiceSurrounding = editSelection == nil ? voiceTarget.flatMap { SurroundingText.capture($0) } : nil
+            CorrectionLearner.shared.stopWatching()
+            if voiceMode == .dictation && voiceTarget == nil && !replyingToAgent {
                 fail(ActionClientError.requestFailed("Click a text field before starting dictation.")); return
             }
             if present {
@@ -438,10 +491,12 @@ final class AssistantController: ObservableObject {
                         context = try await ScreenContext.shared.captureFocusedScreen()
                         try Task.checkCancellation()
                     }
+                    recorder.onAudioChunk = LiveTranscriptPreview.shared.start(languageCode: VoiceCapturePreferences.enabledLanguages().first)
                     try await recorder.startRecording(toOutputFile: url)
-                    if Task.isCancelled { await recorder.stopRecording(); try? FileManager.default.removeItem(at: url); return }
+                    if Task.isCancelled { LiveTranscriptPreview.shared.stop(); await recorder.stopRecording(); try? FileManager.default.removeItem(at: url); return }
                     audioURL = url; recordingPeak = 0; recordingStarted = Date()
                     recording = true; phase = "Listening"
+                    SoundManager.shared.playStartSound()
                     recordingLimit = Task { [weak self] in
                         try? await Task.sleep(for: .seconds(19 * 60))
                         guard let self, !Task.isCancelled, self.recording else { return }
@@ -526,16 +581,13 @@ final class AssistantController: ObservableObject {
                 if try ActionRuntime.shared.needsReview(call) {
                     proposal = action; reviewError = nil
                     response = action.title; phase = "Review action"
+                    presentApproval()
                 } else {
                     toolSteps += 1; phase = action.title
                     let result = try await ActionRuntime.shared.execute(call, approved: false)
                     toolEvidence.append("Tool " + call.tool + ": " + String(result.prefix(18000)))
                     await perform(toolRequest, continuing: true)
                 }
-            } else if action.kind == .codexTask {
-                proposal = action; proposalImage = capturedContext?.image
-                if AssistantMemory.shared.saveHistory, let id { store.setContextNotes(notes, for: id) }
-                response = action.title; phase = "Review task"
             } else {
                 let result = try await ActionExecutor.run(action, threadID: id ?? UUID(), projectFolder: "")
                 finish(result.isEmpty ? "That action is not available yet." : result)
@@ -564,20 +616,17 @@ final class AssistantController: ObservableObject {
             }
             return
         }
-        let navigation = SpeekMainWindow.shared
-        navigation.codingRequest = action.target
-        navigation.codingSource = threadID
-        navigation.codingImages = [proposalImage].compactMap { $0 } + attachments.images
-        navigation.codingContext = attachments.textContext + "\n" + (context?.text ?? "")
-        navigation.codingConnection = connection == .openRouter ? .localCodex : connection
-        navigation.codingModel = connection == .openRouter ? nil : modelID
-        navigation.codingReasoning = reasoningEffort
         proposal = nil; proposalImage = nil
-        navigation.showCodingTasks()
     }
 
-    private func enqueueComputerTask(request: String, context captured: AssistantScreenContext?, history: [ActionMessage]) {
-        let sourceID = threadID
+    /// Starts an interrupted task again as a new job, reporting to its original chat.
+    func retryComputerTask(_ job: ComputerTaskJob) {
+        ComputerTaskManager.shared.dismiss(job.id)
+        enqueueComputerTask(request: job.request, context: nil, history: [], source: job.sourceThreadID)
+    }
+
+    private func enqueueComputerTask(request: String, context captured: AssistantScreenContext?, history: [ActionMessage], source: UUID?? = nil) {
+        let sourceID = source ?? threadID
         let identity = conversationIdentity
         let savesHistory = AssistantMemory.shared.saveHistory
         let selectedConnection = connection
@@ -588,14 +637,7 @@ final class AssistantController: ObservableObject {
                 request: request, context: captured?.text ?? "", image: captured?.image,
                 history: history, connection: selectedConnection, model: selectedModel, reasoning: selectedReasoning,
                 progress: progress,
-                presentApproval: {
-                    // Keep permissions visible without stealing dictation's destination focus.
-                    if !AssistantController.shared.recording && !AssistantController.shared.busy {
-                        SpeekMainWindow.shared.taskPage = .chat
-                        SpeekMainWindow.shared.section = .tasks
-                        SpeekMainWindow.shared.show()
-                    }
-                })
+                presentApproval: { AssistantController.shared.presentApproval() })
         }, completed: { [weak self] job in
             let result = job.result ?? job.progress
             if savesHistory, AssistantMemory.shared.saveHistory, let sourceID {
@@ -652,6 +694,40 @@ final class AssistantController: ObservableObject {
         resize()
     }
 
+    /// Shows a pending permission in the expanded notch. The main window never opens for it;
+    /// if it is already frontmost, the request is answered there instead.
+    func presentApproval() {
+        guard proposal != nil || CodexComputerUse.shared.approval != nil || MCPElicitationCenter.shared.current != nil else { approvalDeferred = false; return }
+        if recording { approvalDeferred = true; return }
+        approvalDeferred = false
+        if SpeekMainWindow.shared.isFrontmost { return }
+        dismissTask?.cancel()
+        expanded = true; resize(); panel?.orderFrontRegardless()
+    }
+
+    /// Inserts an answer into the last text field you used in another app; copies it if that is not possible.
+    func insertAnswer(_ text: String) {
+        guard let target = VoiceFocus.shared.lastExternalTarget, let app = NSRunningApplication(processIdentifier: target.pid) else {
+            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); return
+        }
+        app.activate()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            let result = await CursorPaster.pasteDictation(text, target: target)
+            if !result.didPostPasteCommand {
+                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+                self.phase = "Copied. Paste it where you want it."
+            }
+        }
+    }
+
+    /// Edit a tool call's arguments in the full review form.
+    func reviewInMainWindow() {
+        SpeekMainWindow.shared.taskPage = .chat
+        SpeekMainWindow.shared.section = .tasks
+        SpeekMainWindow.shared.show()
+    }
+
     func openTaskNotice(_ notice: BackgroundTaskNotice) {
         guard !busy, !recording else { return }
         if let sourceID = notice.sourceThreadID,
@@ -682,23 +758,23 @@ final class AssistantController: ObservableObject {
 
     func stopFileTask() {
         for job in ComputerTaskManager.shared.jobs where job.status == .running || job.status == .queued { ComputerTaskManager.shared.cancel(job.id) }
-        for job in CodingTaskManager.shared.jobs where job.status == .running || job.status == .queued { CodingTaskManager.shared.cancel(job.id) }
     }
     func showFileTask() {
-        if !ComputerTaskManager.shared.jobs.isEmpty {
-            SpeekMainWindow.shared.taskPage = .chat
-            SpeekMainWindow.shared.section = .tasks
-            SpeekMainWindow.shared.show()
-        } else { SpeekMainWindow.shared.showActivity() }
+        SpeekMainWindow.shared.taskPage = .chat
+        SpeekMainWindow.shared.section = .tasks
+        SpeekMainWindow.shared.show()
     }
 
-    func circleContext() {
+    func circleContext() { captureContext(.lasso) }
+    func markUpScreen() { captureContext(.markUp) }
+
+    private func captureContext(_ gesture: ScreenContext.Gesture) {
         guard !busy && !recording else { return }
         panel?.orderOut(nil)
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await ScreenContext.shared.selectRegion { [weak self] selected in
+                try await ScreenContext.shared.selectRegion(gesture: gesture) { [weak self] selected in
                     guard let self else { return }
                     if let selected { self.context = selected }
                     self.expanded = true; self.resize(); self.panel?.makeKeyAndOrderFront(nil)
@@ -708,6 +784,7 @@ final class AssistantController: ObservableObject {
     }
 
     func cancel() {
+        LiveTranscriptPreview.shared.stop()
         holdToSpeak.cancel(); shortcutReleaseTask?.cancel()
         recordingLimit?.cancel(); recordingLimit = nil
         dismissTask?.cancel()
@@ -743,6 +820,7 @@ final class AssistantController: ObservableObject {
         if UserDefaults.standard.bool(forKey: "speek.assistant.readReplies"), let lastMessage { Task { await playback.toggle(lastMessage) } }
     }
     private func fail(_ error: Error) {
+        LiveTranscriptPreview.shared.stop()
         if Task.isCancelled || error is CancellationError { return }
         holdToSpeak.cancel(); shortcutReleaseTask?.cancel()
         busy = false; recording = false

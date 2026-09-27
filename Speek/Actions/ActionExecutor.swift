@@ -9,8 +9,7 @@ struct ActionIntegration: Identifiable {
 
     static let catalog: [ActionIntegration] = [
         ActionIntegration(id: .openWebsite, name: "Open website", detail: "Public HTTPS pages", symbol: "safari"),
-        ActionIntegration(id: .searchWeb, name: "Web search", detail: "Browser search results", symbol: "magnifyingglass"),
-        ActionIntegration(id: .codexTask, name: "Codex", detail: "Local CLI in a chosen project", symbol: "chevron.left.forwardslash.chevron.right")
+        ActionIntegration(id: .searchWeb, name: "Web search", detail: "Browser search results", symbol: "magnifyingglass")
     ]
 }
 
@@ -49,8 +48,6 @@ enum ActionExecutor {
                 throw ActionClientError.requestFailed("macOS could not open the search results.")
             }
             return "Opened web results for \(action.target)."
-        case .codexTask:
-            throw ActionClientError.requestFailed("Review the integration request and project folder before starting this task.")
         case .toolCall:
             throw ActionClientError.requestFailed("This action must run through the reviewed tool workflow.")
         case .answer, .unsupported:

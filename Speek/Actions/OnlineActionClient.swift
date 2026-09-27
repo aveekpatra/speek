@@ -19,7 +19,6 @@ enum ActionClientError: LocalizedError {
 enum ProposedActionKind: String, Codable, Hashable {
     case openWebsite = "open_website"
     case searchWeb = "search_web"
-    case codexTask = "codex_task"
     case openApp = "open_app"
     case remember
     case toolCall = "tool_call"
@@ -33,7 +32,7 @@ struct ProposedAction: Codable {
     let target: String
     let response: String
 
-    var requiresReview: Bool { kind == .codexTask || kind == .toolCall }
+    var requiresReview: Bool { kind == .toolCall }
 }
 
 final class OnlineActionClient {
@@ -44,7 +43,7 @@ final class OnlineActionClient {
         ActionCredentials.key(for: .openAI)
     }
 
-    func transcribe(_ audioURL: URL) async throws -> String {
+    func transcribe(_ audioURL: URL, language forced: String? = nil) async throws -> String {
         guard let apiKey, !apiKey.isEmpty else { throw ActionClientError.missingKey }
         let audio = try Data(contentsOf: audioURL)
         guard audio.count < 24_000_000 else { throw ActionClientError.recordingTooLarge }
@@ -57,7 +56,7 @@ final class OnlineActionClient {
         let requestedSpeechModel = UserDefaults.standard.string(forKey: "speek.actions.speechModel") ?? "gpt-transcribe"
         let speechModel = allowedSpeechModels.contains(requestedSpeechModel) ? requestedSpeechModel : "gpt-transcribe"
         field("model", speechModel)
-        for (name, value) in VoiceCapturePreferences.openAIFields(model: speechModel) { field(name, value) }
+        for (name, value) in VoiceCapturePreferences.openAIFields(model: speechModel, forcing: forced) { field(name, value) }
         body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"recording.wav\"\r\nContent-Type: audio/wav\r\n\r\n".utf8))
         body.append(audio)
         body.append(Data("\r\n--\(boundary)--\r\n".utf8))
@@ -78,10 +77,9 @@ final class OnlineActionClient {
         guard let apiKey, !apiKey.isEmpty else { throw ActionClientError.missingKey }
         let recent = history.suffix(8).map { "\($0.role.rawValue): \(String($0.text.prefix(700)))" }.joined(separator: "\n")
         let instructions = """
-        You route requests for a macOS voice assistant. Available actions are open_website, search_web, codex_task, answer, unsupported.
+        You route requests for a macOS voice assistant. Available actions are open_website, search_web, answer, unsupported.
         Use open_website for opening a named public website. Put a full https URL in target. Never use file, javascript, data, localhost, or internal URLs.
         Use search_web for a web search. Put the search terms in target.
-        Use codex_task only for a request to change, inspect, or work on code in a project. Put the full user task in target. Never invent a project path.
         Use answer for conversation. Put a concise answer in response. Do not claim you performed an action.
         Use tool_call for tools listed in context. Target is a serialized tool/arguments object. Use unsupported only when the needed integration is not available.
         Title is a short, plain description. Empty strings are allowed for unused target or response.
@@ -89,7 +87,7 @@ final class OnlineActionClient {
         let schema: [String: Any] = [
             "type": "object",
             "properties": [
-                "kind": ["type": "string", "enum": ["open_website", "search_web", "codex_task", "open_app", "remember", "tool_call", "answer", "unsupported"]],
+                "kind": ["type": "string", "enum": ["open_website", "search_web", "open_app", "remember", "tool_call", "answer", "unsupported"]],
                 "title": ["type": "string"],
                 "target": ["type": "string"],
                 "response": ["type": "string"]

@@ -176,6 +176,21 @@ final class TaskScheduler: ObservableObject {
         }
     }
 
+    func updateSchedule(_ id: UUID, title: String, request: String, date: Date, recurrence: TaskSchedule.Recurrence) throws {
+        guard let index = schedules.firstIndex(where: { $0.id == id }) else { return }
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, date > Date() else {
+            throw NSError(domain: "TaskScheduler", code: 1, userInfo: [NSLocalizedDescriptionKey: "Enter a title, instructions, and a future date."])
+        }
+        let previous = schedules[index]
+        schedules[index].title = title; schedules[index].request = request
+        schedules[index].nextRun = date; schedules[index].recurrence = recurrence
+        guard persist() else {
+            schedules[index] = previous
+            throw NSError(domain: "TaskScheduler", code: 2, userInfo: [NSLocalizedDescriptionKey: storageError ?? "Could not save schedule."])
+        }
+    }
+
     func setSchedulePaused(_ id: UUID, paused: Bool) {
         guard let index = schedules.firstIndex(where: { $0.id == id }) else { return }
         schedules[index].paused = paused
