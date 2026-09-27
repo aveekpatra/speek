@@ -65,6 +65,21 @@ Speek sits quietly in your Mac's notch. Hold a key and talk: it types what you s
   </tr>
 </table>
 
+**Cards, right in the notch.** Answers that are more than words come with a card you can use: the forecast for where you are, places on an Apple map, or an email you can edit before it goes.
+
+<table>
+  <tr>
+    <td width="33%"><img src="Screenshots/notch-weather-card.png" alt="A weather card in the notch"></td>
+    <td width="33%"><img src="Screenshots/notch-map-card.png" alt="A map card in the notch"></td>
+    <td width="33%"><img src="Screenshots/notch-email-draft.png" alt="An email draft card in the notch"></td>
+  </tr>
+  <tr>
+    <td><sub>"What's the weather today?" Tap a day to see its hours.</sub></td>
+    <td><sub>"How far is the mall from here?" Your location and the place on an Apple map.</sub></td>
+    <td><sub>"Draft an email to Martin." Edit it in place, then save or send.</sub></td>
+  </tr>
+</table>
+
 More screenshots are in the [Screenshots](Screenshots) folder.
 
 <a id="features"></a>
