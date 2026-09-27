@@ -45,6 +45,8 @@ final class AssistantController: ObservableObject {
     /// The request the notch's answer belongs to, and its circle screenshot if any.
     @Published private(set) var lastRequest = ""
     @Published private(set) var lastRequestImage: Data?
+    /// While working: the spoken acknowledgment, shown where the reply will appear.
+    @Published private(set) var statusLine: String?
     /// Cards shown with the current answer (weather, map).
     @Published private(set) var resultCards: [ResultCard] = []
     /// When the current session last had a turn; after 10 minutes the next notch request starts fresh.
@@ -377,10 +379,12 @@ final class AssistantController: ObservableObject {
         let measuredBody = textHeight(response, size: 14, spacing: 4)
             + (lastMessage?.text == response && !response.isEmpty ? 40 : 0)
         let bodyHeight = hasContent ? Int(min(180, max(24, measuredBody))) + 12 : 0
-        // Session header, and the request the answer belongs to (up to two lines).
-        let requestHeight = !lastRequest.isEmpty && (busy || hasContent) ? Int(min(34, textHeight(lastRequest, size: 12, spacing: 0))) + 12 : 0
+        // Your message (up to three lines), the status line while working, the earlier-messages line.
+        let bubble = lastRequest.isEmpty ? 0 : Int(min(54, textHeight(lastRequest, size: 13, spacing: 0))) + 24
+        let status = recording || (busy && response.isEmpty) ? 26 : 0
+        let earlier = earlierExchanges.isEmpty ? 0 : 24
         let cardsHeight = resultCards.reduce(0) { $0 + ResultCardView.height($1) + 12 }
-        let extras = 32 + requestHeight + cardsHeight + (taskNotices.isEmpty ? 0 : 116) + (context == nil ? 0 : 44) + (taskStatus.isEmpty ? 0 : 44) + NotchApprovalCard.height(for: self) + (NotchApprovalCard.height(for: self) > 0 ? 12 : 0)
+        let extras = bubble + status + earlier + cardsHeight + (taskNotices.isEmpty ? 0 : 116) + (context == nil ? 0 : 44) + (taskStatus.isEmpty ? 0 : 44) + NotchApprovalCard.height(for: self) + (NotchApprovalCard.height(for: self) > 0 ? 12 : 0)
             + NotchElicitationCard.height() + (NotchElicitationCard.height() > 0 ? 12 : 0) + (attachments.attachments.isEmpty && !attachments.isImporting ? 0 : 30)
         let draftLines = min(3, max(1, draft.count / 45 + draft.filter { $0 == "\n" }.count + 1))
         let recoveryBody = textHeight(dictationError, size: 12, spacing: 0)
@@ -706,7 +710,7 @@ final class AssistantController: ObservableObject {
         foreground = run
         activeRuns.append(run); updateWorking()
         busy = true; phase = "Thinking"
-        response = acknowledgment ?? ""
+        response = ""; statusLine = acknowledgment
         if let acknowledgment, shouldSpeak(spoken) { speak(acknowledgment, followUp: false) }
         run.task = Task { await self.step(run) }
         work = run.task
@@ -785,7 +789,8 @@ final class AssistantController: ObservableObject {
                         end(run)
                         if run.spoken && shouldSpeak(true) { speak(QuickTalk.approvalLine(for: call, title: action.title), followUp: true) }
                         proposal = action; reviewError = nil
-                        response = action.title; phase = "Review action"; busy = false
+                        // The approval card shows the action; no separate reply text.
+                        response = ""; statusLine = nil; phase = "Review action"; busy = false
                         presentApproval()
                     } else { park(run, action) }
                     return
@@ -866,6 +871,18 @@ final class AssistantController: ObservableObject {
 
     private var sessionIsStale: Bool { hasConversation && (lastActivity.map { Date().timeIntervalSince($0) > 600 } ?? false) }
 
+    /// Earlier turns of this conversation, before the exchange the notch shows (up to five).
+    var earlierExchanges: [(request: String, reply: String)] {
+        var pairs: [(request: String, reply: String)] = []
+        var asked: String?
+        for message in visibleMessages {
+            if message.role == .user { asked = message.text }
+            else if let request = asked { pairs.append((request, message.text)); asked = nil }
+        }
+        if let last = pairs.last, last.request == lastRequest { pairs.removeLast() }
+        return Array(pairs.suffix(5))
+    }
+
     /// The title shown at the top of the expanded notch.
     var sessionTitle: String? {
         if let threadID, let thread = ActionThreadStore.shared.threads.first(where: { $0.id == threadID }) { return thread.title }
@@ -874,6 +891,7 @@ final class AssistantController: ObservableObject {
 
     /// Starts a new session silently, keeping the model choice and anything circled or attached.
     private func startFreshSession() {
+        statusLine = nil
         conversationIdentity = UUID()
         threadID = nil; transientHistory = []; lastActivity = nil
         response = ""; proposal = nil; lastMessage = nil; lastRequest = ""; lastRequestImage = nil
@@ -967,7 +985,7 @@ final class AssistantController: ObservableObject {
         guard announce else { return }
         append("Computer task queued. You can keep dictating or start another request.", role: .assistant, to: run)
         if foreground === run {
-            foreground = nil; busy = false
+            foreground = nil; busy = false; statusLine = nil
             response = "Working on it in the background. You can keep going."
             phase = "Ready"
             if shouldSpeak(spoken) { speak("That will take a minute. I'll do it in the background and let you know.", followUp: false) }
@@ -1069,6 +1087,7 @@ final class AssistantController: ObservableObject {
     }
 
     func cancelProposal() {
+        statusLine = nil
         if let run = foreground { end(run) }
         proposal = nil; reviewError = nil; foreground = nil
         response = "Cancelled."; phase = "Ready"
@@ -1144,7 +1163,7 @@ final class AssistantController: ObservableObject {
             deliverTaskNotice(request: run.request, result: text, sourceID: run.threadID, succeeded: true, spoken: run.spoken)
             return
         }
-        foreground = nil; busy = false
+        foreground = nil; busy = false; statusLine = nil
         response = text; phase = "Done"; resultCards = run.cards
         lastMessage = ActionMessage(role: .assistant, text: text)
         if text.hasPrefix("Opened ") || text.hasPrefix("Remembered:") {
@@ -1169,6 +1188,7 @@ final class AssistantController: ObservableObject {
         fail(error)
     }
     private func fail(_ error: Error) {
+        statusLine = nil
         LiveTranscriptPreview.shared.stop()
         CircleGesture.shared.stop()
         if Task.isCancelled || error is CancellationError { return }

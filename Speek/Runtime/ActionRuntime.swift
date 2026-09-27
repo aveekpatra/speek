@@ -102,7 +102,10 @@ final class ActionRuntime: ObservableObject {
 
     static let memoryTools = [
         RuntimeTool(id: "memory.recall", title: "Search memory", summary: "Search what the user asked Speek to remember (facts, locked preferences, procedures) and past requests. Use it for \"what do you remember about...\" or when a request depends on something the user told you before that is not in the context.", schema: schema(["query": ["type": "string"]], required: ["query"]), requiresReview: false),
-        RuntimeTool(id: "memory.remember", title: "Remember a fact", summary: "Save one short, durable fact about the user or their world (a preference, a name, a standing decision). Only for things worth knowing in future conversations; never secrets such as passwords.", schema: schema(["fact": ["type": "string"]], required: ["fact"]), requiresReview: true),
+        RuntimeTool(id: "memory.remember", title: "Remember a fact", summary: "Save one short, durable fact about the user or their world (a preference, a name, a standing decision). Only for things worth knowing in future conversations; never secrets such as passwords. Saved facts are visible and removable in Memory.", schema: schema(["fact": ["type": "string"]], required: ["fact"]), requiresReview: false),
+        RuntimeTool(id: "vocabulary.add", title: "Add to vocabulary", summary: "Teach dictation a word or a correction: a name, term, or spelling (term), and optionally what speech recognition hears instead (heard_as), so \"heard_as\" is always written as \"term\". Use it when the user says a word is spelled a certain way, keeps being misheard, or asks to add it to the dictionary.", schema: schema(["term": ["type": "string"], "heard_as": ["type": "string"]], required: ["term"]), requiresReview: false),
+        RuntimeTool(id: "vocabulary.list", title: "List vocabulary", summary: "The words and corrections dictation knows.", schema: schema([:], required: []), requiresReview: false),
+        RuntimeTool(id: "vocabulary.remove", title: "Remove from vocabulary", summary: "Remove a word or correction from dictation's vocabulary, by its exact term.", schema: schema(["term": ["type": "string"]], required: ["term"]), requiresReview: true),
         RuntimeTool(id: "memory.forget", title: "Forget a fact", summary: "Delete a saved fact, by its id from memory.recall.", schema: schema(["id": ["type": "string"]], required: ["id"]), requiresReview: true)
     ]
 
@@ -173,7 +176,7 @@ final class ActionRuntime: ObservableObject {
         if !cli.isEmpty { lines.append("- Local tools (command-line programs the user imported): " + cli.joined(separator: ", ") + ".") }
         let skills = store.skills.filter(\.enabled).map { $0.name + " (" + $0.summary + ")" }
         lines.append("- Skills (written instructions for using a particular tool well; they add no tools themselves): " + (skills.isEmpty ? "none" : skills.joined(separator: "; ")) + ".")
-        lines.append("- Built-in: memory (what the user asked you to remember, locked preferences, procedures, and past requests; search it with memory.recall), media keys and system volume (play, pause, next, previous in whatever is playing), the user's location with weather and Apple Maps places (shown as cards), web search and page reading, files in the working folder, the shell (the user's login shell, so installed CLIs such as gh work), schedules" + (CodexConnection.binary != nil ? ", and computer use (operating apps on screen, last resort)" : "") + ".")
+        lines.append("- Built-in: memory (what the user asked you to remember, locked preferences, procedures, and past requests; search it with memory.recall; save with memory.remember) and dictation vocabulary and corrections (vocabulary.add, list, remove). Never use computer use to edit Speek's own settings, memory, or vocabulary: these tools do it directly. media keys and system volume (play, pause, next, previous in whatever is playing), the user's location with weather and Apple Maps places (shown as cards), web search and page reading, files in the working folder, the shell (the user's login shell, so installed CLIs such as gh work), schedules" + (CodexConnection.binary != nil ? ", and computer use (operating apps on screen, last resort)" : "") + ".")
         lines.append("When the user asks what you can do, what you are connected to, or where something comes from, answer from this list and the tool sources.")
         return lines.joined(separator: "\n")
     }
@@ -187,6 +190,37 @@ final class ActionRuntime: ObservableObject {
                                     "PLAY", "PAUSE", "SKIP", "TRANSFER", "SET", "MODIFY", "INSERT", "UPLOAD", "SHARE", "INVITE", "ARCHIVE",
                                     "MARK", "SAVE", "FOLLOW", "UNFOLLOW", "PATCH", "EXECUTE", "RUN", "WRITE", "EDIT", "PUT", "FORWARD", "ACCEPT", "DECLINE", "CANCEL"]
         return !words.isDisjoint(with: reads) && words.isDisjoint(with: changes)
+    }
+
+    /// Dictation vocabulary: the same entries as Memory > Vocabulary.
+    private func vocabulary(_ call: RuntimeCall) throws -> String {
+        var entries = DictationPipeline.vocabulary()
+        func save() { UserDefaults.standard.set(try? JSONEncoder().encode(entries), forKey: "speek.memory.vocabularyDrafts") }
+        switch call.tool {
+        case "vocabulary.add":
+            let term = (call.arguments["term"]?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let heard = (call.arguments["heard_as"]?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !term.isEmpty, term.count <= 80, heard.count <= 80 else { throw ActionClientError.requestFailed("Give a word or name under 80 characters.") }
+            if let index = entries.firstIndex(where: { $0.term == term && ($0.heardAs.isEmpty || $0.heardAs.caseInsensitiveCompare(heard) == .orderedSame || heard.isEmpty) }) {
+                if !heard.isEmpty { entries[index].heardAs = heard; save() }
+                return heard.isEmpty ? "\(term) is already in the vocabulary." : "Updated: \"\(heard)\" is written as \"\(term)\"."
+            }
+            entries.append(DictationVocabularyEntry(term: term, heardAs: heard))
+            save()
+            return heard.isEmpty ? "Added \(term) to the vocabulary." : "Added: \"\(heard)\" is now written as \"\(term)\"."
+        case "vocabulary.list":
+            guard !entries.isEmpty else { return "The vocabulary is empty." }
+            return entries.prefix(200).map { $0.heardAs.isEmpty ? $0.term : "\($0.heardAs) -> \($0.term)" }.joined(separator: "\n")
+        case "vocabulary.remove":
+            let term = call.arguments["term"]?.string ?? ""
+            let before = entries.count
+            entries.removeAll { $0.term.caseInsensitiveCompare(term) == .orderedSame }
+            guard entries.count < before else { throw ActionClientError.requestFailed("\(term) is not in the vocabulary.") }
+            save()
+            return "Removed \(term) from the vocabulary."
+        default:
+            throw ActionClientError.requestFailed("Unknown vocabulary tool.")
+        }
     }
 
     private func memory(_ call: RuntimeCall) async throws -> String {
@@ -234,7 +268,7 @@ final class ActionRuntime: ObservableObject {
         if toolID.hasPrefix("reminders.") { return "Native app: Reminders" }
         if toolID.hasPrefix("messages.") { return "Native app: Messages" }
         if toolID == Self.screenToolID { return "Built-in: screen" }
-        if toolID.hasPrefix("memory.") { return "Built-in: memory" }
+        if toolID.hasPrefix("memory.") || toolID.hasPrefix("vocabulary.") { return "Built-in: memory and vocabulary" }
         if toolID.hasPrefix("media.") { return "Built-in: media keys and volume" }
         if PlacesTools.isTool(toolID) { return "Built-in: location, weather, and Apple Maps" }
         return "Built-in"
@@ -265,6 +299,7 @@ final class ActionRuntime: ObservableObject {
             return try await NativeAppTools.shared.execute(name: call.tool, argumentsJSON: arguments, approved: approved).json()
         }
         if call.tool.hasPrefix("memory.") { return try await memory(call) }
+        if call.tool.hasPrefix("vocabulary.") { return try vocabulary(call) }
         if call.tool.hasPrefix("media.") { return try MediaTools.execute(call) }
         if PlacesTools.isTool(call.tool) { return try await PlacesTools.execute(call).0 }
         if call.tool == Self.screenToolID {

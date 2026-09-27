@@ -158,62 +158,115 @@ struct AssistantSurface: View {
         }.padding(12)
     }
 
-    /// Which conversation the notch is in. It ends by itself 10 minutes after the last turn.
-    private var sessionHeader: some View {
-        HStack(spacing: 8) {
-            if controller.recording {
-                // The follow-up window: listening without the shortcut, for a few seconds.
-                Image(systemName: "waveform").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.accentColor)
-                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
-                    .frame(width: 14, height: 14)
-            } else {
-                Image(systemName: controller.busy ? "circle.dotted" : "circle")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .symbolEffect(.rotate, options: .repeat(.continuous), isActive: controller.busy && !reduceMotion)
-                    .frame(width: 14, height: 14)
-            }
-            Text(controller.recording ? "Listening..." : controller.hasConversation ? (controller.sessionTitle ?? "Conversation") : "New conversation")
-                .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
-                .help(controller.hasConversation ? "Requests within 10 minutes continue this conversation." : "Your next request starts a conversation.")
-            Spacer(minLength: 8)
-            if controller.hasConversation {
-                Button { controller.newConversation() } label: {
-                    Image(systemName: "square.and.pencil").font(.system(size: 12)).frame(width: 24, height: 20).contentShape(Rectangle())
-                }.buttonStyle(AssistantControlStyle()).help("New conversation").disabled(controller.recording)
-            }
-        }.padding(.horizontal, 4)
-    }
+    // What the notch shows (one rule set, so it never feels random):
+    // - The current exchange, as in a message thread: what you said, on the right, and Speek's
+    //   reply below it. While Speek works, a status line sits where the reply will be (the
+    //   spoken acknowledgment, or the step it is on); the reply replaces it.
+    // - Earlier turns of the same conversation stay folded behind one line; open them if needed.
+    // - Which conversation you are in is not shown: a new one starts by itself after a pause,
+    //   and the pencil in the composer starts one on purpose.
+    // - Approvals and plugin questions appear right under your message, in place of a reply.
+    // - A background task that finished shows one compact notice at the top.
 
-    /// The request the answer below belongs to, with the circled screenshot if there was one.
-    @ViewBuilder private var requestRow: some View {
-        if !controller.lastRequest.isEmpty, controller.busy || !controller.response.isEmpty {
-            HStack(alignment: .top, spacing: 8) {
-                if let data = controller.lastRequestImage, let image = NSImage(data: data) {
-                    Image(nsImage: image).resizable().scaledToFill()
-                        .frame(width: 28, height: 20).clipShape(RoundedRectangle(cornerRadius: 4))
+    @State private var showEarlier = false
+
+    @ViewBuilder private var conversation: some View {
+        if !controller.lastRequest.isEmpty || !controller.response.isEmpty || controller.busy {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        let earlier = controller.earlierExchanges
+                        if !earlier.isEmpty {
+                            if showEarlier {
+                                ForEach(Array(earlier.enumerated()), id: \.offset) { _, pair in
+                                    userBubble(pair.request, image: nil).opacity(0.7)
+                                    Text(pair.reply).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(4)
+                                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4)
+                                }
+                            } else {
+                                Button { withAnimation(.easeOut(duration: 0.15)) { showEarlier = true } } label: {
+                                    Label(earlier.count == 1 ? "1 earlier message" : "\(earlier.count) earlier messages", systemImage: "chevron.up")
+                                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                                }.buttonStyle(.plain).frame(maxWidth: .infinity)
+                            }
+                        }
+                        if !controller.lastRequest.isEmpty { userBubble(controller.lastRequest, image: controller.lastRequestImage) }
+                        if controller.recording || (controller.busy && controller.response.isEmpty) { statusRow }
+                        ForEach(controller.resultCards) { card in ResultCardView(card: card) }
+                        if !controller.response.isEmpty {
+                            AnswerMarkdown(text: controller.response).draggable(controller.response).padding(.horizontal, 4)
+                            if let message = controller.lastMessage, message.text == controller.response {
+                                HStack(spacing: 4) {
+                                    Spacer()
+                                    CopyAnswerButton(text: message.text)
+                                    InsertAnswerButton(text: message.text)
+                                    NotchResponsePlayback(playback: controller.playback, message: message)
+                                }
+                            }
+                        }
+                        Color.clear.frame(height: 1).id("end")
+                    }.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Text(controller.lastRequest).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
-                Spacer(minLength: 0)
-            }.padding(.horizontal, 4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .onChange(of: controller.response) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
+                .onChange(of: controller.lastRequest) { _, _ in showEarlier = false; proxy.scrollTo("end", anchor: .bottom) }
+            }
         }
     }
 
+    /// What you said, on the right, with the screenshot it was sent with.
+    private func userBubble(_ text: String, image: Data?) -> some View {
+        HStack(alignment: .bottom, spacing: 6) {
+            Spacer(minLength: 48)
+            if let data = image, let screenshot = NSImage(data: data) {
+                Image(nsImage: screenshot).resizable().scaledToFill()
+                    .frame(width: 34, height: 24).clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            }
+            Text(text).font(.system(size: 13)).lineLimit(3).textSelection(.enabled)
+                .padding(.horizontal, 11).padding(.vertical, 7)
+                .background(Color.white.opacity(0.11), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    /// Where the reply will appear: listening, the acknowledgment, or the current step.
+    private var statusRow: some View {
+        HStack(spacing: 8) {
+            if controller.recording {
+                Image(systemName: "waveform").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.accentColor)
+                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
+                Text("Listening...").font(.system(size: 13)).foregroundStyle(.secondary)
+            } else {
+                ProgressView().controlSize(.small)
+                Text(controller.statusLine ?? controller.phase).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }.padding(.horizontal, 4)
+    }
+
     private var expanded: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sessionHeader
+        VStack(alignment: .leading, spacing: 10) {
             BackgroundTaskNoticeView(controller: controller)
             if !controller.taskStatus.isEmpty {
                 HStack(spacing: 8) {
                     Button { controller.showFileTask() } label: {
                         Label(controller.taskStatus, systemImage: "terminal")
                             .font(.system(size: 11)).lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
                             .contentShape(Rectangle())
                     }.buttonStyle(.plain)
                     if controller.fileTaskRunning {
                         iconButton("stop.fill", help: "Stop all background tasks") { controller.stopFileTask() }
                     }
                 }
+            }
+
+            conversation
+
+            NotchApprovalCard(controller: controller)
+            NotchElicitationCard()
+
+            if controller.lastRequest.isEmpty && controller.response.isEmpty && !controller.busy {
+                Spacer(minLength: 0)
             }
 
             if let context = controller.context {
@@ -228,36 +281,6 @@ struct AssistantSurface: View {
                 }
             }
 
-            requestRow
-
-            if !controller.response.isEmpty {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(controller.resultCards) { card in ResultCardView(card: card) }
-                        if !controller.response.isEmpty {
-                            AnswerMarkdown(text: controller.response).draggable(controller.response)
-                        }
-                        if let message = controller.lastMessage, message.text == controller.response {
-                            HStack(spacing: 4) {
-                                Spacer()
-                                CopyAnswerButton(text: message.text)
-                                InsertAnswerButton(text: message.text)
-                                NotchResponsePlayback(playback: controller.playback, message: message)
-                            }
-                        }
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.horizontal, 4)
-            }
-
-            NotchApprovalCard(controller: controller)
-            NotchElicitationCard()
-
-            if controller.response.isEmpty {
-                Spacer(minLength: 0)
-            }
-
             VStack(spacing: 6) {
                 NotchAttachmentStrip(store: controller.attachments)
                 TextField("Ask Speek...", text: $controller.draft, axis: .vertical)
@@ -267,6 +290,10 @@ struct AssistantSurface: View {
                 HStack(spacing: 4) {
                     iconButton("lasso", help: "Circle screen context") { controller.circleContext() }
                         .disabled(controller.busy || controller.recording)
+                    if controller.hasConversation {
+                        iconButton("square.and.pencil", help: "New conversation") { controller.newConversation() }
+                            .disabled(controller.recording)
+                    }
                     Spacer(minLength: 0)
                     AssistantModelPicker(assistant: controller) {
                         SpeekMainWindow.shared.section = .connections

@@ -112,6 +112,7 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 
 ### Memory
 - Facts you ask it to remember, locked preferences that always apply, procedures for recurring work, and a history of past requests.
+- Teach dictation by asking: "Aturno is spelled A-T-U-R-N-O" or "it keeps hearing Avik, it should be Aveek" adds the word or correction right away.
 - Recall that understands meaning, not just matching words.
 - Everything is visible and editable under Memory.
 
