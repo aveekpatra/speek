@@ -7,6 +7,8 @@ struct BackgroundTaskNotice: Identifiable {
     let sourceThreadID: UUID?
     let succeeded: Bool
     let date = Date()
+    /// Asked out loud: the result is announced out loud.
+    var spoken = false
 }
 
 struct BackgroundTaskNoticeView: View {

@@ -160,11 +160,18 @@ struct AssistantSurface: View {
     /// Which conversation the notch is in. It ends by itself 10 minutes after the last turn.
     private var sessionHeader: some View {
         HStack(spacing: 8) {
-            Image(systemName: controller.busy ? "circle.dotted" : "circle")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-                .symbolEffect(.rotate, options: .repeat(.continuous), isActive: controller.busy && !reduceMotion)
-                .frame(width: 14, height: 14)
-            Text(controller.hasConversation ? (controller.sessionTitle ?? "Conversation") : "New conversation")
+            if controller.recording {
+                // The follow-up window: listening without the shortcut, for a few seconds.
+                Image(systemName: "waveform").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.accentColor)
+                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
+                    .frame(width: 14, height: 14)
+            } else {
+                Image(systemName: controller.busy ? "circle.dotted" : "circle")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .symbolEffect(.rotate, options: .repeat(.continuous), isActive: controller.busy && !reduceMotion)
+                    .frame(width: 14, height: 14)
+            }
+            Text(controller.recording ? "Listening..." : controller.hasConversation ? (controller.sessionTitle ?? "Conversation") : "New conversation")
                 .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
                 .help(controller.hasConversation ? "Requests within 10 minutes continue this conversation." : "Your next request starts a conversation.")
             Spacer(minLength: 8)

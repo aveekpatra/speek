@@ -5,6 +5,7 @@ struct ActionConnectionsView: View {
     @AppStorage("speek.actions.connection") private var preferred = ActionConnection.localCodex.rawValue
     @AppStorage("speek.actions.voiceProvider") private var voice = ActionCloudProvider.openRouter.rawValue
     @AppStorage("speek.assistant.readReplies") private var readReplies = false
+    @AppStorage("speek.assistant.spokenReplies") private var spokenReplies = "voice"
     @AppStorage("speek.voice.playbackRate") private var playbackRate = 1.0
     @State private var expanded: ActionConnection?
     @State private var voiceExpanded = false
@@ -206,8 +207,12 @@ struct ActionConnectionsView: View {
                     if ActionCredentials.hasKey(for: .openAI) { Text("OpenAI API").tag(ActionCloudProvider.openAI.rawValue) }
                 }.labelsHidden().fixedSize()
             }
-            settingRow("Spoken replies", info: "Read responses aloud with the voice below.") {
-                Toggle("Spoken replies", isOn: $readReplies).labelsHidden().toggleStyle(.switch)
+            settingRow("Spoken replies", info: "When I speak: Speek answers out loud when you talked to it, and in text when you typed. After it speaks, the microphone stays open a few seconds for a follow-up.") {
+                Picker("Spoken replies", selection: $spokenReplies) {
+                    Text("When I speak").tag("voice")
+                    Text("Always").tag("always")
+                    Text("Never").tag("never")
+                }.labelsHidden().fixedSize()
             }
             settingRow("Speaking speed") {
                 Picker("Speaking speed", selection: $playbackRate) {

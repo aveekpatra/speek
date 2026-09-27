@@ -105,6 +105,7 @@ final class AssistantController: ObservableObject {
     private var voiceBundleID: String?
     private var meterSubscription: AnyCancellable?
     private var wakeSubscription: AnyCancellable?
+    private var followUpSubscription: AnyCancellable?
     /// A request started by the wake phrase ends by itself when the user stops talking.
     private var stopsOnSilence = false
     private var heardSpeech = false
@@ -124,7 +125,8 @@ final class AssistantController: ObservableObject {
         if heardSpeech && quiet > 1.4 {
             stopsOnSilence = false
             toggleVoice()
-        } else if !heardSpeech && Date().timeIntervalSince(recordingStarted) > 6 {
+        } else if !heardSpeech && Date().timeIntervalSince(recordingStarted) > (followUp ? 5 : 6) {
+            followUp = false
             stopsOnSilence = false
             cancel()
         }
@@ -215,6 +217,10 @@ final class AssistantController: ObservableObject {
         }
         // "Hey <name>": listen while idle; pause while recording or reading a reply aloud.
         WakeWordListener.shared.onWake = { [weak self] in self?.wakeHeard() }
+        followUpSubscription = playback.$playingMessageID.removeDuplicates().dropFirst().sink { [weak self] playing in
+            guard playing == nil else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.startFollowUp() }
+        }
         wakeSubscription = $recording.combineLatest(playback.$playingMessageID.map { $0 != nil })
             .removeDuplicates { $0 == $1 }
             .sink { recording, speaking in
@@ -461,7 +467,8 @@ final class AssistantController: ObservableObject {
         if present { show(typing: true) }
     }
 
-    func toggleVoice(present: Bool = true, mode: VoiceInputMode? = nil) {
+    /// `keepOpen`: a follow-up while the notch shows the last answer; it stays expanded.
+    func toggleVoice(present: Bool = true, mode: VoiceInputMode? = nil, keepOpen: Bool = false) {
         // Speaking is never blocked by a request that is still working: the new one runs right after it.
         guard !busy || (!recording && audioURL == nil && runInProgress) else { return }
         if recording {
@@ -471,6 +478,16 @@ final class AssistantController: ObservableObject {
             recording = false; busy = true; phase = "Transcribing"
             stopsOnSilence = false
             CircleGesture.shared.stop()
+            // A follow-up is sent for transcription only if the on-device recognizer heard words,
+            // so background noise never costs a cloud request.
+            let wasFollowUp = followUp
+            followUp = false
+            let heardWords = !LiveTranscriptPreview.shared.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if wasFollowUp && LiveTranscriptPreview.isEnabled && !heardWords {
+                recording = true; busy = false
+                cancel()
+                return
+            }
             SoundManager.shared.playStopSound()
             LiveTranscriptPreview.shared.stop()
             work = Task {
@@ -529,7 +546,7 @@ final class AssistantController: ObservableObject {
                     } else {
                         if let recoveryID { RecordingRecovery.shared.complete(recoveryID) }
                         busy = false
-                        await perform(transcript, route: voiceFromNotch)
+                        await perform(transcript, route: voiceFromNotch, spoken: true)
                         expanded = true; resize(); panel?.orderFrontRegardless()
                     }
                 } catch { fail(error) }
@@ -560,12 +577,12 @@ final class AssistantController: ObservableObject {
             if voiceMode == .dictation && voiceTarget == nil && !replyingToAgent {
                 fail(ActionClientError.requestFailed("Click a text field before starting dictation.")); return
             }
-            if present {
+            if present && !keepOpen {
                 dismissTask?.cancel()
                 expanded = false; resize(); panel?.resignKey(); panel?.acceptsKeyboard = false; panel?.orderFrontRegardless()
             }
             voiceFromNotch = present
-            if voiceMode == .agent && proposal == nil { response = ""; lastMessage = nil }
+            if voiceMode == .agent && proposal == nil && !keepOpen { response = ""; lastMessage = nil }
             busy = true
             work = Task {
                 var finishingReleasedHold = false
@@ -624,12 +641,13 @@ final class AssistantController: ObservableObject {
         Task { await perform(text, route: !explicit) }
     }
 
-    private func perform(_ text: String, route: Bool = true) async {
+    /// `spoken`: the request was said out loud, so replies are spoken back (Settings decides).
+    private func perform(_ text: String, route: Bool = true, spoken: Bool = false) async {
         dismissTask?.cancel()
         if proposal != nil, foreground != nil {
             let decision = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-            if ["yes", "do it", "run it", "go ahead"].contains(decision) { runProposal(); return }
-            if ["no", "cancel", "never mind"].contains(decision) { cancelProposal(); return }
+            if QuickTalk.yes.contains(decision) { runProposal(); return }
+            if QuickTalk.no.contains(decision) { cancelProposal(); return }
         }
         // Quick requests stay in the foreground: a new one waits for the current one to finish
         // (only computer use runs in the background).
@@ -649,21 +667,77 @@ final class AssistantController: ObservableObject {
             store.setReasoning(reasoningEffort, for: threadID!)
         }
         let history = AssistantMemory.shared.saveHistory ? (threadID.flatMap { savedID in store.threads.first { $0.id == savedID }?.messages } ?? transientHistory) : transientHistory
+        busy = true; phase = "Thinking"; response = ""
         // A circle wins; otherwise the screenshot taken when the request started.
+        let circled = context?.isRegion == true
         if context == nil, let screen = pendingScreen { context = await screen.value }
         pendingScreen = nil
+        // Quick first step: answer conversation directly, or say what is about to happen.
+        var acknowledgment: String?
+        if attachments.attachments.isEmpty, await AssistantQuickIntent.action(for: text) == nil {
+            if circled || QuickTalk.refersToScreen(text) {
+                acknowledgment = spoken ? "Let me take a look." : nil
+            } else if let decision = await QuickTalk.decide(text, history: history, facts: AssistantMemory.shared.facts.map(\.text),
+                                                               app: NSWorkspace.shared.frontmostApplication?.localizedName,
+                                                               complete: { system, input in try await DictationPipeline.completeWithModel(system, input, maxTokens: 400).text }) {
+                if decision.reply {
+                    append(text, role: .user)
+                    lastRequest = text; lastRequestImage = nil; context = nil
+                    append(decision.text, role: .assistant)
+                    response = decision.text; phase = "Done"; busy = false
+                    lastMessage = ActionMessage(role: .assistant, text: decision.text)
+                    if shouldSpeak(spoken) { speak(decision.text, followUp: spoken) }
+                    return
+                }
+                acknowledgment = decision.text
+            }
+        }
         let run = AgentRun(request: text, threadID: threadID, identity: conversationIdentity, history: history,
                            connection: connection, modelID: modelID, reasoning: reasoningEffort,
                            context: context, images: attachments.images, attachmentText: attachments.textContext)
+        run.spoken = spoken
         append(text, role: .user)
         lastRequest = text; lastRequestImage = context?.image
         // A circle belongs to the request it was drawn for.
         context = nil
         foreground = run
         activeRuns.append(run); updateWorking()
-        busy = true; phase = "Thinking"; response = ""
+        busy = true; phase = "Thinking"
+        response = acknowledgment ?? ""
+        if let acknowledgment, shouldSpeak(spoken) { speak(acknowledgment, followUp: false) }
         run.task = Task { await self.step(run) }
         work = run.task
+    }
+
+    // MARK: Talking back
+
+    /// Replies are spoken when the user spoke (default), always, or never (Models & Voice).
+    private func shouldSpeak(_ spoken: Bool) -> Bool {
+        switch UserDefaults.standard.string(forKey: "speek.assistant.spokenReplies") ?? (UserDefaults.standard.bool(forKey: "speek.assistant.readReplies") ? "always" : "voice") {
+        case "always": return true
+        case "never": return false
+        default: return spoken
+        }
+    }
+
+    /// After a spoken answer or question, the mic stays open briefly for a follow-up.
+    private var followUpArmed = false
+    private var followUp = false
+
+    private func speak(_ text: String, followUp: Bool) {
+        followUpArmed = followUp
+        let message = ActionMessage(role: .assistant, text: QuickTalk.forSpeech(text))
+        Task { await playback.toggle(message) }
+    }
+
+    private func startFollowUp() {
+        // Another line started speaking (the answer replacing an acknowledgment): wait for it.
+        guard playback.playingMessageID == nil else { return }
+        guard followUpArmed, !recording, !busy || proposal != nil else { followUpArmed = false; return }
+        followUpArmed = false
+        followUp = true
+        stopsOnSilence = true; heardSpeech = false; lastSpeech = Date()
+        toggleVoice(present: true, mode: .agent, keepOpen: true)
     }
 
     /// One model turn of a request, then its tool call, until it answers or needs approval.
@@ -706,6 +780,7 @@ final class AssistantController: ObservableObject {
                     if foreground === run {
                         // Waiting for approval is not working; it resumes in runProposal.
                         end(run)
+                        if run.spoken && shouldSpeak(true) { speak(QuickTalk.approvalLine(for: call, title: action.title), followUp: true) }
                         proposal = action; reviewError = nil
                         response = action.title; phase = "Review action"; busy = false
                         presentApproval()
@@ -853,6 +928,7 @@ final class AssistantController: ObservableObject {
 
     private func enqueueComputerTask(for run: AgentRun, announce: Bool = true) {
         let request = run.request, captured = run.context, history = run.history
+        let spoken = run.spoken
         let sourceID = run.threadID
         let identity = run.identity
         let savesHistory = AssistantMemory.shared.saveHistory
@@ -876,7 +952,7 @@ final class AssistantController: ObservableObject {
             if job.status == .completed { AssistantMemory.shared.recordEpisode(request: request, result: result) }
             if job.status != .cancelled {
                 self?.deliverTaskNotice(request: request, result: result, sourceID: sourceID,
-                                        succeeded: job.status == .completed)
+                                        succeeded: job.status == .completed, spoken: spoken)
             }
         })
         end(run)
@@ -884,14 +960,15 @@ final class AssistantController: ObservableObject {
         append("Computer task queued. You can keep dictating or start another request.", role: .assistant, to: run)
         if foreground === run {
             foreground = nil; busy = false
-            response = "Computer task queued."
+            response = "Working on it in the background. You can keep going."
             phase = "Ready"
+            if shouldSpeak(spoken) { speak("That will take a minute. I'll do it in the background and let you know.", followUp: false) }
         }
     }
 
-    private func deliverTaskNotice(request: String, result: String, sourceID: UUID?, succeeded: Bool) {
+    private func deliverTaskNotice(request: String, result: String, sourceID: UUID?, succeeded: Bool, spoken: Bool = false) {
         let notice = BackgroundTaskNotice(request: request, result: result, sourceThreadID: sourceID,
-                                          succeeded: succeeded)
+                                          succeeded: succeeded, spoken: spoken)
         taskNotices.append(notice)
         unannouncedTaskIDs.append(notice.id)
         guard announcementWork == nil else { return }
@@ -912,9 +989,9 @@ final class AssistantController: ObservableObject {
                 self.expanded = true
                 self.resize()
                 self.panel?.orderFrontRegardless()
-                let announcement = notice.succeeded ? "Your background task is complete." : "Your background task needs attention."
-                if UserDefaults.standard.bool(forKey: "speek.assistant.readReplies") {
-                    await self.playback.toggle(ActionMessage(role: .assistant, text: announcement + " " + String(notice.result.prefix(400))))
+                if self.shouldSpeak(notice.spoken) {
+                    let opening = notice.succeeded ? "Done. " : "I couldn't finish that. "
+                    self.speak(opening + QuickTalk.forSpeech(notice.result), followUp: notice.spoken)
                 } else { NSSound(named: "Glass")?.play() }
             }
         }
@@ -1018,7 +1095,7 @@ final class AssistantController: ObservableObject {
     }
 
     func cancel() {
-        stopsOnSilence = false
+        stopsOnSilence = false; followUp = false
         LiveTranscriptPreview.shared.stop()
         CircleGesture.shared.stop()
         if let run = foreground { end(run); foreground = nil }
@@ -1056,7 +1133,7 @@ final class AssistantController: ObservableObject {
         append(text, role: .assistant, to: run)
         AssistantMemory.shared.recordEpisode(request: run.request, result: text, threadID: run.threadID)
         guard foreground === run else {
-            deliverTaskNotice(request: run.request, result: text, sourceID: run.threadID, succeeded: true)
+            deliverTaskNotice(request: run.request, result: text, sourceID: run.threadID, succeeded: true, spoken: run.spoken)
             return
         }
         foreground = nil; busy = false
@@ -1070,13 +1147,13 @@ final class AssistantController: ObservableObject {
                 expanded = false; resize(); panel?.resignKey()
             }
         }
-        if UserDefaults.standard.bool(forKey: "speek.assistant.readReplies"), let lastMessage { Task { await playback.toggle(lastMessage) } }
+        if shouldSpeak(run.spoken) { speak(text, followUp: run.spoken) }
     }
     private func fail(_ run: AgentRun, _ error: Error) {
         end(run)
         let cancelled = Task.isCancelled || error is CancellationError
         guard foreground === run else {
-            if !cancelled { deliverTaskNotice(request: run.request, result: error.localizedDescription, sourceID: run.threadID, succeeded: false) }
+            if !cancelled { deliverTaskNotice(request: run.request, result: error.localizedDescription, sourceID: run.threadID, succeeded: false, spoken: run.spoken) }
             return
         }
         foreground = nil
@@ -1117,6 +1194,8 @@ final class AgentRun {
     var steps = 0
     var proposal: ProposedAction?
     var task: Task<Void, Never>?
+    /// Said out loud: replies and questions are spoken back.
+    var spoken = false
 
     init(request: String, threadID: UUID?, identity: UUID, history: [ActionMessage], connection: ActionConnection, modelID: String?,
          reasoning: String?, context: AssistantScreenContext?, images: [Data], attachmentText: String) {
