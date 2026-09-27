@@ -490,8 +490,10 @@ private struct NotchIdleControl: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            controls
-            if let entry = learner.notice {
+            // Full screen: the resting notch is only as wide as the camera, with nothing beside it.
+            let resting = controller.tucked && !controller.expanded && !controller.recording && !controller.busy
+            if !resting { controls }
+            if !resting, let entry = learner.notice {
                 // A correction the user just made, saved to Vocabulary.
                 HStack(spacing: 6) {
                     Image(systemName: "character.book.closed").font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))

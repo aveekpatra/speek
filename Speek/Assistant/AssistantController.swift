@@ -23,6 +23,8 @@ final class AssistantController: ObservableObject {
     /// on every side.
     static func idleWing(_ height: CGFloat) -> CGFloat { max(20, height) + 4 }
     @Published var expanded = false
+    /// An app is full screen on the notch display: the resting notch hides behind the camera.
+    @Published private(set) var tucked = false
     @Published private(set) var notchInset: CGFloat = 0
     @Published private(set) var notchCameraWidth: CGFloat = 160
     @Published var draft = ""
@@ -280,6 +282,19 @@ final class AssistantController: ObservableObject {
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.resize() }
         })
+        // Entering or leaving full screen changes the Space; switching apps can too. The window
+        // list settles after the transition animation, so check again shortly after.
+        for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
+            observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    for delay in [0.1, 0.8] {
+                        try? await Task.sleep(for: .seconds(delay))
+                        self?.updateTucked()
+                    }
+                }
+            })
+        }
+        updateTucked()
         resize()
         if showControl { window.orderFrontRegardless() }
         globalSpace = NotchGlobalSpace(window: window)
@@ -349,6 +364,25 @@ final class AssistantController: ObservableObject {
         }
     }
 
+    /// True when the frontmost app has a window covering the whole notch display, which is what
+    /// a full-screen app looks like in the window list (bounds need no screen-recording access).
+    private func updateTucked() {
+        guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main,
+              let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            if tucked { tucked = false; resize() }
+            return
+        }
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let full = windows.contains { info in
+            guard (info[kCGWindowOwnerPID as String] as? pid_t) == app.processIdentifier,
+                  (info[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat] else { return false }
+            return abs((bounds["Width"] ?? 0) - screen.frame.width) < 1 && abs((bounds["Height"] ?? 0) - screen.frame.height) < 1
+        }
+        if full != tucked { tucked = full; resize() }
+    }
+
     func resize() {
         guard let panel else { return }
         guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main ?? NSScreen.screens.first else { return }
@@ -390,8 +424,8 @@ final class AssistantController: ObservableObject {
             ? 24 + Int(min(220, max(24, recoveryBody))) + (pendingDictation.isEmpty ? 0 : 44)
             : 112 + bodyHeight + extras + (draftLines - 1) * 17
         let active = recording || busy
-        let learned = !expanded && !active && CorrectionLearner.shared.notice != nil
-        let width = expanded ? CGFloat(440) : active ? max(340, notchWidth + 100) : learned ? max(300, notchWidth + Self.idleWing(inset) * 2) : notchWidth + Self.idleWing(inset) * 2
+        let learned = !expanded && !active && !tucked && CorrectionLearner.shared.notice != nil
+        let width = expanded ? CGFloat(440) : active ? max(340, notchWidth + 100) : learned ? max(300, notchWidth + Self.idleWing(inset) * 2) : tucked ? notchWidth : notchWidth + Self.idleWing(inset) * 2
         let size = NSSize(width: min(width, screen.frame.width - 32),
                           height: min(expanded ? inset + CGFloat(height) : active ? inset + 48 : (inset > 0 ? inset : 28) + (learned ? 30 : 0), screen.frame.height - 80))
         panel.acceptsKeyboard = expanded
