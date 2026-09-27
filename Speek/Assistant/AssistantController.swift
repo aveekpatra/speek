@@ -175,7 +175,8 @@ final class AssistantController: ObservableObject {
                 AgentUpdateCenter.shared.setRecordingState(recording ? .recording : (busy && phase == "Transcribing") ? .transcribing : .idle)
             }
         AgentUpdateCenter.shared.recorder = recorder
-        CodexComputerUse.skillInstructions = { IntegrationStore.shared.enabledSkillInstructions(for: $0) }
+        // The computer-use agent gets the same skills, in full, plus the list of all enabled ones.
+        CodexComputerUse.skillInstructions = { IntegrationStore.shared.enabledSkillInstructions(for: $0, limit: 40_000, catalog: true) }
         CircleGesture.shared.onCircle = { [weak self] captured in self?.context = captured }
         SpeekNotifications.shared.start()
         // Meaning-based recall uses the embedding model of the provider Speek already uses.

@@ -499,13 +499,27 @@ final class IntegrationStore: ObservableObject {
         do { try persist() } catch { skills = previous; throw error }
     }
 
-    func enabledSkillInstructions(for query: String) -> String {
+    /// Instructions of the enabled skills that match the request, in full up to `limit` characters
+    /// each, with the skill's folder so its reference files can be read. `catalog` also lists every
+    /// enabled skill by name, so one that did not match by words can still be chosen.
+    func enabledSkillInstructions(for query: String, limit: Int = 20_000, catalog: Bool = false) -> String {
         let terms = Set(query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).filter { $0.count > 2 }.map(String.init))
-        let matches = skills.filter(\.enabled).map { skill in
+        let enabled = skills.filter(\.enabled)
+        let matches = enabled.map { skill in
             let text = (skill.name + " " + skill.summary).lowercased()
             return (skill, terms.filter { text.contains($0) }.count)
         }.filter { query.isEmpty || $0.1 > 0 }.sorted { $0.1 > $1.1 }.prefix(4)
-        return matches.map { "Skill: \($0.0.name)\n" + String($0.0.instructions.prefix(8000)) }.joined(separator: "\n\n")
+        var parts = matches.map { match -> String in
+            let folder = URL(fileURLWithPath: match.0.sourcePath).deletingLastPathComponent().path
+            return "Skill: \(match.0.name)\nFolder (its reference files are here): \(folder)\n" + String(match.0.instructions.prefix(limit))
+        }
+        let unmatched = enabled.filter { skill in !matches.contains { $0.0.id == skill.id } }
+        if catalog, !unmatched.isEmpty {
+            parts.append("Other enabled skills (read SKILL.md in the folder if the task needs one):\n" + unmatched.map {
+                "- \($0.name): \($0.summary) (\($0.sourcePath))"
+            }.joined(separator: "\n"))
+        }
+        return parts.joined(separator: "\n\n")
     }
 
     private func persist() throws {
