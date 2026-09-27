@@ -462,8 +462,8 @@ final class AssistantController: ObservableObject {
     }
 
     func toggleVoice(present: Bool = true, mode: VoiceInputMode? = nil) {
-        // A request still working moves to the background, so speaking is never blocked by it.
-        guard !busy || (!recording && detachForeground()) else { return }
+        // Speaking is never blocked by a request that is still working: the new one runs right after it.
+        guard !busy || (!recording && audioURL == nil && runInProgress) else { return }
         if recording {
             holdToSpeak.cancel(); shortcutReleaseTask?.cancel()
             let capturedDuration = Date().timeIntervalSince(recordingStarted)
@@ -569,7 +569,7 @@ final class AssistantController: ObservableObject {
             busy = true
             work = Task {
                 var finishingReleasedHold = false
-                defer { if !Task.isCancelled && !finishingReleasedHold { busy = false } }
+                defer { if !Task.isCancelled && !finishingReleasedHold && !self.runInProgress { busy = false } }
                 let auth = AVCaptureDevice.authorizationStatus(for: .audio)
                 if auth == .notDetermined {
                     guard await AVCaptureDevice.requestAccess(for: .audio) else {
@@ -617,7 +617,7 @@ final class AssistantController: ObservableObject {
     func submit(explicit: Bool = false) {
         guard !recording else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !busy || detachForeground() else { return }
+        guard !text.isEmpty, !busy || runInProgress else { return }
         surfaceMode = .agent
         draft = ""
         if explicit { pendingScreen = nil } else { captureScreenForRequest() }
@@ -630,6 +630,12 @@ final class AssistantController: ObservableObject {
             let decision = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
             if ["yes", "do it", "run it", "go ahead"].contains(decision) { runProposal(); return }
             if ["no", "cancel", "never mind"].contains(decision) { cancelProposal(); return }
+        }
+        // Quick requests stay in the foreground: a new one waits for the current one to finish
+        // (only computer use runs in the background).
+        if let running = foreground, activeRuns.contains(where: { $0 === running }), let task = running.task {
+            phase = "Finishing the last request"
+            await task.value
         }
         if route { routeSession(for: text) }
         surfaceMode = .agent
@@ -789,6 +795,12 @@ final class AssistantController: ObservableObject {
         threadID = nil; transientHistory = []; lastActivity = nil
         response = ""; proposal = nil; lastMessage = nil; lastRequest = ""; lastRequestImage = nil
         foreground = nil
+    }
+
+    /// A request is working in the foreground (not transcribing, not waiting for approval).
+    private var runInProgress: Bool {
+        guard let run = foreground else { return false }
+        return proposal == nil && activeRuns.contains { $0 === run }
     }
 
     // MARK: Background requests

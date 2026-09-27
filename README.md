@@ -34,7 +34,7 @@ Speek sits quietly in your Mac's notch. Hold a key and talk: it types what you s
 
 👆 **Point at your screen.** Speek sees what you are looking at when you ask. To point at something specific, circle it with the pointer while you hold the shortcut. "This" then means exactly what you circled.
 
-🧵 **Keep going while it works.** Ask something new while a task is still running, and the first one carries on in the background. When it is done, a notice appears in the notch and the result waits in its conversation.
+🧵 **Keep going while it works.** Quick requests finish in seconds, right in the notch. Longer work, like operating an app on screen, runs in the background: keep talking to Speek, and a notice appears when it is done.
 
 🧠 **It remembers.** Say "remember my sister's name is Priya" or "remember I prefer meetings after 11". Speek keeps it and uses it when it matters. Say "forget ..." to let it go.
 
@@ -84,7 +84,7 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 ### The assistant
 - A notch panel that stays out of your way, and a main window for longer conversations.
 - Conversations start and continue on their own: a quick follow-up continues, a new topic later starts fresh.
-- Background tasks that report back, and approvals you answer right in the notch: an email, an event, a file change, or a song appears as a card you can edit before it goes.
+- Computer tasks that run in the background and report back, and approvals you answer right in the notch: an email, an event, a file change, or a song appears as a card you can edit before it goes.
 - Your screen with each request (you can turn it off), a circle gesture to point, and "look at my screen" on demand.
 - Images, PDFs, and text files: drop or paste them into the notch.
 - Answers you can copy, insert into the app you were using, or have read aloud.

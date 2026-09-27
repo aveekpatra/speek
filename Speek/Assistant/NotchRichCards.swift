@@ -120,116 +120,212 @@ struct RichApprovalCard: View {
     let source: String
     @ObservedObject var controller: AssistantController
     @State private var fields: [String: String] = [:]
+    @State private var guests: [String] = []
+    @State private var recipients: [String] = []
+    @State private var newAddress = ""
     @State private var start = Date()
     @State private var end = Date()
     @State private var hasTimes = false
+    @State private var editingTime = false
     @State private var artwork: URL?
     @State private var trackTitle: String?
+    @State private var trackArtist: String?
+
+    private static let radius: CGFloat = 20
+    private static let inset: CGFloat = 18
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider().opacity(0.4)
-            content.padding(.horizontal, 14).padding(.vertical, 10)
-            footer.padding(.horizontal, 14).padding(.bottom, 12)
+            content
         }
-        .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.accentColor.opacity(0.55), lineWidth: 1))
-        .shadow(color: Color.accentColor.opacity(0.35), radius: 10)
+        .background(Color(white: 0.115), in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+        // A soft accent halo, like a focused window.
+        .background(RoundedRectangle(cornerRadius: Self.radius + 4, style: .continuous).fill(Color.accentColor.opacity(0.5)).padding(-4).blur(radius: 8))
         .onAppear(perform: load)
+        .onExitCommand { controller.cancelProposal() }
     }
 
     // MARK: Parts
 
     private var header: some View {
-        HStack(spacing: 8) {
-            icon.frame(width: 18, height: 18)
-            Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+        HStack(spacing: 10) {
+            icon.frame(width: 20, height: 20)
+            Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
             Spacer(minLength: 0)
             Menu {
+                Button("Cancel") { controller.cancelProposal() }
+                Divider()
                 Button("Always allow " + (ActionRuntime.shared.tools.first { $0.id == call.tool }?.title ?? "this")) {
                     commit(); ToolPolicyStore.shared.set(.allow, for: call.tool); controller.runProposal()
                 }
                 Button("Open in Speek") { controller.reviewInMainWindow() }
-            } label: { Image(systemName: "ellipsis").frame(width: 24, height: 20).contentShape(Rectangle()) }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            } label: {
+                Image(systemName: "ellipsis").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+                    .frame(width: 26, height: 22).contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("More, or Escape to cancel")
         }
-        .padding(.horizontal, 14).padding(.vertical, 9)
+        .padding(.horizontal, Self.inset).frame(height: 46)
         // Square at the bottom, where it meets the fields; only the card's top corners are rounded.
-        .background(Color.white.opacity(0.06), in: UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 0,
-                                                                          bottomTrailingRadius: 0, topTrailingRadius: 16, style: .continuous))
+        .background(Color.white.opacity(0.055), in: UnevenRoundedRectangle(topLeadingRadius: Self.radius, bottomLeadingRadius: 0,
+                                                                           bottomTrailingRadius: 0, topTrailingRadius: Self.radius, style: .continuous))
     }
 
     @ViewBuilder private var content: some View {
         switch card {
         case .message(let message):
-            VStack(alignment: .leading, spacing: 8) {
-                if message.to != nil { field("To", key: "to") }
-                if message.cc != nil, !(fields["cc"] ?? "").isEmpty { field("Cc", key: "cc") }
-                if message.subject != nil {
-                    TextField("Subject", text: binding("subject")).textFieldStyle(.plain).font(.system(size: 13, weight: .medium))
-                    Divider().opacity(0.3)
+            VStack(alignment: .leading, spacing: 0) {
+                if message.to != nil {
+                    line { addressRow("To", addresses: $recipients) }
                 }
-                TextEditor(text: binding("body")).font(.system(size: 13)).scrollContentBackground(.hidden).frame(height: 84)
+                if message.subject != nil {
+                    line { TextField("Subject", text: binding("subject")).textFieldStyle(.plain).font(.system(size: 14)) }
+                }
+                ZStack(alignment: .bottomTrailing) {
+                    TextEditor(text: binding("body")).font(.system(size: 14)).lineSpacing(3).scrollContentBackground(.hidden)
+                        .padding(.horizontal, Self.inset - 5).padding(.top, 12).padding(.bottom, 56)
+                        .frame(height: 170)
+                    primaryButton.padding(Self.inset - 4)
+                }
             }
         case .event(let event):
-            VStack(alignment: .leading, spacing: 9) {
-                TextField("Title", text: binding("title")).textFieldStyle(.plain).font(.system(size: 15, weight: .semibold))
-                Rectangle().fill(Color.accentColor).frame(height: 2)
-                row("clock") {
-                    if hasTimes {
-                        DatePicker("Start", selection: $start).labelsHidden().datePickerStyle(.field).controlSize(.small)
-                        if event.end != nil {
-                            Text("to").font(.system(size: 12)).foregroundStyle(.secondary)
-                            DatePicker("End", selection: $end, displayedComponents: .hourAndMinute).labelsHidden().datePickerStyle(.field).controlSize(.small)
-                        }
-                    } else { Text(RichCard.describe(start: event.start, end: event.end)).font(.system(size: 13)) }
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Title", text: binding("title")).textFieldStyle(.plain).font(.system(size: 18, weight: .semibold))
+                    Rectangle().fill(Color.accentColor).frame(height: 2)
                 }
-                if event.attendees != nil { row("person") { TextField("Guests", text: binding("attendees")).textFieldStyle(.plain).font(.system(size: 13)) } }
-                if event.location != nil { row("mappin.and.ellipse") { TextField("Location", text: binding("location")).textFieldStyle(.plain).font(.system(size: 13)) } }
+                row("clock") {
+                    Button { editingTime.toggle() } label: {
+                        Text(hasTimes ? timeText(hasEnd: event.end != nil) : RichCard.describe(start: event.start, end: event.end))
+                            .font(.system(size: 14)).foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain).disabled(!hasTimes).help("Change the time")
+                    .popover(isPresented: $editingTime, arrowEdge: .bottom) { timeEditor(hasEnd: event.end != nil) }
+                }
+                if event.attendees != nil { row("person") { chips($guests, placeholder: "Add guest") } }
+                if event.location != nil {
+                    row("mappin.and.ellipse") { TextField("Location", text: binding("location")).textFieldStyle(.plain).font(.system(size: 14)) }
+                }
+                HStack(spacing: 8) {
+                    Image(systemName: source.contains("Google") ? "video" : "calendar").font(.system(size: 13)).foregroundStyle(.secondary).frame(width: 18)
+                    Text(source.contains("Google") ? "Google Calendar" : "Calendar").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    primaryButton
+                }
             }
+            .padding(.horizontal, Self.inset).padding(.top, 16).padding(.bottom, 16)
         case .file(let change):
-            VStack(alignment: .leading, spacing: 8) {
-                row(fileSymbol(change.action)) { Text(change.path).font(.system(size: 13, design: .monospaced)).lineLimit(1).truncationMode(.middle) }
+            VStack(alignment: .leading, spacing: 14) {
+                row(fileSymbol(change.action)) {
+                    Text(change.path).font(.system(size: 13, design: .monospaced)).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                }
                 if change.destination != nil {
-                    row("arrow.turn.down.right") { TextField("Destination", text: binding("destination")).textFieldStyle(.plain).font(.system(size: 13, design: .monospaced)) }
+                    row("arrow.turn.down.right") {
+                        TextField("Destination", text: binding("destination")).textFieldStyle(.plain).font(.system(size: 13, design: .monospaced))
+                    }
                 }
                 if change.text != nil {
                     TextEditor(text: binding("text")).font(.system(size: 12, design: .monospaced)).scrollContentBackground(.hidden)
-                        .frame(height: 70).padding(6).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(8).frame(height: 88)
+                        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                HStack(spacing: 8) {
+                    Image(systemName: "folder").font(.system(size: 13)).foregroundStyle(.secondary).frame(width: 18)
+                    Text("Working folder").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    primaryButton
                 }
             }
+            .padding(.horizontal, Self.inset).padding(.vertical, 16)
         case .music(let music):
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 AsyncImage(url: artwork) { image in image.resizable().scaledToFill() } placeholder: {
-                    Image(systemName: "music.note").font(.system(size: 20)).foregroundStyle(.secondary)
+                    Image(systemName: "music.note").font(.system(size: 22)).foregroundStyle(.secondary)
                 }
-                .frame(width: 48, height: 48).background(Color.white.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(trackTitle ?? music.query ?? music.uri ?? "Music").font(.system(size: 14, weight: .semibold)).lineLimit(2)
-                    Text(music.queues ? "Add to the Spotify queue" : call.tool.hasPrefix("spotify") ? "Play in Spotify" : "Play in Music")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                .frame(width: 58, height: 58).background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(trackTitle ?? music.query ?? "Music").font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                    Text(trackArtist ?? (call.tool.hasPrefix("spotify") ? "Spotify" : "Apple Music"))
+                        .font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
+                primaryButton
             }
+            .padding(.horizontal, Self.inset).padding(.vertical, 16)
         }
     }
 
-    private var footer: some View {
-        HStack(spacing: 10) {
-            if case .event = card, source.contains("Google") {
-                Label("Google Calendar", systemImage: "calendar").font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            Button("Cancel") { controller.cancelProposal() }.buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(.secondary)
-            Button { commit(); controller.runProposal() } label: {
-                Text(primary).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                    .padding(.horizontal, 18).padding(.vertical, 7)
-                    .background(Color.accentColor, in: Capsule())
-            }
-            .buttonStyle(.plain).keyboardShortcut(.defaultAction).disabled(controller.busy)
+    private var primaryButton: some View {
+        Button { commit(); controller.runProposal() } label: {
+            Text(primary).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                .padding(.horizontal, 22).frame(height: 34)
+                .background(Color.accentColor, in: Capsule())
+                .contentShape(Capsule())
         }
+        .buttonStyle(.plain).keyboardShortcut(.defaultAction).disabled(controller.busy)
+    }
+
+    /// A full-width row with a hairline below it, as in a compose window.
+    private func line<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            content().padding(.horizontal, Self.inset).frame(minHeight: 46)
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+        }
+    }
+
+    private func addressRow(_ label: String, addresses: Binding<[String]>) -> some View {
+        HStack(spacing: 12) {
+            Text(label).font(.system(size: 14)).foregroundStyle(.secondary)
+            chips(addresses, placeholder: addresses.wrappedValue.isEmpty ? "Add recipient" : "")
+        }
+    }
+
+    /// Addresses as removable pills, with a field to add more (Return or comma adds).
+    private func chips(_ items: Binding<[String]>, placeholder: String) -> some View {
+        HStack(spacing: 6) {
+            ForEach(Array(items.wrappedValue.enumerated()), id: \.offset) { index, item in
+                HStack(spacing: 4) {
+                    Text(item).font(.system(size: 13)).lineLimit(1)
+                    Button { items.wrappedValue.remove(at: index) } label: {
+                        Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
+                    }.buttonStyle(.plain).help("Remove")
+                }
+                .padding(.leading, 10).padding(.trailing, 8).frame(height: 26)
+                .background(Color.accentColor.opacity(0.18), in: Capsule())
+            }
+            TextField(placeholder, text: $newAddress).textFieldStyle(.plain).font(.system(size: 13)).frame(minWidth: 60)
+                .onSubmit { addAddress(to: items) }
+                .onChange(of: newAddress) { _, value in if value.hasSuffix(",") { addAddress(to: items) } }
+        }
+    }
+
+    private func addAddress(to items: Binding<[String]>) {
+        let value = newAddress.trimmingCharacters(in: CharacterSet(charactersIn: ", ").union(.whitespaces))
+        if !value.isEmpty { items.wrappedValue.append(value) }
+        newAddress = ""
+    }
+
+    /// "Today, 6:00 - 7:00 PM"
+    private func timeText(hasEnd: Bool) -> String {
+        let calendar = Calendar.current
+        let day = calendar.isDateInToday(start) ? "Today" : calendar.isDateInTomorrow(start) ? "Tomorrow"
+            : start.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+        let from = start.formatted(date: .omitted, time: .shortened)
+        guard hasEnd else { return day + ", " + from }
+        return day + ", " + from + " - " + end.formatted(date: .omitted, time: .shortened)
+    }
+
+    private func timeEditor(hasEnd: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DatePicker("Starts", selection: $start)
+            if hasEnd { DatePicker("Ends", selection: $end, displayedComponents: .hourAndMinute) }
+        }
+        .padding(14).frame(width: 280)
+        .onChange(of: start) { old, new in end = end.addingTimeInterval(new.timeIntervalSince(old)) }
     }
 
     // MARK: Helpers
@@ -280,19 +376,9 @@ struct RichApprovalCard: View {
         ["trash": "trash", "create_folder": "folder.badge.plus", "move": "doc", "copy": "doc.on.doc"][action] ?? "doc.text"
     }
 
-    private func field(_ label: String, key: String) -> some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                Text(label).font(.system(size: 13)).foregroundStyle(.secondary).frame(width: 26, alignment: .leading)
-                TextField(label, text: binding(key)).textFieldStyle(.plain).font(.system(size: 13))
-            }
-            Divider().opacity(0.3)
-        }
-    }
-
     private func row<Content: View>(_ symbol: String, @ViewBuilder _ content: () -> Content) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(.secondary).frame(width: 18)
+        HStack(spacing: 12) {
+            Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(.secondary).frame(width: 18)
             content()
             Spacer(minLength: 0)
         }
@@ -306,9 +392,11 @@ struct RichApprovalCard: View {
     private func load() {
         switch card {
         case .message(let message):
-            fields = ["to": message.to ?? "", "cc": message.cc ?? "", "subject": message.subject ?? "", "body": message.body]
+            fields = ["cc": message.cc ?? "", "subject": message.subject ?? "", "body": message.body]
+            recipients = Self.split(message.to ?? "")
         case .event(let event):
-            fields = ["title": event.title, "attendees": event.attendees ?? "", "location": event.location ?? ""]
+            fields = ["title": event.title, "location": event.location ?? ""]
+            guests = Self.split(event.attendees ?? "")
             if let from = RichCard.date(from: event.start) {
                 start = from; hasTimes = true
                 end = event.end.flatMap(RichCard.date(from:)) ?? from.addingTimeInterval(1800)
@@ -323,6 +411,7 @@ struct RichApprovalCard: View {
                 guard let (data, _) = try? await URLSession.shared.data(from: url),
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
                 trackTitle = json["title"] as? String
+                trackArtist = (json["author_name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
                 artwork = (json["thumbnail_url"] as? String).flatMap(URL.init(string:))
             }
         }
@@ -333,7 +422,7 @@ struct RichApprovalCard: View {
         var args = call.arguments
         switch card {
         case .message:
-            args = RichCard.updated(args, key: RichCard.key(["to", "recipient", "recipients", "email", "address"], in: args), value: fields["to"] ?? "")
+            args = RichCard.updated(args, key: RichCard.key(["to", "recipient", "recipients", "email", "address"], in: args), value: (recipients + [newAddress]).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: ", "))
             if args["cc"] != nil { args = RichCard.updated(args, key: "cc", value: fields["cc"] ?? "") }
             if args["subject"] != nil { args = RichCard.updated(args, key: "subject", value: fields["subject"] ?? "") }
             args = RichCard.updated(args, key: RichCard.key(["body", "text", "message", "content"], in: args), value: fields["body"] ?? "")
@@ -353,7 +442,9 @@ struct RichApprovalCard: View {
                     args = RichCard.updated(args, key: endKey, value: formatter.string(from: finish))
                 }
             }
-            if let key = RichCard.key(["attendees", "guests", "invitees"], in: args) { args = RichCard.updated(args, key: key, value: fields["attendees"] ?? "") }
+            if let key = RichCard.key(["attendees", "guests", "invitees"], in: args) {
+                args = RichCard.updated(args, key: key, value: (guests + [newAddress]).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: ", "))
+            }
             if args["location"] != nil { args = RichCard.updated(args, key: "location", value: fields["location"] ?? "") }
         case .file:
             if args["destination"] != nil { args = RichCard.updated(args, key: "destination", value: fields["destination"] ?? "") }
@@ -362,6 +453,10 @@ struct RichApprovalCard: View {
             break
         }
         controller.updateReviewedArguments(args)
+    }
+
+    private static func split(_ text: String) -> [String] {
+        text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     private static func openLink(_ uri: String) -> String? {
@@ -374,10 +469,11 @@ struct RichApprovalCard: View {
     /// Height the notch reserves for each card.
     static func height(for card: RichCard) -> Int {
         switch card {
-        case .message(let message): return 196 + (message.to == nil ? 0 : 34) + (message.subject == nil ? 0 : 30)
-        case .event(let event): return 150 + (event.attendees == nil ? 0 : 28) + (event.location == nil ? 0 : 28)
-        case .file(let change): return 120 + (change.destination == nil ? 0 : 28) + (change.text == nil ? 0 : 88)
-        case .music: return 136
+        case .message(let message): return 46 + 170 + (message.to == nil ? 0 : 47) + (message.subject == nil ? 0 : 47) + 8
+        case .event(let event): return 46 + 32 + 44 + 30 + 34 + (event.attendees == nil ? 0 : 42) + (event.location == nil ? 0 : 36) + 16
+        case .file(let change): return 46 + 32 + 24 + 34 + 14 + (change.destination == nil ? 0 : 38) + (change.text == nil ? 0 : 102) + 8
+        case .music: return 46 + 32 + 58 + 8
         }
     }
+
 }
