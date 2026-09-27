@@ -554,7 +554,9 @@ final class AssistantController: ObservableObject {
                         if let recoveryID { RecordingRecovery.shared.complete(recoveryID) }
                         busy = false
                         await perform(transcript, route: voiceFromNotch, spoken: true)
-                        expanded = true; resize(); panel?.orderFrontRegardless()
+                        // A request still working stays tucked; a reply or approval already opened the notch.
+                        if !runInProgress { expanded = true }
+                        resize(); panel?.orderFrontRegardless()
                     }
                 } catch { fail(error) }
             }
@@ -694,6 +696,7 @@ final class AssistantController: ObservableObject {
                     append(decision.text, role: .assistant)
                     response = decision.text; phase = "Done"; busy = false
                     lastMessage = ActionMessage(role: .assistant, text: decision.text)
+                    showResult()
                     if shouldSpeak(spoken) { speak(decision.text, followUp: spoken) }
                     return
                 }
@@ -713,8 +716,27 @@ final class AssistantController: ObservableObject {
         busy = true; phase = "Thinking"
         response = ""; statusLine = acknowledgment
         if let acknowledgment, shouldSpeak(spoken) { speak(acknowledgment, followUp: false) }
+        tuckWhileWorking()
         run.task = Task { await self.step(run) }
         work = run.task
+    }
+
+    // MARK: The notch while working
+
+    /// While a request works with nothing to show, the notch tucks into its small working pill
+    /// (a spinner and the current step); it opens again for the reply, a card, or an approval.
+    private func tuckWhileWorking() {
+        guard expanded, proposal == nil, MCPElicitationCenter.shared.current == nil, CodexComputerUse.shared.approval == nil,
+              !SpeekMainWindow.shared.isFrontmost else { return }
+        expanded = false
+        panel?.resignKey(); panel?.acceptsKeyboard = false
+        resize(); panel?.orderFrontRegardless()
+    }
+
+    /// Opens the notch to show what just arrived.
+    private func showResult() {
+        dismissTask?.cancel()
+        expanded = true; resize(); panel?.orderFrontRegardless()
     }
 
     // MARK: Talking back
@@ -989,6 +1011,7 @@ final class AssistantController: ObservableObject {
             foreground = nil; busy = false; statusLine = nil
             response = "Working on it in the background. You can keep going."
             phase = "Ready"
+            showResult()
             if shouldSpeak(spoken) { speak("That will take a minute. I'll do it in the background and let you know.", followUp: false) }
         }
     }
@@ -1167,6 +1190,7 @@ final class AssistantController: ObservableObject {
         foreground = nil; busy = false; statusLine = nil
         response = text; phase = "Done"; resultCards = run.cards
         lastMessage = ActionMessage(role: .assistant, text: text)
+        showResult()
         if text.hasPrefix("Opened ") || text.hasPrefix("Remembered:") {
             dismissTask?.cancel()
             dismissTask = Task {

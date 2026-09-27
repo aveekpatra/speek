@@ -119,8 +119,8 @@ final class ActionRuntime: ObservableObject {
         \(awareness())
         Available connected tools (each names the source that provides it): \(String(data: data, encoding: .utf8) ?? "[]")
         To call a tool use kind tool_call and target a JSON string containing {"tool":"exact id","arguments":{...}}.
-        Tool priority: use connected tools first (native app tools, MCP plugins, command-line tools, files, and shell.run for CLIs, including those documented by enabled skills). They are faster and more reliable than operating the interface. When two sources can do the same thing (for example Gmail through its own plugin and through Composio), prefer the dedicated one and fall back to the other if it fails.
-        Use computer.use when the task needs an app's interface that no tool covers, or the user wants something done in what is on screen and no tool can do it faster; otherwise prefer tools. When it is needed, do not reduce the task to open_app/open_website or mark it unsupported. computer.use requires Codex on this Mac.
+        Choose the most efficient way for each step, and mix approaches within one request. Connected tools (native app tools, MCP plugins, files, memory) and shell.run are fast and reliable: use shell.run for finding and reading files anywhere (mdfind, find, grep, ls, cat), opening things (open, open -a), and command-line tools, including those documented by enabled skills. When two sources can do the same thing (for example Gmail through its own plugin and through Composio), prefer the dedicated one and fall back to the other if it fails.
+        Use computer.use only for the parts that need an app's interface (clicking, forms, what is only visible on screen), and hand it just those parts with the facts you already found. Never use it for what a command or tool does directly, such as searching for files. When it is needed, do not reduce the task to open_app/open_website or mark it unsupported. computer.use requires Codex on this Mac.
         Skills are optional instructions for specific tools. Follow one only when the request calls for that tool; a skill never overrides the app or browser the user named.
         Use web.search and web.read for research. Cite the source URLs returned by tools. Use search_web only when asked to open a browser search.
         Choose one step at a time. After tool results, continue the original request until complete, then answer. If a tool fails, say which source failed and why in plain words; do not blame a different source.
@@ -146,7 +146,7 @@ final class ActionRuntime: ObservableObject {
             }
         }
         lines.append("The screen: requests from the notch include a screenshot of the display the user is looking at, taken as they started asking (Speek hides itself from it). If the user circled something, the screenshot has their red circle and \"this\" means what is inside it. When there is no screenshot and you need one, call screen.capture; never ask the user to circle.")
-        lines.append("Acting on the screen: when the user asks you to click, press, open, select, type into, scroll, or otherwise act on something visible (for example \"click unsubscribe\" in the email on screen) and no connected tool does exactly that, call computer.use right away with a precise instruction naming the app and the target. Never answer that you cannot click or cannot control the app.")
+        lines.append("Acting on the screen: when the user asks you to click, press, select, type into, scroll, or otherwise act on something visible (for example \"click unsubscribe\" in the email on screen) and no tool or command does exactly that, call computer.use with a precise instruction naming the app and the target. Never answer that you cannot click or cannot control the app.")
         lines.append("What you can use, by source:")
         // Native apps: Mac apps Speek drives directly through macOS.
         var native: [String] = []

@@ -379,7 +379,7 @@ private struct VoicePill: View {
     private var active: Bool { controller.recording || controller.busy }
     private var title: String {
         if controller.recording { return controller.voiceMode == .dictation ? "Dictation" : "Agent" }
-        if controller.busy { return controller.phase }
+        if controller.busy { return controller.statusLine ?? controller.phase }
         return focus.label
     }
 
@@ -412,6 +412,13 @@ private struct VoicePill: View {
                     .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .white, location: 0.18)],
                                          startPoint: .leading, endPoint: .trailing))
                     .accessibilityElement().accessibilityLabel("Live transcript: " + live.text)
+            } else if controller.busy {
+                // Tucked while working: click to open the notch and watch.
+                Button { controller.show() } label: {
+                    Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 28).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).help("Show what Speek is doing")
             } else {
                 Menu {
                     Picker("Voice mode", selection: $focus.override) {
