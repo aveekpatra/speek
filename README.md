@@ -26,17 +26,17 @@ Speek sits quietly in your Mac's notch. Hold a key and talk: it types what you s
 <a id="what-it-does"></a>
 ## What it does
 
-🎙️ **Write without typing.** Hold the shortcut, speak, let go. Your words land in whatever text field you are in: Mail, Slack, Notes, a browser, a terminal. Speek fits them into what is already there and can polish them into clean sentences.
+**Write without typing.** Hold the shortcut, speak, let go. Your words land in whatever text field you are in: Mail, Slack, Notes, a browser, a terminal. Speek fits them into what is already there and can polish them into clean sentences.
 
-👋 **Just say its name.** "Hey Speek, what's on my calendar today?" Turn on voice activation and start a request without touching the keyboard. Call it whatever you like: pick a name, and Speek answers to it. Listening happens on your Mac, and it stops recording when you stop talking.
+**Just say its name.** "Hey Speek, what's on my calendar today?" Turn on voice activation and start a request without touching the keyboard. Call it whatever you like: pick a name, and Speek answers to it. Listening happens on your Mac, and it stops recording when you stop talking.
 
-💬 **Talk, or ask for things.** Chat with it and get a spoken answer in about a second. Or ask it to do something: "Reply to Tomas that Friday works." "Add lunch with Tomas tomorrow at noon." "Play Faded by Alan Walker." It tells you what it is doing, does it, and answers. To follow up, press the shortcut or say "Hey <name>": it picks up the same conversation.
+**Talk, or ask for things.** Chat with it and get a spoken answer in about a second. Or ask it to do something: "Reply to Tomas that Friday works." "Add lunch with Tomas tomorrow at noon." "Play Faded by Alan Walker." It tells you what it is doing, does it, and answers. To follow up, press the shortcut or say "Hey <name>": it picks up the same conversation.
 
-👆 **Point at your screen.** Speek sees what you are looking at when you ask. To point at something specific, circle it with the pointer while you hold the shortcut. "This" then means exactly what you circled.
+**Point at your screen.** Speek sees what you are looking at when you ask. To point at something specific, circle it with the pointer while you hold the shortcut. "This" then means exactly what you circled.
 
-🧵 **Keep going while it works.** Quick requests finish in seconds, right in the notch. Longer work, like operating an app on screen, runs in the background: keep talking to Speek, and a notice appears when it is done.
+**Keep going while it works.** Quick requests finish in seconds, right in the notch. Longer work, like operating an app on screen, runs in the background: keep talking to Speek, and a notice appears when it is done.
 
-🧠 **It remembers.** Say "remember my sister's name is Priya" or "remember I prefer meetings after 11". Speek keeps it and uses it when it matters. Say "forget ..." to let it go.
+**It remembers.** Say "remember my sister's name is Priya" or "remember I prefer meetings after 11". Speek keeps it and uses it when it matters. Say "forget ..." to let it go.
 
 <a id="showcase"></a>
 ## Showcase
@@ -139,21 +139,22 @@ More screenshots are in the [Screenshots](Screenshots) folder.
 <a id="getting-started"></a>
 ## Getting started
 
-**You need** a Mac running macOS 26, and an OpenRouter or OpenAI API key. Computer use also needs Codex installed and signed in. Speek is made for the Mac only.
+**You need** a Mac running macOS 26, and an OpenRouter or OpenAI API key. Computer use also needs Codex installed and signed in. Speek is made for the Mac only. There is no public release yet, so build it from source first (see [For developers](#for-developers)).
 
 1. Open Speek and add your API key under **Models & Voice**.
 2. Allow Microphone and Accessibility when asked. Screen Recording and app access are requested when a feature first needs them.
 3. Hold the shortcut (Option-Space by default) and start talking. For hands-free, turn on **Voice activation** in Settings > General and say "Hey Speek".
 4. Turn on the apps and services you want under **Integrations**.
 
+<a id="for-developers"></a>
 ## For developers
 
-Speek builds with Xcode 26. `./scripts/dev-build.sh` builds, signs with the stable development identity, and installs to `/Applications/Speek.app`. Checks live in `scripts/checks/`. [Feature status](docs/FEATURE_STATUS.md) lists what is supported and known limits, and [PRD.md](PRD.md) describes current behavior.
+Speek builds with Xcode 26 and needs CMake for whisper.cpp (`brew install cmake`). `make local` builds an ad-hoc signed copy to `~/Downloads/Speek.app` without an Apple Developer certificate. `./scripts/dev-build.sh` builds, signs with the stable development identity ("Speek Dev Signing", which must be in your keychain), and installs to `/Applications/Speek.app`. [BUILDING.md](BUILDING.md) lists all Makefile targets. Checks live in `scripts/checks/`. [Feature status](docs/FEATURE_STATUS.md) lists what is supported and known limits, and [PRD.md](PRD.md) describes current behavior.
 
 <a id="acknowledgments"></a>
 ## Acknowledgments
 
-Speek stands on the shoulders of these open-source projects:
+Speek is a fork of [Whisper Pro](https://github.com/ZdenekCulik/whisper-pro) by Zdenek Culik, which itself started as a fork of [VoiceInk](https://github.com/Beingpax/VoiceInk). Speek stands on the shoulders of these open-source projects:
 
 - [VoiceInk](https://github.com/Beingpax/VoiceInk) by Prakash Joshi Pax (GPL-3.0)
 - [Whisper Pro](https://github.com/ZdenekCulik/whisper-pro) by Zdenek Culik (GPL-3.0)
