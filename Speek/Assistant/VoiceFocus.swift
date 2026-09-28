@@ -67,6 +67,12 @@ final class VoiceFocus: ObservableObject {
         detectedMode = .agent
     }
 
+    /// Gecko apps ship the XUL framework next to their executable.
+    nonisolated static func isGecko(_ app: NSRunningApplication) -> Bool {
+        guard let bundle = app.bundleURL else { return false }
+        return FileManager.default.fileExists(atPath: bundle.appendingPathComponent("Contents/MacOS/XUL").path)
+    }
+
     nonisolated static func isDesktop(bundleID: String?, hasFocusedWindow: Bool) -> Bool {
         bundleID == "com.apple.finder" && !hasFocusedWindow
     }
@@ -93,9 +99,14 @@ final class VoiceFocus: ObservableObject {
             appName = app.localizedName ?? "Current app"
             appIcon = app.icon
             // Chromium and Electron expose their focused editor after AX is enabled.
+            // Gecko browsers (Firefox, Zen, LibreWolf...) ignore that flag and only build
+            // their tree with AXEnhancedUserInterface; without it every field reads as the window.
             if AXIsProcessTrusted() {
                 let root = AXUIElementCreateApplication(pid)
                 AXUIElementSetAttributeValue(root, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+                if Self.isGecko(app) {
+                    AXUIElementSetAttributeValue(root, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+                }
             }
         }
         permissionMissing = !AXIsProcessTrusted()
